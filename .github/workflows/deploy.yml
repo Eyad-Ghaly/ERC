@@ -30,13 +30,10 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
       - name: Build
-        run: npm run build -- --logLevel info
+        run: npx vite build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          CI: false
-      - name: Copy index.html to 404.html
-        run: cp dist/index.html dist/404.html
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
