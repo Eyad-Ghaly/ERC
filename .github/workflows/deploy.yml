@@ -30,10 +30,11 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
       - name: Build
-        run: npx vite build
+        run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          CI: false
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
