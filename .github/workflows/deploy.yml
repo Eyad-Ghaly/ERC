@@ -28,12 +28,13 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install --legacy-peer-deps --ignore-scripts
+        run: npm install --legacy-peer-deps
       - name: Build
-        run: npx vite build
+        run: npm run build -- --logLevel info
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          CI: false
       - name: Copy index.html to 404.html
         run: cp dist/index.html dist/404.html
       - name: Setup Pages
