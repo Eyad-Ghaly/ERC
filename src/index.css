@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Humanitarian / Red Crescent design system. All colors HSL. RTL Arabic-first. */
+
+@layer base {
+  :root {
+    --background: 0 0% 99%;
+    --foreground: 0 15% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 15% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 15% 12%;
+
+    /* Red Crescent primary */
+    --primary: 354 78% 46%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 354 88% 58%;
+    --primary-soft: 354 70% 96%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 15% 18%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 5% 42%;
+
+    --accent: 354 70% 96%;
+    --accent-foreground: 354 78% 38%;
+
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 64% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 90% 50%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 92%;
+    --ring: 354 78% 46%;
+
+    --radius: 0.625rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 15% 10%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: 354 78% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 15% 16%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 15% 18%;
+    --sidebar-ring: 354 78% 52%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(354 78% 46%), hsl(354 88% 58%));
+    --gradient-hero: linear-gradient(135deg, hsl(354 78% 42%) 0%, hsl(354 88% 56%) 100%);
+    --gradient-subtle: linear-gradient(180deg, hsl(0 0% 99%), hsl(0 0% 96%));
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px hsl(0 15% 12% / 0.04);
+    --shadow-md: 0 4px 12px hsl(0 15% 12% / 0.06);
+    --shadow-lg: 0 12px 32px hsl(0 15% 12% / 0.08);
+    --shadow-glow: 0 8px 24px hsl(354 78% 46% / 0.25);
+  }
+
+  .dark {
+    --background: 0 15% 8%;
+    --foreground: 0 0% 95%;
+    --card: 0 15% 11%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 15% 11%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 354 78% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 15% 16%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 15% 16%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 15% 18%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 15% 18%;
+    --input: 0 15% 18%;
+    --ring: 354 78% 56%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { font-family: 'Cairo', 'Tajawal', system-ui, sans-serif; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
+  }
+  h1, h2, h3, h4 { @apply font-bold tracking-tight; }
+}
+
+@layer components {
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold;
+  }
+  .gradient-primary { background: var(--gradient-primary); }
+  .gradient-hero { background: var(--gradient-hero); }
+  .gradient-subtle { background: var(--gradient-subtle); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+  .card-elevated {
+    @apply bg-card border border-border rounded-xl;
+    box-shadow: var(--shadow-md);
+  }
+}
