@@ -27,7 +27,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner position="top-center" richColors closeButton />
-      <BrowserRouter>
+      <BrowserRouter basename="/ERC/">
         <AuthProvider>
           <Routes>
             <Route path="/auth" element={<Auth />} />
