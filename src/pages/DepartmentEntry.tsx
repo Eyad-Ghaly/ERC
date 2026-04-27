@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -11,9 +11,33 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, Save, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Send, Save, AlertCircle, FileUp, Loader2 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface Volunteer { full_name: string; membership_number: string; branch: string; }
+
+const HEADER_MAP: Record<string, string> = {
+  "كود المشروع": "projectCode",
+  "كود الإدارة": "adminCode",
+  "محافظة التنفيذ": "governorate",
+  "تصنيف النشاط": "activityClassification",
+  "نوع النشاط": "activityType",
+  "تفاصيل النشاط": "activityDetails",
+  "طبيعة المهمة": "missionNature",
+  "اسم النوع": "typeName",
+  "التصنيف": "classification",
+  "اسم التصنيف": "classificationName",
+  "تاريخ النشاط": "activityDate",
+  "مكان التنفيذ": "executionPlace",
+  "اسم المهمة بالتفصيل": "missionName",
+  "اسم المهمة": "missionName",
+  "خط العرض": "latitude",
+  "خط الطول": "longitude",
+  "مسؤول المتابعة": "followUpResponsible",
+  "رقم تليفون مسؤول المتابعة": "followUpPhone",
+  "هل بها مستفيدين": "hasBeneficiaries",
+  "هل المهمة مفتوحة": "isOpenMission",
+};
 
 function FieldSelect({ fieldKey, value, onChange, label }: { fieldKey: string; value: string; onChange: (v: string) => void; label: string }) {
   const { options, loading } = useDropdownOptions(fieldKey);
@@ -35,6 +59,7 @@ export default function DepartmentEntry() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [teamCode, setTeamCode] = useState(profile?.team_code ?? "");
   const [projectCode, setProjectCode] = useState("");
@@ -60,6 +85,7 @@ export default function DepartmentEntry() {
 
   const [volunteers, setVolunteers] = useState<Volunteer[]>([{ full_name: "", membership_number: "", branch: "" }]);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => { 
     if (profile?.team_code && !id) setTeamCode(profile.team_code); 
@@ -107,6 +133,159 @@ export default function DepartmentEntry() {
   const removeVolunteer = (i: number) => setVolunteers((v) => v.filter((_, idx) => idx !== i));
   const updateVolunteer = (i: number, key: keyof Volunteer, val: string) =>
     setVolunteers((v) => v.map((x, idx) => (idx === i ? { ...x, [key]: val } : x)));
+
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+        if (json.length === 0) {
+          toast.error("الملف فارغ");
+          return;
+        }
+
+        if (json.length === 1) {
+          // Fill form for single row
+          const row = json[0];
+          fillFormFromRow(row);
+          toast.success("تم تعبئة البيانات من الملف");
+        } else {
+          // Bulk upload for multiple rows
+          if (confirm(`هل تريد رفع عدد ${json.length} مهمة دفعة واحدة؟`)) {
+            await bulkUploadMissions(json);
+          }
+        }
+      } catch (err: any) {
+        toast.error("فشل قراءة الملف: " + err.message);
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const fillFormFromRow = (row: any) => {
+    const mapped: any = {};
+    Object.entries(row).forEach(([key, val]) => {
+      const field = HEADER_MAP[key] || key;
+      mapped[field] = val;
+    });
+
+    if (mapped.projectCode) setProjectCode(String(mapped.projectCode));
+    if (mapped.adminCode) setAdminCode(String(mapped.adminCode));
+    if (mapped.governorate) setGovernorate(String(mapped.governorate));
+    if (mapped.activityClassification) setActivityClassification(String(mapped.activityClassification));
+    if (mapped.activityType) setActivityType(String(mapped.activityType));
+    if (mapped.activityDetails) setActivityDetails(String(mapped.activityDetails));
+    if (mapped.missionNature) setMissionNature(String(mapped.missionNature));
+    if (mapped.typeName) setTypeName(String(mapped.typeName));
+    if (mapped.classification) setClassification(String(mapped.classification));
+    if (mapped.classificationName) setClassificationName(String(mapped.classificationName));
+    if (mapped.activityDate) {
+        // Handle Excel date format
+        let d = mapped.activityDate;
+        if (typeof d === "number") {
+            const date = XLSX.SSF.parse_date_code(d);
+            d = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+        }
+        setActivityDate(String(d));
+    }
+    if (mapped.executionPlace) setExecutionPlace(String(mapped.executionPlace));
+    if (mapped.missionName) setMissionName(String(mapped.missionName));
+    if (mapped.latitude) setLatitude(String(mapped.latitude));
+    if (mapped.longitude) setLongitude(String(mapped.longitude));
+    if (mapped.followUpResponsible) setFollowUpResponsible(String(mapped.followUpResponsible));
+    if (mapped.followUpPhone) setFollowUpPhone(String(mapped.followUpPhone));
+    if (mapped.hasBeneficiaries !== undefined) {
+        const val = String(mapped.hasBeneficiaries).toLowerCase();
+        setHasBeneficiaries(val === "true" || val === "نعم" || val === "1");
+    }
+    if (mapped.isOpenMission !== undefined) {
+        const val = String(mapped.isOpenMission).toLowerCase();
+        setIsOpenMission(val === "true" || val === "نعم" || val === "1");
+    }
+  };
+
+  const bulkUploadMissions = async (rows: any[]) => {
+    if (!user || !teamCode) return;
+    
+    setBusy(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const row of rows) {
+      const mapped: any = {};
+      Object.entries(row).forEach(([key, val]) => {
+        const field = HEADER_MAP[key] || key;
+        mapped[field] = val;
+      });
+
+      try {
+        const pCode = String(mapped.projectCode || "");
+        if (!pCode) throw new Error("كود المشروع مفقود");
+
+        const { data: generatedCode, error: codeErr } = await supabase.rpc("generate_mission_code", {
+          _project_code: pCode, _team_code: teamCode,
+        });
+        if (codeErr) throw codeErr;
+
+        let actDate = mapped.activityDate;
+        if (typeof actDate === "number") {
+            const date = XLSX.SSF.parse_date_code(actDate);
+            actDate = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+        }
+
+        const hasBen = String(mapped.hasBeneficiaries || "").toLowerCase();
+        const isOpen = String(mapped.isOpenMission || "").toLowerCase();
+
+        const { error: insErr } = await supabase.from("missions").insert({
+          mission_code: generatedCode as string,
+          status: "planned",
+          created_by: user.id,
+          team_code: teamCode,
+          project_code: pCode,
+          governorate: mapped.governorate ? String(mapped.governorate) : null,
+          admin_code: mapped.adminCode ? String(mapped.adminCode) : null,
+          activity_classification: mapped.activityClassification ? String(mapped.activityClassification) : null,
+          activity_type: mapped.activityType ? String(mapped.activityType) : null,
+          activity_details: mapped.activityDetails ? String(mapped.activityDetails) : null,
+          mission_nature: mapped.missionNature ? String(mapped.missionNature) : null,
+          type_name: mapped.typeName ? String(mapped.typeName) : null,
+          classification: mapped.classification ? String(mapped.classification) : null,
+          classification_name: mapped.classificationName ? String(mapped.classificationName) : null,
+          activity_date: actDate ? String(actDate) : new Date().toISOString().split('T')[0],
+          execution_place: mapped.executionPlace ? String(mapped.executionPlace) : null,
+          mission_name: mapped.missionName ? String(mapped.missionName) : "مهمة مستوردة",
+          latitude: mapped.latitude ? Number(mapped.latitude) : null,
+          longitude: mapped.longitude ? Number(mapped.longitude) : null,
+          follow_up_responsible: mapped.followUpResponsible ? String(mapped.followUpResponsible) : null,
+          follow_up_phone: mapped.followUpPhone ? String(mapped.followUpPhone) : null,
+          has_beneficiaries: hasBen === "true" || hasBen === "نعم" || hasBen === "1",
+          is_open_mission: isOpen === "true" || isOpen === "نعم" || isOpen === "1",
+        });
+
+        if (insErr) throw insErr;
+        successCount++;
+      } catch (err) {
+        console.error("Row failed:", err, row);
+        failCount++;
+      }
+    }
+
+    setBusy(false);
+    toast.success(`تم رفع ${successCount} مهمة بنجاح. فشل ${failCount} مهمة.`);
+    if (successCount > 0) navigate("/department-dashboard");
+  };
 
   const submit = async (sendNow: boolean) => {
     if (!user) return;
@@ -217,14 +396,38 @@ export default function DepartmentEntry() {
   return (
     <AppLayout title={id ? "تعديل المهمة" : "إدخال مهمة جديدة"}>
       <div className="space-y-6 max-w-5xl">
-        {!profile?.team_code && (
-          <Card className="p-4 border-warning/50 bg-warning/10 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
-            <div className="text-sm">
-              <strong>تنبيه:</strong> لم يتم تعيين كود فريق لحسابك. يرجى التواصل مع المدير لتعيين كود الفريق قبل إنشاء مهمة.
+        <div className="flex justify-between items-center">
+            <div>
+                {!profile?.team_code && (
+                    <Card className="p-4 border-warning/50 bg-warning/10 flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
+                        <div className="text-sm">
+                            <strong>تنبيه:</strong> لم يتم تعيين كود فريق لحسابك. يرجى التواصل مع المدير لتعيين كود الفريق قبل إنشاء مهمة.
+                        </div>
+                    </Card>
+                )}
             </div>
-          </Card>
-        )}
+            {!id && (
+                <div className="flex gap-2">
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        className="hidden" 
+                        accept=".xlsx, .xls" 
+                        onChange={handleExcelUpload} 
+                    />
+                    <Button 
+                        variant="outline" 
+                        className="border-primary/50 text-primary hover:bg-primary/5"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading || busy}
+                    >
+                        {uploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <FileUp className="w-4 h-4 ms-2" />}
+                        تحميل من إكسيل
+                    </Button>
+                </div>
+            )}
+        </div>
 
         <Card className="card-elevated p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
