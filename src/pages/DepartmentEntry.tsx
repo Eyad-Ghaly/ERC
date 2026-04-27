@@ -396,38 +396,45 @@ export default function DepartmentEntry() {
   return (
     <AppLayout title={id ? "تعديل المهمة" : "إدخال مهمة جديدة"}>
       <div className="space-y-6 max-w-5xl">
-        <div className="flex justify-between items-center">
-            <div>
-                {!profile?.team_code && (
-                    <Card className="p-4 border-warning/50 bg-warning/10 flex items-start gap-3">
-                        <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
-                        <div className="text-sm">
-                            <strong>تنبيه:</strong> لم يتم تعيين كود فريق لحسابك. يرجى التواصل مع المدير لتعيين كود الفريق قبل إنشاء مهمة.
-                        </div>
-                    </Card>
-                )}
+        {!id && (
+          <Card className="p-4 border-dashed border-primary/40 bg-primary/5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3 text-primary">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <FileUp className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-bold">إدخال سريع من إكسيل</p>
+                <p className="text-xs text-muted-foreground">يمكنك رفع ملف إكسيل لتعبئة البيانات تلقائياً</p>
+              </div>
             </div>
-            {!id && (
-                <div className="flex gap-2">
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept=".xlsx, .xls" 
-                        onChange={handleExcelUpload} 
-                    />
-                    <Button 
-                        variant="outline" 
-                        className="border-primary/50 text-primary hover:bg-primary/5"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={uploading || busy}
-                    >
-                        {uploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <FileUp className="w-4 h-4 ms-2" />}
-                        تحميل من إكسيل
-                    </Button>
-                </div>
-            )}
-        </div>
+            <div className="flex gap-2">
+              <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept=".xlsx, .xls" 
+                  onChange={handleExcelUpload} 
+              />
+              <Button 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading || busy}
+                  className="gradient-primary shadow-lg shadow-primary/20"
+              >
+                  {uploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Plus className="w-4 h-4 ms-2" />}
+                  تحميل البيانات الآن
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {!profile?.team_code && (
+          <Card className="p-4 border-warning/50 bg-warning/10 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
+            <div className="text-sm">
+              <strong>تنبيه:</strong> لم يتم تعيين كود فريق لحسابك. يرجى التواصل مع المدير لتعيين كود الفريق قبل إنشاء مهمة.
+            </div>
+          </Card>
+        )}
 
         <Card className="card-elevated p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
