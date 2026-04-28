@@ -675,6 +675,80 @@ export type Database = {
           },
         ]
       }
+      volunteer_teams: {
+        Row: {
+          created_at: string
+          id: string
+          is_approved: boolean
+          join_date: string | null
+          team_code: string
+          volunteer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_approved?: boolean
+          join_date?: string | null
+          team_code: string
+          volunteer_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_approved?: boolean
+          join_date?: string | null
+          team_code?: string
+          volunteer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "volunteer_teams_volunteer_id_fkey"
+            columns: ["volunteer_id"]
+            isOneToOne: false
+            referencedRelation: "volunteers_base"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      volunteers_base: {
+        Row: {
+          birthdate: string | null
+          branch: string | null
+          created_at: string
+          full_name: string
+          id: string
+          membership_number: string | null
+          national_id: string | null
+          nationality: string | null
+          phone_number: string | null
+          residence: string | null
+        }
+        Insert: {
+          birthdate?: string | null
+          branch?: string | null
+          created_at?: string
+          full_name: string
+          id?: string
+          membership_number?: string | null
+          national_id?: string | null
+          nationality?: string | null
+          phone_number?: string | null
+          residence?: string | null
+        }
+        Update: {
+          birthdate?: string | null
+          branch?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          membership_number?: string | null
+          national_id?: string | null
+          nationality?: string | null
+          phone_number?: string | null
+          residence?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -11,8 +11,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, Save, AlertCircle, FileUp, Loader2 } from "lucide-react";
+import { Plus, Trash2, Send, Save, AlertCircle, FileUp, Loader2, Search } from "lucide-react";
 import * as XLSX from "xlsx";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { VolunteerPicker, VolunteerData } from "@/components/VolunteerPicker";
 
 // Trigger build to sync Excel feature
 
@@ -135,6 +137,18 @@ export default function DepartmentEntry() {
   const removeVolunteer = (i: number) => setVolunteers((v) => v.filter((_, idx) => idx !== i));
   const updateVolunteer = (i: number, key: keyof Volunteer, val: string) =>
     setVolunteers((v) => v.map((x, idx) => (idx === i ? { ...x, [key]: val } : x)));
+
+  const handlePickVolunteer = (v: VolunteerData) => {
+    // Check if empty row exists, update it, else append
+    const emptyIdx = volunteers.findIndex(row => !row.full_name && !row.membership_number);
+    const newVol = { full_name: v.full_name, membership_number: v.membership_number || "", branch: v.branch || "" };
+    
+    if (emptyIdx >= 0) {
+      setVolunteers(prev => prev.map((row, i) => i === emptyIdx ? newVol : row));
+    } else {
+      setVolunteers(prev => [...prev, newVol]);
+    }
+  };
 
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -493,7 +507,18 @@ export default function DepartmentEntry() {
         <Card className="card-elevated p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-bold">المتطوعون</h3>
-            <Button size="sm" variant="outline" onClick={addVolunteer}><Plus className="w-4 h-4 ms-1" />إضافة متطوع</Button>
+            <div className="flex gap-2">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="secondary"><Search className="w-4 h-4 ms-1" />إضافة من القاعدة</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>اختيار متطوع من قاعدة البيانات</DialogTitle></DialogHeader>
+                  <VolunteerPicker onSelect={handlePickVolunteer} className="mt-4" />
+                </DialogContent>
+              </Dialog>
+              <Button size="sm" variant="outline" onClick={addVolunteer}><Plus className="w-4 h-4 ms-1" />متطوع جديد</Button>
+            </div>
           </div>
           {volunteers.map((v, i) => (
             <div key={i} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end p-3 rounded-lg border border-border">

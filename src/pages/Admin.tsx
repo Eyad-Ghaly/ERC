@@ -31,12 +31,14 @@ export default function Admin() {
           <TabsTrigger value="dropdowns">القوائم المنسدلة</TabsTrigger>
           <TabsTrigger value="restrictions">قيود لكل مستخدم</TabsTrigger>
           <TabsTrigger value="custom_fields">حقول مخصصة للفرق</TabsTrigger>
+          <TabsTrigger value="volunteer_approvals">اعتماد المتطوعين</TabsTrigger>
           <TabsTrigger value="audit">سجل التعديلات</TabsTrigger>
         </TabsList>
         <TabsContent value="users"><UsersTab /></TabsContent>
         <TabsContent value="dropdowns"><DropdownsTab /></TabsContent>
         <TabsContent value="restrictions"><RestrictionsTab /></TabsContent>
         <TabsContent value="custom_fields"><CustomFieldsTab /></TabsContent>
+        <TabsContent value="volunteer_approvals"><VolunteerApprovalsTab /></TabsContent>
         <TabsContent value="audit"><AuditTab /></TabsContent>
       </Tabs>
     </AppLayout>
@@ -419,6 +421,93 @@ function AuditTab() {
               <TableCell className="font-mono text-xs">{l.changed_by?.slice(0, 8) ?? "—"}</TableCell>
             </TableRow>
           ))}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
+function VolunteerApprovalsTab() {
+  const [pending, setPending] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("volunteer_teams")
+      .select(`
+        id, team_code, join_date, is_approved,
+        volunteers_base ( full_name, membership_number, branch )
+      `)
+      .eq("is_approved", false)
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setPending(data ?? []);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const approve = async (id: string) => {
+    const { error } = await supabase.from("volunteer_teams").update({ is_approved: true }).eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("تم الاعتماد بنجاح"); load(); }
+  };
+
+  const reject = async (id: string) => {
+    if (!confirm("هل أنت متأكد من رفض ورفض انضمام هذا المتطوع للفريق؟")) return;
+    const { error } = await supabase.from("volunteer_teams").delete().eq("id", id);
+    if (error) toast.error(error.message);
+    else { toast.success("تم رفض الطلب وحذفه"); load(); }
+  };
+
+  return (
+    <Card className="card-elevated p-4 overflow-x-auto">
+      <div className="mb-4">
+        <h3 className="font-bold text-lg">طلبات انضمام المتطوعين للفرق</h3>
+        <p className="text-sm text-muted-foreground">قم باعتماد أو رفض المتطوعين الذين أضافهم مسؤولو الفرق.</p>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>اسم المتطوع</TableHead>
+            <TableHead>رقم العضوية</TableHead>
+            <TableHead>الفرع</TableHead>
+            <TableHead>الفريق المطلوب</TableHead>
+            <TableHead>إجراءات</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {loading ? (
+            <TableRow><TableCell colSpan={5} className="text-center py-8">جاري التحميل...</TableCell></TableRow>
+          ) : pending.length === 0 ? (
+            <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">لا توجد طلبات انضمام قيد الانتظار</TableCell></TableRow>
+          ) : (
+            pending.map((p) => {
+              const v = p.volunteers_base;
+              if (!v) return null;
+              return (
+                <TableRow key={p.id}>
+                  <TableCell className="font-bold">{v.full_name}</TableCell>
+                  <TableCell dir="ltr">{v.membership_number || "—"}</TableCell>
+                  <TableCell>{v.branch || "—"}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs">{p.team_code}</Badge></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="default" className="bg-success text-success-foreground hover:bg-success/90 h-8" onClick={() => approve(p.id)}>
+                        <Check className="w-4 h-4 ms-1" /> اعتماد
+                      </Button>
+                      <Button size="icon" variant="outline" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30" onClick={() => reject(p.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })
+          )}
         </TableBody>
       </Table>
     </Card>

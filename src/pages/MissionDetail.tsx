@@ -16,8 +16,9 @@ import {
 } from "@/lib/constants";
 import { StatusBadge } from "@/components/StatusBadge";
 import { toast } from "sonner";
-import { Save, Send, Plus, Trash2, AlertCircle, ChevronDown, ChevronUp, Lock, Calendar } from "lucide-react";
-
+import { Save, Send, Plus, Trash2, AlertCircle, ChevronDown, ChevronUp, Lock, Calendar, Search } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { VolunteerPicker, VolunteerData } from "@/components/VolunteerPicker";
 export default function MissionDetail() {
   const { id } = useParams();
   const { hasRole } = useAuth();
@@ -111,6 +112,16 @@ export default function MissionDetail() {
   // Volunteer ops
   const addVol = async () => {
     await supabase.from("mission_volunteers").insert({ mission_id: mission.id, full_name: "متطوع جديد", added_in_ops: true });
+    reloadVolunteers();
+  };
+  const addVolFromDB = async (v: VolunteerData) => {
+    await supabase.from("mission_volunteers").insert({ 
+      mission_id: mission.id, 
+      full_name: v.full_name, 
+      membership_number: v.membership_number,
+      branch: v.branch,
+      added_in_ops: true 
+    });
     reloadVolunteers();
   };
   const updateVol = async (vid: string, patch: any) => {
@@ -293,7 +304,20 @@ export default function MissionDetail() {
         <Card className="card-elevated p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-bold">المتطوعون</h3>
-            {canEdit && <Button size="sm" variant="outline" onClick={addVol}><Plus className="w-4 h-4 ms-1" />إضافة متطوع</Button>}
+            {canEdit && (
+              <div className="flex gap-2">
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button size="sm" variant="secondary"><Search className="w-4 h-4 ms-1" />إضافة من القاعدة</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>اختيار متطوع من قاعدة البيانات</DialogTitle></DialogHeader>
+                    <VolunteerPicker onSelect={(v) => addVolFromDB(v)} className="mt-4" />
+                  </DialogContent>
+                </Dialog>
+                <Button size="sm" variant="outline" onClick={addVol}><Plus className="w-4 h-4 ms-1" />متطوع جديد</Button>
+              </div>
+            )}
           </div>
           {volunteers.filter((v) => !v.removed).length === 0 && <p className="text-sm text-muted-foreground">لا يوجد متطوعون</p>}
           {volunteers.filter((v) => !v.removed).map((v) => (
