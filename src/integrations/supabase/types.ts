@@ -825,8 +825,8 @@ export type Database = {
       | "department_entry"
       | "operations_room"
       | "operations_supervisor"
-      | "joker"
       | "youth_room"
+      | "branch_youth"
       | "stakeholder"
       data_source: "whatsapp" | "wireless" | "phone"
       mission_status:
@@ -988,6 +988,7 @@ export const Constants = {
         "operations_supervisor",
         "joker",
         "youth_room",
+        "branch_youth",
         "stakeholder",
       ],
       data_source: ["whatsapp", "wireless", "phone"],
