@@ -16,7 +16,7 @@ interface Row {
   governorate: string | null; activity_date: string; status: string; region: string | null;
 }
 
-export default function Joker({ titleOverride }: { titleOverride?: string }) {
+export default function Joker({ titleOverride, embedded }: { titleOverride?: string, embedded?: boolean }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState("all");
@@ -48,9 +48,8 @@ export default function Joker({ titleOverride }: { titleOverride?: string }) {
   const reviewed = filtered.filter((r) => r.status === "reviewed").length;
   const pending = filtered.filter((r) => !["monitored", "reviewed"].includes(r.status)).length;
 
-  return (
-    <AppLayout title={titleOverride || "الجوكر"}>
-      <div className="space-y-6">
+  const content = (
+    <div className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Card className="p-4"><div className="text-xs text-muted-foreground">إجمالي</div><div className="text-2xl font-bold mt-1">{total}</div></Card>
           <Card className="p-4"><div className="text-xs text-muted-foreground">تم الرصد</div><div className="text-2xl font-bold mt-1 text-success">{monitored}</div></Card>
@@ -106,6 +105,7 @@ export default function Joker({ titleOverride }: { titleOverride?: string }) {
           </div>
         </Card>
       </div>
-    </AppLayout>
   );
+
+  return embedded ? content : <AppLayout title={titleOverride || "الجوكر"}>{content}</AppLayout>;
 }

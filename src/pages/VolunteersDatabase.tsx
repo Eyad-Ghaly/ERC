@@ -17,7 +17,7 @@ interface VolunteerWithTeams {
   volunteer_teams: { team_code: string; is_approved: boolean }[];
 }
 
-export default function VolunteersDatabase() {
+export default function VolunteersDatabase({ embedded }: { embedded?: boolean }) {
   const [volunteers, setVolunteers] = useState<VolunteerWithTeams[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -56,21 +56,17 @@ export default function VolunteersDatabase() {
   }, [volunteers, branchFilter, memberIdFilter, nameFilter]);
 
   // Unique branches for the datalist (if we wanted a dropdown) but the user asked for inputs "3 زراير فلاتر الاول بالفرع والتاني برقم العضوية والتالت بالاسم عادي"
-  // So we use Inputs with icons.
-
-  return (
-    <AppLayout title="قاعدة المتطوعين">
-      <div className="space-y-6">
-        <Card className="p-5 border-primary/20 bg-card/50 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="بحث بالفرع..."
-              value={branchFilter}
-              onChange={e => setBranchFilter(e.target.value)}
-              className="pr-9"
-            />
-          </div>
+  const content = (
+    <div className="space-y-6">
+      <Card className="p-5 border-primary/20 bg-card/50 flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="بحث بالفرع..."
+            value={branchFilter}
+            onChange={e => setBranchFilter(e.target.value)}
+            className="pr-9"
+        </div>
           <div className="relative flex-1">
             <Hash className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -144,6 +140,7 @@ export default function VolunteersDatabase() {
           </div>
         </Card>
       </div>
-    </AppLayout>
   );
+
+  return embedded ? content : <AppLayout title="قاعدة بيانات المتطوعين">{content}</AppLayout>;
 }

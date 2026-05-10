@@ -6,6 +6,7 @@ export const ROLES = {
   operations_supervisor: "مشرف غرفة العمليات",
   joker: "الجوكر",
   youth_room: "غرفة الشباب والتطوع",
+  branch_youth: "مسؤول الشباب بالفرع",
   stakeholder: "Dashboard - أصحاب المصلحة",
 } as const;
 

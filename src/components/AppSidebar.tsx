@@ -24,7 +24,7 @@ const items: NavItem[] = [
   { title: "الجوكر", url: "/joker", icon: Sparkles, roles: ["joker", "admin"] },
   { title: "مشرف غرفة العمليات", url: "/supervisor", icon: ShieldCheck, roles: ["operations_supervisor", "admin"] },
   { title: "غرفة الشباب والتطوع", url: "/youth", icon: Users2, roles: ["youth_room", "admin"] },
-  { title: "قاعدة المتطوعين", url: "/volunteers-database", icon: Users2, roles: ["youth_room"] },
+  { title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, roles: ["branch_youth", "admin"] },
   { title: "Dashboard", url: "/dashboard", icon: BarChart3, roles: ["stakeholder", "data_manager", "admin"] },
   { title: "إدارة وتحليل البيانات", url: "/data-manager", icon: Database, roles: ["data_manager", "admin"] },
   { title: "لوحة المدير", url: "/admin", icon: Settings, roles: ["admin"] },
