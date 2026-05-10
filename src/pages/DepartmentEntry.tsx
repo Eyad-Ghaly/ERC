@@ -477,8 +477,6 @@ export default function DepartmentEntry() {
             <div className="space-y-1.5"><Label>تاريخ النشاط *</Label><Input type="date" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>مكان التنفيذ</Label><Input value={executionPlace} onChange={(e) => setExecutionPlace(e.target.value)} /></div>
             <div className="space-y-1.5 md:col-span-2"><Label>اسم المهمة بالتفصيل *</Label><Textarea rows={2} value={missionName} onChange={(e) => setMissionName(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>خط العرض</Label><Input value={latitude} onChange={(e) => setLatitude(e.target.value)} dir="ltr" placeholder="30.0444" /></div>
-            <div className="space-y-1.5"><Label>خط الطول</Label><Input value={longitude} onChange={(e) => setLongitude(e.target.value)} dir="ltr" placeholder="31.2357" /></div>
             <div className="space-y-1.5"><Label>مسؤول المتابعة</Label><Input value={followUpResponsible} onChange={(e) => setFollowUpResponsible(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>رقم تليفون مسؤول المتابعة</Label><Input value={followUpPhone} onChange={(e) => setFollowUpPhone(e.target.value)} dir="ltr" /></div>
             <div className="space-y-1.5 md:col-span-2">
