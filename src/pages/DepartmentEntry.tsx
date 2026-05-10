@@ -309,6 +309,8 @@ export default function DepartmentEntry() {
     if (!projectCode) { toast.error("اختر كود المشروع"); return; }
     if (!missionName.trim()) { toast.error("أدخل اسم المهمة"); return; }
     if (!activityDate) { toast.error("أدخل تاريخ النشاط"); return; }
+    if (!followUpResponsible.trim()) { toast.error("أدخل مسؤول المتابعة"); return; }
+    if (!/^\d{11}$/.test(followUpPhone.trim())) { toast.error("رقم تليفون مسؤول المتابعة يجب أن يكون 11 رقماً"); return; }
 
     setBusy(true);
     try {
@@ -477,8 +479,8 @@ export default function DepartmentEntry() {
             <div className="space-y-1.5"><Label>تاريخ النشاط *</Label><Input type="date" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>مكان التنفيذ</Label><Input value={executionPlace} onChange={(e) => setExecutionPlace(e.target.value)} /></div>
             <div className="space-y-1.5 md:col-span-2"><Label>اسم المهمة بالتفصيل *</Label><Textarea rows={2} value={missionName} onChange={(e) => setMissionName(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>مسؤول المتابعة</Label><Input value={followUpResponsible} onChange={(e) => setFollowUpResponsible(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label>رقم تليفون مسؤول المتابعة</Label><Input value={followUpPhone} onChange={(e) => setFollowUpPhone(e.target.value)} dir="ltr" /></div>
+            <div className="space-y-1.5"><Label>مسؤول المتابعة *</Label><Input value={followUpResponsible} onChange={(e) => setFollowUpResponsible(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>رقم تليفون مسؤول المتابعة *</Label><Input value={followUpPhone} onChange={(e) => setFollowUpPhone(e.target.value)} dir="ltr" maxLength={11} placeholder="01X XXXX XXXX" /></div>
             <div className="space-y-1.5 md:col-span-2">
               <Label>هل طبيعة المهمة بها مستفيدين؟</Label>
               <Select value={hasBeneficiaries ? "true" : "false"} onValueChange={(v) => setHasBeneficiaries(v === "true")}>
