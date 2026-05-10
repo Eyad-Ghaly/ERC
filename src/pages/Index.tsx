@@ -11,6 +11,7 @@ const TILES = [
   { role: "joker", title: "الجوكر", url: "/joker", icon: Sparkles, desc: "مراجعة الاستمارات" },
   { role: "operations_supervisor", title: "مشرف العمليات", url: "/supervisor", icon: ShieldCheck, desc: "اعتماد المهام" },
   { role: "youth_room", title: "غرفة الشباب", url: "/youth", icon: Users2, desc: "رصد المتطوعين والساعات" },
+  { role: "branch_youth", title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, desc: "تسجيل المتطوعين في القاعدة" },
   { role: "stakeholder", title: "Dashboard", url: "/dashboard", icon: BarChart3, desc: "مؤشرات الأداء" },
   { role: "data_manager", title: "إدارة البيانات", url: "/data-manager", icon: Database, desc: "رؤية مزدوجة وكاملة" },
   { role: "admin", title: "لوحة المدير", url: "/admin", icon: Settings, desc: "المستخدمون والقوائم" },
