@@ -91,8 +91,8 @@ export default function DepartmentEntry() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => { 
-    if (profile?.team_code && !id) setTeamCode(profile.team_code); 
+  useEffect(() => {
+    if (profile?.team_code && !id) setTeamCode(profile.team_code);
   }, [profile, id]);
 
   useEffect(() => {
@@ -122,7 +122,7 @@ export default function DepartmentEntry() {
           setHasBeneficiaries(mission.has_beneficiaries || false);
           setIsOpenMission(mission.is_open_mission || false);
         }
-        
+
         const { data: vols } = await supabase.from("mission_volunteers").select("*").eq("mission_id", id);
         if (vols && vols.length > 0) {
           setVolunteers(vols.map(v => ({ full_name: v.full_name || "", membership_number: v.membership_number || "", branch: v.branch || "" })));
@@ -142,7 +142,7 @@ export default function DepartmentEntry() {
     // Check if empty row exists, update it, else append
     const emptyIdx = volunteers.findIndex(row => !row.full_name && !row.membership_number);
     const newVol = { full_name: v.full_name, membership_number: v.membership_number || "", branch: v.branch || "" };
-    
+
     if (emptyIdx >= 0) {
       setVolunteers(prev => prev.map((row, i) => i === emptyIdx ? newVol : row));
     } else {
@@ -208,13 +208,13 @@ export default function DepartmentEntry() {
     if (mapped.classification) setClassification(String(mapped.classification));
     if (mapped.classificationName) setClassificationName(String(mapped.classificationName));
     if (mapped.activityDate) {
-        // Handle Excel date format
-        let d = mapped.activityDate;
-        if (typeof d === "number") {
-            const date = XLSX.SSF.parse_date_code(d);
-            d = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
-        }
-        setActivityDate(String(d));
+      // Handle Excel date format
+      let d = mapped.activityDate;
+      if (typeof d === "number") {
+        const date = XLSX.SSF.parse_date_code(d);
+        d = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+      }
+      setActivityDate(String(d));
     }
     if (mapped.executionPlace) setExecutionPlace(String(mapped.executionPlace));
     if (mapped.missionName) setMissionName(String(mapped.missionName));
@@ -223,18 +223,18 @@ export default function DepartmentEntry() {
     if (mapped.followUpResponsible) setFollowUpResponsible(String(mapped.followUpResponsible));
     if (mapped.followUpPhone) setFollowUpPhone(String(mapped.followUpPhone));
     if (mapped.hasBeneficiaries !== undefined) {
-        const val = String(mapped.hasBeneficiaries).toLowerCase();
-        setHasBeneficiaries(val === "true" || val === "نعم" || val === "1");
+      const val = String(mapped.hasBeneficiaries).toLowerCase();
+      setHasBeneficiaries(val === "true" || val === "نعم" || val === "1");
     }
     if (mapped.isOpenMission !== undefined) {
-        const val = String(mapped.isOpenMission).toLowerCase();
-        setIsOpenMission(val === "true" || val === "نعم" || val === "1");
+      const val = String(mapped.isOpenMission).toLowerCase();
+      setIsOpenMission(val === "true" || val === "نعم" || val === "1");
     }
   };
 
   const bulkUploadMissions = async (rows: any[]) => {
     if (!user || !teamCode) return;
-    
+
     setBusy(true);
     let successCount = 0;
     let failCount = 0;
@@ -257,8 +257,8 @@ export default function DepartmentEntry() {
 
         let actDate = mapped.activityDate;
         if (typeof actDate === "number") {
-            const date = XLSX.SSF.parse_date_code(actDate);
-            actDate = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+          const date = XLSX.SSF.parse_date_code(actDate);
+          actDate = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
         }
 
         const hasBen = String(mapped.hasBeneficiaries || "").toLowerCase();
@@ -319,7 +319,7 @@ export default function DepartmentEntry() {
         // Update existing mission
         const { data: mData } = await supabase.from("missions").select("mission_code").eq("id", id).single();
         code = mData?.mission_code || "";
-        
+
         const { error: updErr } = await supabase.from("missions").update({
           status: sendNow ? (isOpenMission ? "open_active" : "coded") : "planned",
           project_code: projectCode,
@@ -424,20 +424,20 @@ export default function DepartmentEntry() {
               </div>
             </div>
             <div className="flex gap-2">
-              <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  className="hidden" 
-                  accept=".xlsx, .xls" 
-                  onChange={handleExcelUpload} 
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".xlsx, .xls"
+                onChange={handleExcelUpload}
               />
-              <Button 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || busy}
-                  className="gradient-primary shadow-lg shadow-primary/20"
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || busy}
+                className="gradient-primary shadow-lg shadow-primary/20"
               >
-                  {uploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Plus className="w-4 h-4 ms-2" />}
-                  تحميل البيانات الآن
+                {uploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Plus className="w-4 h-4 ms-2" />}
+                تحميل البيانات الآن
               </Button>
             </div>
           </Card>

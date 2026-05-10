@@ -115,12 +115,12 @@ export default function MissionDetail() {
     reloadVolunteers();
   };
   const addVolFromDB = async (v: VolunteerData) => {
-    await supabase.from("mission_volunteers").insert({ 
-      mission_id: mission.id, 
-      full_name: v.full_name, 
+    await supabase.from("mission_volunteers").insert({
+      mission_id: mission.id,
+      full_name: v.full_name,
       membership_number: v.membership_number,
       branch: v.branch,
-      added_in_ops: true 
+      added_in_ops: true
     });
     reloadVolunteers();
   };
@@ -461,7 +461,7 @@ export default function MissionDetail() {
               />
             ))}
 
-            {isOps && (!dailyReports.length || dailyReports[dailyReports.length-1].status === 'completed') && !mission.is_open_mission_closed && (
+            {isOps && (!dailyReports.length || dailyReports[dailyReports.length - 1].status === 'completed') && !mission.is_open_mission_closed && (
               <div className="flex justify-end pt-2">
                 <Button onClick={startNewDay} variant="outline" className="border-primary text-primary hover:bg-primary/10">
                   <Plus className="w-4 h-4 ms-2" /> بدء تقرير يوم جديد
@@ -497,10 +497,10 @@ function DailyReportBox({ report, mission, load, hasRole }: any) {
   // Strict role checks — no role inflation via admin for button visibility
   const canSendToJoker = hasRole("operations_room") || hasRole("operations_supervisor");
   const canSendToYouth = hasRole("joker");
-  const canComplete   = hasRole("youth_room");
-  const isAdmin       = hasRole("admin");
+  const canComplete = hasRole("youth_room");
+  const isAdmin = hasRole("admin");
 
-  const isOpsUser  = canSendToJoker || isAdmin;
+  const isOpsUser = canSendToJoker || isAdmin;
   const isJokerUser = canSendToYouth || isAdmin;
   const isYouthUser = canComplete || isAdmin;
 
@@ -624,7 +624,7 @@ function DailyReportBox({ report, mission, load, hasRole }: any) {
         )}
 
         {/* ── Youth notes (collapsible) ── */}
-        {(isYouthUser && ['pending_youth','completed'].includes(report.status) || report.youth_notes) && (
+        {(isYouthUser && ['pending_youth', 'completed'].includes(report.status) || report.youth_notes) && (
           <div className="border rounded-lg overflow-hidden">
             <button type="button" className="w-full flex items-center justify-between px-4 py-3 bg-success/5 hover:bg-success/10 transition-colors text-sm font-bold" onClick={() => setYouthExpanded(!youthExpanded)}>
               <span className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-success inline-block"></span>ملاحظات غرفة الشباب</span>

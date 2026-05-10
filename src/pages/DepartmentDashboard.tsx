@@ -18,7 +18,7 @@ import { AddVolunteerDialog } from "@/components/AddVolunteerDialog";
 export default function DepartmentDashboard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  
+
   // Missions state
   const [missions, setMissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +49,7 @@ export default function DepartmentDashboard() {
     const { data, error } = await supabase
       .from("volunteer_teams")
       .select(`
-        id, is_approved, join_date, team_code,
+        id, is_approved, join_date, team_code, team_phone, team_national_id,
         volunteers_base ( id, full_name, membership_number, branch, phone_number )
       `)
       .eq("team_code", profile.team_code);
@@ -116,7 +116,7 @@ export default function DepartmentDashboard() {
             <TabsTrigger value="volunteers" className="px-6"><UserCheck className="w-4 h-4 ml-2" /> متطوعو الفريق</TabsTrigger>
           </TabsList>
           {profile?.team_code && (
-             <Badge variant="outline" className="hidden md:inline-flex">كود الفريق: {profile.team_code}</Badge>
+            <Badge variant="outline" className="hidden md:inline-flex">كود الفريق: {profile.team_code}</Badge>
           )}
         </div>
 
@@ -171,25 +171,25 @@ export default function DepartmentDashboard() {
                   <TableBody>
                     {loading ? <TableRow><TableCell colSpan={5} className="text-center py-8">جاري التحميل...</TableCell></TableRow>
                       : filteredMissions.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8">لا توجد مهام</TableCell></TableRow>
-                      : filteredMissions.map((m) => (
-                        <TableRow key={m.id}>
-                          <TableCell><code className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{m.mission_code}</code></TableCell>
-                          <TableCell className="font-medium max-w-[200px] truncate" title={m.mission_name}>{m.mission_name}</TableCell>
-                          <TableCell className="text-muted-foreground text-sm">{m.activity_date}</TableCell>
-                          <TableCell><StatusBadge status={m.status} /></TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/missions/${m.id}`)}><Eye className="w-4 h-4 text-info" /></Button>
-                              {m.status === 'planned' && (
-                                <>
-                                  <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/department-entry/${m.id}`)}><Edit2 className="w-4 h-4 text-warning" /></Button>
-                                  <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => handleDeleteMission(m.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                        : filteredMissions.map((m) => (
+                          <TableRow key={m.id}>
+                            <TableCell><code className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{m.mission_code}</code></TableCell>
+                            <TableCell className="font-medium max-w-[200px] truncate" title={m.mission_name}>{m.mission_name}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{m.activity_date}</TableCell>
+                            <TableCell><StatusBadge status={m.status} /></TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/missions/${m.id}`)}><Eye className="w-4 h-4 text-info" /></Button>
+                                {m.status === 'planned' && (
+                                  <>
+                                    <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/department-entry/${m.id}`)}><Edit2 className="w-4 h-4 text-warning" /></Button>
+                                    <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => handleDeleteMission(m.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
                   </TableBody>
                 </Table>
               </div>
@@ -216,6 +216,7 @@ export default function DepartmentDashboard() {
                     <TableHead>الاسم</TableHead>
                     <TableHead>الفرع</TableHead>
                     <TableHead>رقم العضوية</TableHead>
+                    <TableHead>التليفون</TableHead>
                     <TableHead>تاريخ الانضمام</TableHead>
                     <TableHead>الحالة</TableHead>
                   </TableRow>
@@ -234,6 +235,7 @@ export default function DepartmentDashboard() {
                           <TableCell className="font-bold">{v.full_name}</TableCell>
                           <TableCell>{v.branch || "—"}</TableCell>
                           <TableCell dir="ltr" className="text-right">{v.membership_number || "—"}</TableCell>
+                          <TableCell dir="ltr" className="text-right">{vt.team_phone || v.phone_number || "—"}</TableCell>
                           <TableCell>{vt.join_date || "—"}</TableCell>
                           <TableCell>
                             {vt.is_approved ? (

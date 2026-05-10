@@ -20,7 +20,7 @@ interface VolunteerWithTeams {
 export default function VolunteersDatabase() {
   const [volunteers, setVolunteers] = useState<VolunteerWithTeams[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Filters
   const [branchFilter, setBranchFilter] = useState("");
   const [memberIdFilter, setMemberIdFilter] = useState("");
@@ -36,13 +36,13 @@ export default function VolunteersDatabase() {
           id, full_name, membership_number, branch, phone_number, national_id,
           volunteer_teams ( team_code, is_approved )
         `);
-      
+
       if (!error && data) {
         setVolunteers(data as unknown as VolunteerWithTeams[]);
       }
       setLoading(false);
     };
-    
+
     fetchVolunteers();
   }, []);
 
@@ -64,28 +64,28 @@ export default function VolunteersDatabase() {
         <Card className="p-5 border-primary/20 bg-card/50 flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
             <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="بحث بالفرع..." 
-              value={branchFilter} 
-              onChange={e => setBranchFilter(e.target.value)} 
+            <Input
+              placeholder="بحث بالفرع..."
+              value={branchFilter}
+              onChange={e => setBranchFilter(e.target.value)}
               className="pr-9"
             />
           </div>
           <div className="relative flex-1">
             <Hash className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="بحث برقم العضوية..." 
-              value={memberIdFilter} 
-              onChange={e => setMemberIdFilter(e.target.value)} 
+            <Input
+              placeholder="بحث برقم العضوية..."
+              value={memberIdFilter}
+              onChange={e => setMemberIdFilter(e.target.value)}
               className="pr-9"
             />
           </div>
           <div className="relative flex-1">
             <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="بحث بالاسم..." 
-              value={nameFilter} 
-              onChange={e => setNameFilter(e.target.value)} 
+            <Input
+              placeholder="بحث بالاسم..."
+              value={nameFilter}
+              onChange={e => setNameFilter(e.target.value)}
               className="pr-9"
             />
           </div>

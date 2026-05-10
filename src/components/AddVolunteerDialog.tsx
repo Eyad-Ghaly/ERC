@@ -17,20 +17,22 @@ interface AddVolunteerDialogProps {
 export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  
+
   // New Volunteer state
   const [fullName, setFullName] = useState("");
   const [memberId, setMemberId] = useState("");
   const [branch, setBranch] = useState("");
   const [phone, setPhone] = useState("");
   const [nationalId, setNationalId] = useState("");
-  
+
   // Existing Volunteer state
   const [selectedVolunteer, setSelectedVolunteer] = useState<VolunteerData | null>(null);
+  const [teamPhone, setTeamPhone] = useState("");
+  const [teamNationalId, setTeamNationalId] = useState("");
 
   const handleAddExisting = async () => {
     if (!selectedVolunteer) return toast.error("الرجاء اختيار متطوع");
-    
+
     setBusy(true);
     // Check if already in team
     const { data: existing } = await supabase
@@ -49,7 +51,9 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
       volunteer_id: selectedVolunteer.id,
       team_code: teamCode,
       join_date: new Date().toISOString().split('T')[0],
-      is_approved: false
+      is_approved: false,
+      team_phone: teamPhone || null,
+      team_national_id: teamNationalId || null
     });
 
     setBusy(false);
@@ -58,13 +62,15 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
     } else {
       toast.success("تم إرسال طلب إضافة المتطوع للفريق وهو قيد الاعتماد");
       setOpen(false);
+      setTeamPhone("");
+      setTeamNationalId("");
       onAdded();
     }
   };
 
   const handleAddNew = async () => {
     if (!fullName.trim()) return toast.error("اسم المتطوع مطلوب");
-    
+
     setBusy(true);
     // 1. Insert into base
     const { data: newVol, error: baseError } = await supabase
@@ -89,7 +95,9 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
       volunteer_id: newVol.id,
       team_code: teamCode,
       join_date: new Date().toISOString().split('T')[0],
-      is_approved: false
+      is_approved: false,
+      team_phone: phone || null,
+      team_national_id: nationalId || null
     });
 
     setBusy(false);
@@ -106,7 +114,7 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="w-4 h-4 ms-2"/> إضافة متطوع للفريق</Button>
+        <Button size="sm"><Plus className="w-4 h-4 ms-2" /> إضافة متطوع للفريق</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
@@ -115,15 +123,26 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
 
         <Tabs defaultValue="existing" className="mt-4">
           <TabsList className="grid w-full grid-cols-2 mb-4">
-            <TabsTrigger value="existing"><Search className="w-4 h-4 ml-2"/> من قاعدة البيانات</TabsTrigger>
-            <TabsTrigger value="new"><Plus className="w-4 h-4 ml-2"/> متطوع جديد</TabsTrigger>
+            <TabsTrigger value="existing"><Search className="w-4 h-4 ml-2" /> من قاعدة البيانات</TabsTrigger>
+            <TabsTrigger value="new"><Plus className="w-4 h-4 ml-2" /> متطوع جديد</TabsTrigger>
           </TabsList>
 
           <TabsContent value="existing" className="space-y-4">
             <div className="p-4 border rounded-md bg-muted/30">
               <p className="text-sm text-muted-foreground mb-4">ابحث عن متطوع مسجل مسبقاً في قاعدة بيانات المتطوعين لضمه لفريقك.</p>
               <VolunteerPicker onSelect={setSelectedVolunteer} />
-              <Button onClick={handleAddExisting} disabled={busy || !selectedVolunteer} className="w-full mt-6">إرسال طلب انضمام</Button>
+              
+              {selectedVolunteer && (
+                <div className="mt-4 p-3 bg-background border rounded-md space-y-3">
+                  <p className="text-xs font-bold text-primary">بيانات إضافية خاصة بالفريق (اختياري)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5"><Label className="text-xs">رقم التليفون (للفريق)</Label><Input value={teamPhone} onChange={e => setTeamPhone(e.target.value)} dir="ltr" className="h-8 text-sm" /></div>
+                    <div className="space-y-1.5"><Label className="text-xs">الرقم القومي (للفريق)</Label><Input value={teamNationalId} onChange={e => setTeamNationalId(e.target.value)} dir="ltr" className="h-8 text-sm" /></div>
+                  </div>
+                </div>
+              )}
+              
+              <Button onClick={handleAddExisting} disabled={busy || !selectedVolunteer} className="w-full mt-4">إرسال طلب انضمام</Button>
             </div>
           </TabsContent>
 
@@ -131,9 +150,9 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2 space-y-1.5"><Label>الاسم بالكامل *</Label><Input value={fullName} onChange={e => setFullName(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>الفرع</Label><Input value={branch} onChange={e => setBranch(e.target.value)} /></div>
-              <div className="space-y-1.5"><Label>رقم العضوية</Label><Input value={memberId} onChange={e => setMemberId(e.target.value)} dir="ltr"/></div>
-              <div className="space-y-1.5"><Label>رقم التليفون</Label><Input value={phone} onChange={e => setPhone(e.target.value)} dir="ltr"/></div>
-              <div className="space-y-1.5"><Label>الرقم القومي</Label><Input value={nationalId} onChange={e => setNationalId(e.target.value)} dir="ltr"/></div>
+              <div className="space-y-1.5"><Label>رقم العضوية</Label><Input value={memberId} onChange={e => setMemberId(e.target.value)} dir="ltr" /></div>
+              <div className="space-y-1.5"><Label>رقم التليفون</Label><Input value={phone} onChange={e => setPhone(e.target.value)} dir="ltr" /></div>
+              <div className="space-y-1.5"><Label>الرقم القومي</Label><Input value={nationalId} onChange={e => setNationalId(e.target.value)} dir="ltr" /></div>
             </div>
             <Button onClick={handleAddNew} disabled={busy} className="w-full mt-4">تسجيل وإضافة للفريق</Button>
           </TabsContent>

@@ -457,7 +457,7 @@ function VolunteerApprovalsTab() {
   };
 
   const reject = async (id: string) => {
-    if (!confirm("هل أنت متأكد من رفض ورفض انضمام هذا المتطوع للفريق؟")) return;
+    if (!confirm("هل أنت متأكد من رفض طلب الانضمام؟")) return;
     const { error } = await supabase.from("volunteer_teams").delete().eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("تم رفض الطلب وحذفه"); load(); }
