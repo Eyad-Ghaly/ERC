@@ -238,6 +238,7 @@ export default function BeneficiariesRegistration() {
   const submitIndividual = async () => {
     if (!selectedTargetId) return toast.error("اختر المهمة أولاً");
     if (!indivFullName.trim()) return toast.error("أدخل اسم المستفيد");
+    if (indivPhone && indivPhone.length !== 11) return toast.error("رقم التليفون يجب أن يكون 11 رقماً بالضبط");
     
     const target = targets.find(t => t.id === selectedTargetId);
     if (!target) return;
@@ -446,7 +447,24 @@ export default function BeneficiariesRegistration() {
                         </div>
                       )}
                     </div>
-                    <div className="space-y-1.5"><Label>رقم التليفون</Label><Input value={indivPhone} onChange={(e) => setIndivPhone(e.target.value)} dir="ltr" /></div>
+                    <div className="space-y-1.5">
+                      <Label>رقم التليفون</Label>
+                      <Input
+                        value={indivPhone}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/\D/g, '').slice(0, 11);
+                          setIndivPhone(v);
+                        }}
+                        dir="ltr"
+                        maxLength={11}
+                        placeholder="01xxxxxxxxx"
+                        inputMode="numeric"
+                        className={indivPhone && indivPhone.length !== 11 ? 'border-destructive focus-visible:ring-destructive' : ''}
+                      />
+                      {indivPhone && indivPhone.length !== 11 && indivPhone.length > 0 && (
+                        <p className="text-xs text-destructive">{11 - indivPhone.length} أرقام متبقية</p>
+                      )}
+                    </div>
                     <div className="space-y-1.5"><Label>تاريخ الميلاد</Label><Input type="date" value={indivBirthdate} onChange={(e) => setIndivBirthdate(e.target.value)} /></div>
                     <div className="space-y-1.5"><Label>الجنسية</Label><Input value={indivNationality} onChange={(e) => setIndivNationality(e.target.value)} /></div>
                     <FieldSelect fieldKey="service_type" value={indivServiceType} onChange={setIndivServiceType} label="نوع الخدمة" />
