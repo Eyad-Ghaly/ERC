@@ -86,6 +86,7 @@ export default function DepartmentEntry() {
   const [followUpPhone, setFollowUpPhone] = useState("");
   const [hasBeneficiaries, setHasBeneficiaries] = useState(false);
   const [isOpenMission, setIsOpenMission] = useState(false);
+  const [isAutoMissionName, setIsAutoMissionName] = useState(true);
 
   const [volunteers, setVolunteers] = useState<Volunteer[]>([{ full_name: "", membership_number: "", branch: "" }]);
   const [busy, setBusy] = useState(false);
@@ -115,6 +116,7 @@ export default function DepartmentEntry() {
           setActivityDate(mission.activity_date || "");
           setExecutionPlace(mission.execution_place || "");
           setMissionName(mission.mission_name || "");
+          setIsAutoMissionName(false);
           setLatitude(mission.latitude ? String(mission.latitude) : "");
           setLongitude(mission.longitude ? String(mission.longitude) : "");
           setFollowUpResponsible(mission.follow_up_responsible || "");
@@ -132,6 +134,17 @@ export default function DepartmentEntry() {
       loadMission();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (isAutoMissionName && !id && !uploading) {
+      const parts = [activityClassification, activityType, executionPlace].filter(p => p && p.trim() !== "");
+      if (parts.length > 0) {
+        setMissionName(parts.join(" - "));
+      } else {
+        setMissionName("");
+      }
+    }
+  }, [activityClassification, activityType, executionPlace, isAutoMissionName, id, uploading]);
 
   const addVolunteer = () => setVolunteers((v) => [...v, { full_name: "", membership_number: "", branch: "" }]);
   const removeVolunteer = (i: number) => setVolunteers((v) => v.filter((_, idx) => idx !== i));
@@ -217,7 +230,10 @@ export default function DepartmentEntry() {
       setActivityDate(String(d));
     }
     if (mapped.executionPlace) setExecutionPlace(String(mapped.executionPlace));
-    if (mapped.missionName) setMissionName(String(mapped.missionName));
+    if (mapped.missionName) {
+      setMissionName(String(mapped.missionName));
+      setIsAutoMissionName(false);
+    }
     if (mapped.latitude) setLatitude(String(mapped.latitude));
     if (mapped.longitude) setLongitude(String(mapped.longitude));
     if (mapped.followUpResponsible) setFollowUpResponsible(String(mapped.followUpResponsible));
@@ -478,7 +494,7 @@ export default function DepartmentEntry() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5"><Label>تاريخ النشاط *</Label><Input type="date" value={activityDate} onChange={(e) => setActivityDate(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>مكان التنفيذ</Label><Input value={executionPlace} onChange={(e) => setExecutionPlace(e.target.value)} /></div>
-            <div className="space-y-1.5 md:col-span-2"><Label>اسم المهمة بالتفصيل *</Label><Textarea rows={2} value={missionName} onChange={(e) => setMissionName(e.target.value)} /></div>
+            <div className="space-y-1.5 md:col-span-2"><Label>اسم المهمة بالتفصيل *</Label><Textarea rows={2} value={missionName} onChange={(e) => { setMissionName(e.target.value); setIsAutoMissionName(false); }} /></div>
             <div className="space-y-1.5"><Label>مسؤول المتابعة *</Label><Input value={followUpResponsible} onChange={(e) => setFollowUpResponsible(e.target.value)} /></div>
             <div className="space-y-1.5"><Label>رقم تليفون مسؤول المتابعة *</Label><Input value={followUpPhone} onChange={(e) => setFollowUpPhone(e.target.value)} dir="ltr" maxLength={11} placeholder="01X XXXX XXXX" /></div>
             <div className="space-y-1.5 md:col-span-2">
