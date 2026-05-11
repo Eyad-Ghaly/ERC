@@ -31,6 +31,8 @@ export default function Admin() {
           <TabsTrigger value="dropdowns">القوائم المنسدلة</TabsTrigger>
           <TabsTrigger value="restrictions">قيود لكل مستخدم</TabsTrigger>
           <TabsTrigger value="custom_fields">حقول مخصصة للفرق</TabsTrigger>
+          <TabsTrigger value="team_kpis">مؤشرات مخصصة</TabsTrigger>
+          <TabsTrigger value="feedback_questions">أسئلة تقييم الفريق</TabsTrigger>
           <TabsTrigger value="volunteer_approvals">اعتماد المتطوعين</TabsTrigger>
           <TabsTrigger value="audit">سجل التعديلات</TabsTrigger>
         </TabsList>
@@ -38,6 +40,8 @@ export default function Admin() {
         <TabsContent value="dropdowns"><DropdownsTab /></TabsContent>
         <TabsContent value="restrictions"><RestrictionsTab /></TabsContent>
         <TabsContent value="custom_fields"><CustomFieldsTab /></TabsContent>
+        <TabsContent value="team_kpis"><TeamCustomKpisTab /></TabsContent>
+        <TabsContent value="feedback_questions"><FeedbackQuestionsTab /></TabsContent>
         <TabsContent value="volunteer_approvals"><VolunteerApprovalsTab /></TabsContent>
         <TabsContent value="audit"><AuditTab /></TabsContent>
       </Tabs>
@@ -389,6 +393,148 @@ function CustomFieldsTab() {
                       </TableCell>
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TeamCustomKpisTab() {
+  const [teamCode, setTeamCode] = useState("");
+  const [kpis, setKpis] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newKey, setNewKey] = useState("");
+
+  const loadKpis = async (tc: string) => {
+    if (!tc) return;
+    setLoading(true);
+    const { data } = await supabase.from("team_custom_kpis").select("*").eq("team_code", tc).order("created_at");
+    setKpis(data ?? []);
+    setLoading(false);
+  };
+
+  const addKpi = async () => {
+    if (!teamCode || !newLabel || !newKey) return toast.error("أكمل البيانات المطلوبة");
+    const { error } = await supabase.from("team_custom_kpis").insert({ team_code: teamCode, kpi_label: newLabel, kpi_key: newKey });
+    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setNewLabel(""); setNewKey(""); loadKpis(teamCode); }
+  };
+
+  const deleteKpi = async (id: string) => {
+    await supabase.from("team_custom_kpis").delete().eq("id", id);
+    loadKpis(teamCode);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="card-elevated p-5">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-1.5 flex-1 max-w-[300px]">
+            <Label>أدخل كود الفريق</Label>
+            <Input value={teamCode} onChange={(e) => setTeamCode(e.target.value)} placeholder="مثال: P02" dir="ltr" />
+          </div>
+          <Button variant="outline" onClick={() => loadKpis(teamCode)}>تحميل المؤشرات</Button>
+        </div>
+      </Card>
+      {teamCode.trim() && (
+        <>
+          <Card className="card-elevated p-5 border-primary/30">
+            <h3 className="font-bold text-primary mb-4">إضافة مؤشر أداء جديد لفريق <code className="bg-primary/10 px-1.5 py-0.5 rounded">{teamCode}</code></h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label>اسم المؤشر (عربي) *</Label><Input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="مثال: عدد المستهدفين بالتوعية" /></div>
+              <div className="space-y-1.5"><Label>مفتاح المؤشر (إنجليزي) *</Label><Input value={newKey} onChange={e => setNewKey(e.target.value)} placeholder="awareness_target" dir="ltr" /></div>
+            </div>
+            <Button className="mt-4" onClick={addKpi}><Plus className="w-4 h-4 ms-2" /> إضافة المؤشر</Button>
+          </Card>
+          <Card className="card-elevated p-4">
+            <h3 className="font-bold mb-3">المؤشرات الحالية</h3>
+            {loading ? <p className="text-muted-foreground text-sm p-4">جاري التحميل...</p> : (
+              <Table>
+                <TableHeader><TableRow><TableHead>اسم المؤشر</TableHead><TableHead>المفتاح</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {kpis.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground">لا توجد مؤشرات</TableCell></TableRow>
+                    : kpis.map(k => (
+                      <TableRow key={k.id}>
+                        <TableCell className="font-bold">{k.kpi_label}</TableCell>
+                        <TableCell><code className="text-xs bg-muted px-1.5 py-0.5 rounded" dir="ltr">{k.kpi_key}</code></TableCell>
+                        <TableCell><Button size="icon" variant="ghost" onClick={() => deleteKpi(k.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FeedbackQuestionsTab() {
+  const [teamCode, setTeamCode] = useState("");
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newKey, setNewKey] = useState("");
+
+  const loadQuestions = async (tc: string) => {
+    if (!tc) return;
+    setLoading(true);
+    const { data } = await supabase.from("feedback_custom_questions").select("*").eq("team_code", tc).order("created_at");
+    setQuestions(data ?? []);
+    setLoading(false);
+  };
+
+  const addQuestion = async () => {
+    if (!teamCode || !newLabel || !newKey) return toast.error("أكمل البيانات المطلوبة");
+    const { error } = await supabase.from("feedback_custom_questions").insert({ team_code: teamCode, question_text: newLabel, question_key: newKey });
+    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setNewLabel(""); setNewKey(""); loadQuestions(teamCode); }
+  };
+
+  const deleteQuestion = async (id: string) => {
+    await supabase.from("feedback_custom_questions").delete().eq("id", id);
+    loadQuestions(teamCode);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className="card-elevated p-5">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-1.5 flex-1 max-w-[300px]">
+            <Label>أدخل كود الفريق</Label>
+            <Input value={teamCode} onChange={(e) => setTeamCode(e.target.value)} placeholder="مثال: P02" dir="ltr" />
+          </div>
+          <Button variant="outline" onClick={() => loadQuestions(teamCode)}>تحميل الأسئلة</Button>
+        </div>
+      </Card>
+      {teamCode.trim() && (
+        <>
+          <Card className="card-elevated p-5 border-primary/30">
+            <h3 className="font-bold text-primary mb-4">إضافة سؤال تقييم جديد لفريق <code className="bg-primary/10 px-1.5 py-0.5 rounded">{teamCode}</code></h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5"><Label>نص السؤال (عربي) *</Label><Input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="مثال: كيف تقيم سرعة الاستجابة؟" /></div>
+              <div className="space-y-1.5"><Label>مفتاح السؤال (إنجليزي) *</Label><Input value={newKey} onChange={e => setNewKey(e.target.value)} placeholder="response_speed" dir="ltr" /></div>
+            </div>
+            <Button className="mt-4" onClick={addQuestion}><Plus className="w-4 h-4 ms-2" /> إضافة السؤال</Button>
+          </Card>
+          <Card className="card-elevated p-4">
+            <h3 className="font-bold mb-3">الأسئلة الحالية</h3>
+            {loading ? <p className="text-muted-foreground text-sm p-4">جاري التحميل...</p> : (
+              <Table>
+                <TableHeader><TableRow><TableHead>نص السؤال</TableHead><TableHead>المفتاح</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {questions.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-4 text-muted-foreground">لا توجد أسئلة مخصصة</TableCell></TableRow>
+                    : questions.map(q => (
+                      <TableRow key={q.id}>
+                        <TableCell className="font-bold">{q.question_text}</TableCell>
+                        <TableCell><code className="text-xs bg-muted px-1.5 py-0.5 rounded" dir="ltr">{q.question_key}</code></TableCell>
+                        <TableCell><Button size="icon" variant="ghost" onClick={() => deleteQuestion(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell>
+                      </TableRow>
+                    ))}
                 </TableBody>
               </Table>
             )}

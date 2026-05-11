@@ -23,10 +23,12 @@ export default function TeamTargets() {
   const [targetUniqueVolunteers, setTargetUniqueVolunteers] = useState<number>(0);
   const [targetVolunteerParticipations, setTargetVolunteerParticipations] = useState<number>(0);
   const [targetBeneficiaries, setTargetBeneficiaries] = useState<number>(0);
+  const [customTargets, setCustomTargets] = useState<Record<string, number>>({});
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [teams, setTeams] = useState<string[]>([]);
+  const [customKpis, setCustomKpis] = useState<any[]>([]);
 
   const isElevated = hasRole("admin") || hasRole("data_manager");
 
@@ -51,6 +53,10 @@ export default function TeamTargets() {
 
     const fetchTargets = async () => {
       setLoading(true);
+      
+      const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_code", selectedTeam);
+      setCustomKpis(kpisData ?? []);
+
       const { data, error } = await supabase
         .from("team_kpi_targets")
         .select("*")
@@ -63,11 +69,13 @@ export default function TeamTargets() {
         setTargetUniqueVolunteers(data.target_unique_volunteers);
         setTargetVolunteerParticipations(data.target_volunteer_participations);
         setTargetBeneficiaries(data.target_beneficiaries);
+        setCustomTargets((data.custom_targets as Record<string, number>) || {});
       } else {
         setTargetMissions(0);
         setTargetUniqueVolunteers(0);
         setTargetVolunteerParticipations(0);
         setTargetBeneficiaries(0);
+        setCustomTargets({});
       }
       setLoading(false);
     };
@@ -93,6 +101,7 @@ export default function TeamTargets() {
       target_unique_volunteers: targetUniqueVolunteers,
       target_volunteer_participations: targetVolunteerParticipations,
       target_beneficiaries: targetBeneficiaries,
+      custom_targets: customTargets,
       created_by: user?.id,
     }, {
       onConflict: "team_code, target_month"
@@ -198,6 +207,18 @@ export default function TeamTargets() {
                   />
                   <p className="text-xs text-muted-foreground">العدد الإجمالي للأفراد والمجموعات المستهدفة.</p>
                 </div>
+
+                {customKpis.map(kpi => (
+                  <div key={kpi.id} className="space-y-2">
+                    <Label>{kpi.kpi_label}</Label>
+                    <Input 
+                      type="number" 
+                      min="0"
+                      value={customTargets[kpi.kpi_key] || 0} 
+                      onChange={(e) => setCustomTargets({ ...customTargets, [kpi.kpi_key]: Number(e.target.value) })} 
+                    />
+                  </div>
+                ))}
               </div>
 
               <div className="flex justify-end pt-4 border-t border-border">

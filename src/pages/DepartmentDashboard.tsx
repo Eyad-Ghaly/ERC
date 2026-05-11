@@ -31,6 +31,7 @@ export default function DepartmentDashboard() {
 
   // Targets state
   const [targets, setTargets] = useState<any[]>([]);
+  const [customKpis, setCustomKpis] = useState<any[]>([]);
 
   const loadMissions = async () => {
     if (!user) return;
@@ -67,6 +68,9 @@ export default function DepartmentDashboard() {
     if (!profile?.team_code) return;
     const { data } = await supabase.from("team_kpi_targets").select("*").eq("team_code", profile.team_code);
     if (data) setTargets(data);
+
+    const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_code", profile.team_code);
+    if (kpisData) setCustomKpis(kpisData);
   };
 
   useEffect(() => {
@@ -144,6 +148,7 @@ export default function DepartmentDashboard() {
     let tUniqueVols = 0;
     let tTotalVols = 0;
     let tBens = 0;
+    let tCustom: Record<string, number> = {};
 
     targets.forEach(t => {
       const m = t.target_month;
@@ -152,6 +157,11 @@ export default function DepartmentDashboard() {
         tUniqueVols += t.target_unique_volunteers || 0;
         tTotalVols += t.target_volunteer_participations || 0;
         tBens += t.target_beneficiaries || 0;
+        
+        const ct = t.custom_targets as Record<string, number> || {};
+        for (const k in ct) {
+          tCustom[k] = (tCustom[k] || 0) + Number(ct[k] || 0);
+        }
       }
     });
 
@@ -159,7 +169,8 @@ export default function DepartmentDashboard() {
       missions: tMissions,
       uniqueVols: tUniqueVols,
       totalVols: tTotalVols,
-      bens: tBens
+      bens: tBens,
+      custom: tCustom
     };
   }, [targets, startDate, endDate]);
 
@@ -252,6 +263,22 @@ export default function DepartmentDashboard() {
               <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">المستفيدون (فعليون)</p>{renderKpiValue(kpis.totalBeneficiaries, aggregatedTargets?.bens, "bg-success")}</div>
             </Card>
           </div>
+
+          {customKpis.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {customKpis.map((kpi, idx) => (
+                <Card key={kpi.id} className="p-4 card-elevated border-border flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground font-bold">{kpi.kpi_label}</p>
+                    <h3 className="text-2xl font-extrabold mt-1 text-primary">
+                      {aggregatedTargets?.custom[kpi.kpi_key] || 0}
+                    </h3>
+                  </div>
+                  <Target className="w-8 h-8 text-primary/20" />
+                </Card>
+              ))}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="p-6 card-elevated border-primary/20">

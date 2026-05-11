@@ -589,6 +589,7 @@ export type Database = {
           target_unique_volunteers: number
           target_volunteer_participations: number
           target_beneficiaries: number
+          custom_targets: Json | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -601,6 +602,7 @@ export type Database = {
           target_unique_volunteers?: number
           target_volunteer_participations?: number
           target_beneficiaries?: number
+          custom_targets?: Json | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
@@ -613,11 +615,113 @@ export type Database = {
           target_unique_volunteers?: number
           target_volunteer_participations?: number
           target_beneficiaries?: number
+          custom_targets?: Json | null
           created_by?: string | null
           created_at?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      team_custom_kpis: {
+        Row: {
+          id: string
+          team_code: string
+          kpi_label: string
+          kpi_key: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          team_code: string
+          kpi_label: string
+          kpi_key: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          team_code?: string
+          kpi_label?: string
+          kpi_key?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      feedback_custom_questions: {
+        Row: {
+          id: string
+          team_code: string
+          question_text: string
+          question_key: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          team_code: string
+          question_text: string
+          question_key: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          team_code?: string
+          question_text?: string
+          question_key?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      mission_feedback: {
+        Row: {
+          id: string
+          mission_id: string
+          service_rating: number | null
+          communication_rating: number | null
+          importance_rating: number | null
+          notes: string | null
+          photos: string[] | null
+          custom_answers: Json | null
+          is_dismissed: boolean | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          mission_id: string
+          service_rating?: number | null
+          communication_rating?: number | null
+          importance_rating?: number | null
+          notes?: string | null
+          photos?: string[] | null
+          custom_answers?: Json | null
+          is_dismissed?: boolean | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          mission_id?: string
+          service_rating?: number | null
+          communication_rating?: number | null
+          importance_rating?: number | null
+          notes?: string | null
+          photos?: string[] | null
+          custom_answers?: Json | null
+          is_dismissed?: boolean | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mission_feedback_mission_id_fkey"
+            columns: ["mission_id"]
+            isOneToOne: true
+            referencedRelation: "missions"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       user_dropdown_options: {
         Row: {
