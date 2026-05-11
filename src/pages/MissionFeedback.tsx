@@ -52,11 +52,10 @@ export default function MissionFeedback() {
       supabase.from("missions")
         .select(`
           *,
-          mission_feedback (id, is_dismissed),
-          beneficiaries_individual (id),
-          beneficiaries_group (id)
+          mission_feedback (id, is_dismissed)
         `)
         .eq("created_by", user.id)
+        .eq("has_beneficiaries", true)
         .order("created_at", { ascending: false }),
       supabase.from("feedback_custom_questions").select("*").eq("team_code", profile?.team_code || "")
     ]);
@@ -65,9 +64,8 @@ export default function MissionFeedback() {
 
     if (missionsData) {
       const pending = missionsData.filter(m => {
-        const hasBens = (m.beneficiaries_individual?.length > 0) || (m.beneficiaries_group?.length > 0);
         const hasFeedback = m.mission_feedback && m.mission_feedback.length > 0;
-        return hasBens && !hasFeedback;
+        return !hasFeedback;
       });
       setMissions(pending);
     }
