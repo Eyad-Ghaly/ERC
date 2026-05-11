@@ -64,11 +64,11 @@ export default function DepartmentEntry() {
   const navigate = useNavigate();
   const { id } = useParams();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { options: projectCodeTeams } = useDropdownOptions("project_code_teams");
 
   const [teamCode, setTeamCode] = useState(profile?.team_code ?? "");
   const [projectCode, setProjectCode] = useState("");
   const [governorate, setGovernorate] = useState("");
-  const [adminCode, setAdminCode] = useState("");
   const [activityClassification, setActivityClassification] = useState("");
   const [activityType, setActivityType] = useState("");
   const [activityDetails, setActivityDetails] = useState("");
@@ -105,7 +105,6 @@ export default function DepartmentEntry() {
           setTeamCode(mission.team_code || "");
           setProjectCode(mission.project_code || "");
           setGovernorate(mission.governorate || "");
-          setAdminCode(mission.admin_code || "");
           setActivityClassification(mission.activity_classification || "");
           setActivityType(mission.activity_type || "");
           setActivityDetails(mission.activity_details || "");
@@ -211,7 +210,6 @@ export default function DepartmentEntry() {
     });
 
     if (mapped.projectCode) setProjectCode(String(mapped.projectCode));
-    if (mapped.adminCode) setAdminCode(String(mapped.adminCode));
     if (mapped.governorate) setGovernorate(String(mapped.governorate));
     if (mapped.activityClassification) setActivityClassification(String(mapped.activityClassification));
     if (mapped.activityType) setActivityType(String(mapped.activityType));
@@ -287,7 +285,7 @@ export default function DepartmentEntry() {
           team_code: teamCode,
           project_code: pCode,
           governorate: mapped.governorate ? String(mapped.governorate) : null,
-          admin_code: mapped.adminCode ? String(mapped.adminCode) : null,
+          admin_code: mapped.adminCode ? String(mapped.adminCode) : (profile?.department_code || null),
           activity_classification: mapped.activityClassification ? String(mapped.activityClassification) : null,
           activity_type: mapped.activityType ? String(mapped.activityType) : null,
           activity_details: mapped.activityDetails ? String(mapped.activityDetails) : null,
@@ -322,7 +320,6 @@ export default function DepartmentEntry() {
   const submit = async (sendNow: boolean) => {
     if (!user) return;
     if (!teamCode) { toast.error("لا يوجد كود فريق مرتبط بحسابك. تواصل مع المدير."); return; }
-    if (!projectCode) { toast.error("اختر كود المشروع"); return; }
     if (!missionName.trim()) { toast.error("أدخل اسم المهمة"); return; }
     if (!activityDate) { toast.error("أدخل تاريخ النشاط"); return; }
     if (!followUpResponsible.trim()) { toast.error("أدخل مسؤول المتابعة"); return; }
@@ -341,7 +338,7 @@ export default function DepartmentEntry() {
         const { error: updErr } = await supabase.from("missions").update({
           status: sendNow ? (isOpenMission ? "open_active" : "coded") : "planned",
           project_code: projectCode,
-          governorate, admin_code: adminCode,
+          governorate, admin_code: profile?.department_code || null,
           activity_classification: activityClassification,
           activity_type: activityType,
           activity_details: activityDetails,
@@ -378,7 +375,7 @@ export default function DepartmentEntry() {
           created_by: user.id,
           team_code: teamCode,
           project_code: projectCode,
-          governorate, admin_code: adminCode,
+          governorate, admin_code: profile?.department_code || null,
           activity_classification: activityClassification,
           activity_type: activityType,
           activity_details: activityDetails,
@@ -476,8 +473,6 @@ export default function DepartmentEntry() {
               <Label>كود الفريق (ثابت)</Label>
               <Input value={teamCode} disabled className="bg-muted font-mono" dir="ltr" />
             </div>
-            <FieldSelect fieldKey="project_code" value={projectCode} onChange={setProjectCode} label="كود المشروع *" />
-            <FieldSelect fieldKey="admin_code" value={adminCode} onChange={setAdminCode} label="كود الإدارة" />
             <FieldSelect fieldKey="governorate" value={governorate} onChange={setGovernorate} label="محافظة التنفيذ" />
             <FieldSelect fieldKey="activity_classification" value={activityClassification} onChange={setActivityClassification} label="تصنيف النشاط" />
             <FieldSelect fieldKey="activity_type" value={activityType} onChange={setActivityType} label="نوع النشاط" />
@@ -517,6 +512,11 @@ export default function DepartmentEntry() {
                 </SelectContent>
               </Select>
             </div>
+            {projectCodeTeams.some(o => o.value === teamCode) && (
+              <div className="md:col-span-2 pt-2 border-t border-border mt-2">
+                <FieldSelect fieldKey="project_code" value={projectCode} onChange={setProjectCode} label="كود المشروع" />
+              </div>
+            )}
           </div>
         </Card>
 
