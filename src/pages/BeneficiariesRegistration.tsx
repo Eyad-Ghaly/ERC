@@ -203,22 +203,19 @@ export default function BeneficiariesRegistration() {
     setLookingUp(false);
   };
 
-  // Autocomplete by name (for same team's previous beneficiaries)
+  // Autocomplete by name — search the entire shared registry
   const handleNameChange = async (val: string) => {
     setIndivFullName(val);
+    setRegistryMatch(null);
+    setPrevServices([]);
     if (val.length < 2) { setNameSuggestions([]); return; }
     const { data } = await supabase
       .from('beneficiaries_registry')
       .select('id, full_name, nationality, birthdate, phone, id_hash')
       .ilike('full_name', `%${val}%`)
-      .limit(5);
-    // Filter to only show matches that were registered by this team
-    const { data: teamReg } = await supabase
-      .from('beneficiaries_individual')
-      .select('registry_id')
-      .eq('missions.team_code', profile?.team_code || '');
-    const teamRegIds = new Set((teamReg || []).map((r: any) => r.registry_id));
-    setNameSuggestions((data || []).filter((r: any) => teamRegIds.has(r.id)));
+      .order('full_name')
+      .limit(8);
+    setNameSuggestions(data || []);
   };
 
   const applyRegistrySuggestion = async (reg: any) => {
