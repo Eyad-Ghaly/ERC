@@ -10,6 +10,7 @@ import Auth from "./pages/Auth.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import DepartmentDashboard from "./pages/DepartmentDashboard.tsx";
 import DepartmentEntry from "./pages/DepartmentEntry.tsx";
+import TeamTargets from "./pages/TeamTargets.tsx";
 import OperationsRoom from "./pages/OperationsRoom.tsx";
 import Joker from "./pages/Joker.tsx";
 import Supervisor from "./pages/Supervisor.tsx";
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry"]}><DepartmentDashboard /></ProtectedRoute>} />
             <Route path="/department-entry" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
             <Route path="/department-entry/:id" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
+            <Route path="/team-targets" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><TeamTargets /></ProtectedRoute>} />
             <Route path="/beneficiaries-registration" element={<ProtectedRoute roles={["department_entry"]}><BeneficiariesRegistration /></ProtectedRoute>} />
             <Route path="/operations-room" element={<ProtectedRoute roles={["operations_room", "operations_supervisor"]}><OperationsRoom /></ProtectedRoute>} />
             <Route path="/joker" element={<ProtectedRoute roles={["joker"]}><Joker /></ProtectedRoute>} />

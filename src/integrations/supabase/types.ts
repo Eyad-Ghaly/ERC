@@ -580,6 +580,45 @@ export type Database = {
         }
         Relationships: []
       }
+      team_kpi_targets: {
+        Row: {
+          id: string
+          team_code: string
+          target_month: string
+          target_missions: number
+          target_unique_volunteers: number
+          target_volunteer_participations: number
+          target_beneficiaries: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          team_code: string
+          target_month: string
+          target_missions?: number
+          target_unique_volunteers?: number
+          target_volunteer_participations?: number
+          target_beneficiaries?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          team_code?: string
+          target_month?: string
+          target_missions?: number
+          target_unique_volunteers?: number
+          target_volunteer_participations?: number
+          target_beneficiaries?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_dropdown_options: {
         Row: {
           created_at: string

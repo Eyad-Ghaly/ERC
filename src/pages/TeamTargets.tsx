@@ -1,0 +1,215 @@
+import { useState, useEffect } from "react";
+import { AppLayout } from "@/components/AppLayout";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import { Save, Loader2, Target } from "lucide-react";
+
+export default function TeamTargets() {
+  const { user, profile, hasRole } = useAuth();
+  
+  const [selectedTeam, setSelectedTeam] = useState(profile?.team_code || "");
+  const [targetMonth, setTargetMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  });
+
+  const [targetMissions, setTargetMissions] = useState<number>(0);
+  const [targetUniqueVolunteers, setTargetUniqueVolunteers] = useState<number>(0);
+  const [targetVolunteerParticipations, setTargetVolunteerParticipations] = useState<number>(0);
+  const [targetBeneficiaries, setTargetBeneficiaries] = useState<number>(0);
+
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [teams, setTeams] = useState<string[]>([]);
+
+  const isElevated = hasRole("admin") || hasRole("data_manager");
+
+  useEffect(() => {
+    if (isElevated) {
+      supabase.from("profiles")
+        .select("team_code")
+        .not("team_code", "is", null)
+        .then(({ data }) => {
+          if (data) {
+            const uniqueTeams = Array.from(new Set(data.map(d => d.team_code as string))).sort();
+            setTeams(uniqueTeams);
+          }
+        });
+    } else if (profile?.team_code) {
+      setSelectedTeam(profile.team_code);
+    }
+  }, [isElevated, profile]);
+
+  useEffect(() => {
+    if (!selectedTeam || !targetMonth) return;
+
+    const fetchTargets = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("team_kpi_targets")
+        .select("*")
+        .eq("team_code", selectedTeam)
+        .eq("target_month", targetMonth)
+        .maybeSingle();
+
+      if (data) {
+        setTargetMissions(data.target_missions);
+        setTargetUniqueVolunteers(data.target_unique_volunteers);
+        setTargetVolunteerParticipations(data.target_volunteer_participations);
+        setTargetBeneficiaries(data.target_beneficiaries);
+      } else {
+        setTargetMissions(0);
+        setTargetUniqueVolunteers(0);
+        setTargetVolunteerParticipations(0);
+        setTargetBeneficiaries(0);
+      }
+      setLoading(false);
+    };
+
+    fetchTargets();
+  }, [selectedTeam, targetMonth]);
+
+  const handleSave = async () => {
+    if (!selectedTeam) {
+      toast.error("يجب تحديد كود الفريق");
+      return;
+    }
+    if (!targetMonth) {
+      toast.error("يجب تحديد الشهر");
+      return;
+    }
+
+    setSaving(true);
+    const { error } = await supabase.from("team_kpi_targets").upsert({
+      team_code: selectedTeam,
+      target_month: targetMonth,
+      target_missions: targetMissions,
+      target_unique_volunteers: targetUniqueVolunteers,
+      target_volunteer_participations: targetVolunteerParticipations,
+      target_beneficiaries: targetBeneficiaries,
+      created_by: user?.id,
+    }, {
+      onConflict: "team_code, target_month"
+    });
+
+    if (error) {
+      toast.error("حدث خطأ أثناء حفظ الأهداف: " + error.message);
+    } else {
+      toast.success("تم حفظ الأهداف بنجاح");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <AppLayout title="مستهدفات الفريق (KPIs)">
+      <div className="max-w-4xl space-y-6">
+        <Card className="p-6">
+          <div className="flex items-center gap-2 mb-6 text-primary">
+            <Target className="w-6 h-6" />
+            <h2 className="text-xl font-bold">تحديد مستهدفات الأداء الشهري</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {isElevated ? (
+              <div className="space-y-2">
+                <Label>كود الفريق</Label>
+                <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+                  <SelectTrigger dir="ltr" className="text-right">
+                    <SelectValue placeholder="اختر الفريق..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map(t => (
+                      <SelectItem key={t} value={t} dir="ltr" className="text-right">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>كود الفريق (ثابت)</Label>
+                <Input value={selectedTeam} disabled className="bg-muted font-mono" dir="ltr" />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>الشهر المستهدف</Label>
+              <Input 
+                type="month" 
+                value={targetMonth} 
+                onChange={(e) => setTargetMonth(e.target.value)} 
+                dir="ltr"
+              />
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="py-12 flex justify-center text-primary">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label>المستهدف من المهام المسجلة</Label>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    value={targetMissions} 
+                    onChange={(e) => setTargetMissions(Number(e.target.value))} 
+                  />
+                  <p className="text-xs text-muted-foreground">عدد المهام المطلوب تنفيذها في هذا الشهر.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>المستهدف من المتطوعين (منفردون)</Label>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    value={targetUniqueVolunteers} 
+                    onChange={(e) => setTargetUniqueVolunteers(Number(e.target.value))} 
+                  />
+                  <p className="text-xs text-muted-foreground">عدد المتطوعين الجدد/المشاركين (بدون تكرار).</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>المستهدف من المشاركات التطوعية</Label>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    value={targetVolunteerParticipations} 
+                    onChange={(e) => setTargetVolunteerParticipations(Number(e.target.value))} 
+                  />
+                  <p className="text-xs text-muted-foreground">إجمالي مرات مشاركة المتطوعين في كل المهام.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>المستهدف من المستفيدين الفعليين</Label>
+                  <Input 
+                    type="number" 
+                    min="0"
+                    value={targetBeneficiaries} 
+                    onChange={(e) => setTargetBeneficiaries(Number(e.target.value))} 
+                  />
+                  <p className="text-xs text-muted-foreground">العدد الإجمالي للأفراد والمجموعات المستهدفة.</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-border">
+                <Button onClick={handleSave} disabled={saving || !selectedTeam || !targetMonth}>
+                  {saving ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Save className="w-4 h-4 ms-2" />}
+                  حفظ المستهدفات
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    </AppLayout>
+  );
+}

@@ -29,6 +29,9 @@ export default function DepartmentDashboard() {
   const [teamVolunteers, setTeamVolunteers] = useState<any[]>([]);
   const [loadingVols, setLoadingVols] = useState(true);
 
+  // Targets state
+  const [targets, setTargets] = useState<any[]>([]);
+
   const loadMissions = async () => {
     if (!user) return;
     setLoading(true);
@@ -60,10 +63,17 @@ export default function DepartmentDashboard() {
     setLoadingVols(false);
   };
 
+  const loadTargets = async () => {
+    if (!profile?.team_code) return;
+    const { data } = await supabase.from("team_kpi_targets").select("*").eq("team_code", profile.team_code);
+    if (data) setTargets(data);
+  };
+
   useEffect(() => {
     loadMissions();
     if (profile?.team_code) {
       loadVolunteers();
+      loadTargets();
     }
   }, [user, profile]);
 
@@ -115,6 +125,44 @@ export default function DepartmentDashboard() {
     };
   }, [filteredMissions]);
 
+  const aggregatedTargets = useMemo(() => {
+    if (!targets.length) return null;
+    
+    // Determine the month range based on filters, or default to current month
+    let startMonth = "";
+    let endMonth = "";
+    
+    if (startDate) startMonth = startDate.substring(0, 7);
+    if (endDate) endMonth = endDate.substring(0, 7);
+    
+    if (!startDate && !endDate) {
+      const today = new Date();
+      startMonth = endMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    let tMissions = 0;
+    let tUniqueVols = 0;
+    let tTotalVols = 0;
+    let tBens = 0;
+
+    targets.forEach(t => {
+      const m = t.target_month;
+      if ((!startMonth || m >= startMonth) && (!endMonth || m <= endMonth)) {
+        tMissions += t.target_missions || 0;
+        tUniqueVols += t.target_unique_volunteers || 0;
+        tTotalVols += t.target_volunteer_participations || 0;
+        tBens += t.target_beneficiaries || 0;
+      }
+    });
+
+    return {
+      missions: tMissions,
+      uniqueVols: tUniqueVols,
+      totalVols: tTotalVols,
+      bens: tBens
+    };
+  }, [targets, startDate, endDate]);
+
   const chartData = useMemo(() => {
     const counts: Record<string, number> = {};
     filteredMissions.forEach(m => {
@@ -150,6 +198,22 @@ export default function DepartmentDashboard() {
 
   const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e', '#84cc16'];
 
+  const renderKpiValue = (actual: number, target: number | undefined, colorClass: string) => {
+    if (!target) return <h3 className="text-2xl font-extrabold">{actual}</h3>;
+    const percent = Math.min(100, Math.round((actual / target) * 100)) || 0;
+    return (
+      <div className="w-full mt-1">
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-2xl font-extrabold">{actual}</h3>
+          <span className="text-sm text-muted-foreground font-medium">/ {target}</span>
+        </div>
+        <div className="w-full h-1.5 bg-black/10 dark:bg-white/10 rounded-full mt-2 overflow-hidden">
+          <div className={`h-full ${colorClass} rounded-full transition-all duration-500`} style={{ width: `${percent}%` }} />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <AppLayout title="لوحة معلومات فريقي">
       <Tabs defaultValue="missions" className="w-full space-y-6">
@@ -171,21 +235,21 @@ export default function DepartmentDashboard() {
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="p-5 card-elevated flex items-center gap-4 bg-gradient-to-br from-primary/10 to-transparent border-primary/20">
-              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0"><Target className="w-6 h-6 text-primary" /></div>
-              <div><p className="text-xs text-muted-foreground font-bold">المهام المسجلة</p><h3 className="text-2xl font-extrabold">{kpis.totalMissions}</h3></div>
+            <Card className="p-5 card-elevated flex items-start gap-4 bg-gradient-to-br from-primary/10 to-transparent border-primary/20">
+              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0 mt-1"><Target className="w-6 h-6 text-primary" /></div>
+              <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">المهام المسجلة</p>{renderKpiValue(kpis.totalMissions, aggregatedTargets?.missions, "bg-primary")}</div>
             </Card>
-            <Card className="p-5 card-elevated flex items-center gap-4 bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-500/20">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center shrink-0"><Users className="w-6 h-6 text-indigo-500" /></div>
-              <div><p className="text-xs text-muted-foreground font-bold">المتطوعون (منفردون)</p><h3 className="text-2xl font-extrabold">{kpis.uniqueVolunteers}</h3></div>
+            <Card className="p-5 card-elevated flex items-start gap-4 bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-500/20">
+              <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center shrink-0 mt-1"><Users className="w-6 h-6 text-indigo-500" /></div>
+              <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">المتطوعون (منفردون)</p>{renderKpiValue(kpis.uniqueVolunteers, aggregatedTargets?.uniqueVols, "bg-indigo-500")}</div>
             </Card>
-            <Card className="p-5 card-elevated flex items-center gap-4 bg-gradient-to-br from-info/10 to-transparent border-info/20">
-              <div className="w-12 h-12 rounded-xl bg-info/20 flex items-center justify-center shrink-0"><Activity className="w-6 h-6 text-info" /></div>
-              <div><p className="text-xs text-muted-foreground font-bold">المشاركات التطوعية</p><h3 className="text-2xl font-extrabold">{kpis.totalVolunteers}</h3></div>
+            <Card className="p-5 card-elevated flex items-start gap-4 bg-gradient-to-br from-info/10 to-transparent border-info/20">
+              <div className="w-12 h-12 rounded-xl bg-info/20 flex items-center justify-center shrink-0 mt-1"><Activity className="w-6 h-6 text-info" /></div>
+              <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">المشاركات التطوعية</p>{renderKpiValue(kpis.totalVolunteers, aggregatedTargets?.totalVols, "bg-info")}</div>
             </Card>
-            <Card className="p-5 card-elevated flex items-center gap-4 bg-gradient-to-br from-success/10 to-transparent border-success/20">
-              <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center shrink-0"><BarChartIcon className="w-6 h-6 text-success" /></div>
-              <div><p className="text-xs text-muted-foreground font-bold">المستفيدون (فعليون)</p><h3 className="text-2xl font-extrabold">{kpis.totalBeneficiaries}</h3></div>
+            <Card className="p-5 card-elevated flex items-start gap-4 bg-gradient-to-br from-success/10 to-transparent border-success/20">
+              <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center shrink-0 mt-1"><BarChartIcon className="w-6 h-6 text-success" /></div>
+              <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">المستفيدون (فعليون)</p>{renderKpiValue(kpis.totalBeneficiaries, aggregatedTargets?.bens, "bg-success")}</div>
             </Card>
           </div>
 
