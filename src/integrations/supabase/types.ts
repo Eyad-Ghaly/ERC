@@ -98,6 +98,45 @@ export type Database = {
           },
         ]
       }
+      beneficiaries_registry: {
+        Row: {
+          id: string
+          id_hash: string | null
+          full_name: string
+          nationality: string | null
+          birthdate: string | null
+          phone: string | null
+          first_registered_by: string | null
+          first_team_code: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          id_hash?: string | null
+          full_name: string
+          nationality?: string | null
+          birthdate?: string | null
+          phone?: string | null
+          first_registered_by?: string | null
+          first_team_code?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          id_hash?: string | null
+          full_name?: string
+          nationality?: string | null
+          birthdate?: string | null
+          phone?: string | null
+          first_registered_by?: string | null
+          first_team_code?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       beneficiaries_individual: {
         Row: {
           birthdate: string | null

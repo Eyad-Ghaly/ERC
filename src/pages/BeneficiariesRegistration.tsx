@@ -10,9 +10,19 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare } from "lucide-react";
+import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+
+// Utility: SHA-256 hash of a string (browser native)
+async function sha256(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text.trim().toLowerCase());
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 // مكون فرعي لاختيار القوائم المنسدلة بناءً على المفتاح
 function FieldSelect({ fieldKey, value, onChange, label }: { fieldKey: string; value: string; onChange: (v: string) => void; label: string }) {
@@ -32,7 +42,7 @@ function FieldSelect({ fieldKey, value, onChange, label }: { fieldKey: string; v
 }
 
 export default function BeneficiariesRegistration() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [targets, setTargets] = useState<any[]>([]);
   const [selectedTargetId, setSelectedTargetId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -44,6 +54,12 @@ export default function BeneficiariesRegistration() {
   // Custom fields for this team
   const [customFieldDefs, setCustomFieldDefs] = useState<any[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+
+  // Registry lookup
+  const [registryMatch, setRegistryMatch] = useState<any | null>(null);
+  const [prevServices, setPrevServices] = useState<any[]>([]);
+  const [nameSuggestions, setNameSuggestions] = useState<any[]>([]);
+  const [lookingUp, setLookingUp] = useState(false);
 
   // Individual State
   const [indivNationalId, setIndivNationalId] = useState("");
@@ -160,6 +176,68 @@ export default function BeneficiariesRegistration() {
     }
   }, [selectedTargetId, targets]);
 
+  // Lookup by national ID hash when ID field loses focus
+  const handleIdBlur = async () => {
+    const trimmed = indivNationalId.trim();
+    if (!trimmed) { setRegistryMatch(null); setPrevServices([]); return; }
+    setLookingUp(true);
+    const hash = await sha256(trimmed);
+    const { data } = await supabase.from('beneficiaries_registry').select('*').eq('id_hash', hash).maybeSingle();
+    if (data) {
+      setRegistryMatch(data);
+      setIndivFullName(data.full_name || indivFullName);
+      setIndivNationality(data.nationality || indivNationality);
+      setIndivBirthdate(data.birthdate || indivBirthdate);
+      setIndivPhone(data.phone || indivPhone);
+      // Fetch previous services
+      const { data: prev } = await supabase
+        .from('beneficiaries_individual')
+        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team_code)')
+        .eq('registry_id', data.id)
+        .order('created_at', { ascending: false });
+      setPrevServices(prev || []);
+    } else {
+      setRegistryMatch(null);
+      setPrevServices([]);
+    }
+    setLookingUp(false);
+  };
+
+  // Autocomplete by name (for same team's previous beneficiaries)
+  const handleNameChange = async (val: string) => {
+    setIndivFullName(val);
+    if (val.length < 2) { setNameSuggestions([]); return; }
+    const { data } = await supabase
+      .from('beneficiaries_registry')
+      .select('id, full_name, nationality, birthdate, phone, id_hash')
+      .ilike('full_name', `%${val}%`)
+      .limit(5);
+    // Filter to only show matches that were registered by this team
+    const { data: teamReg } = await supabase
+      .from('beneficiaries_individual')
+      .select('registry_id')
+      .eq('missions.team_code', profile?.team_code || '');
+    const teamRegIds = new Set((teamReg || []).map((r: any) => r.registry_id));
+    setNameSuggestions((data || []).filter((r: any) => teamRegIds.has(r.id)));
+  };
+
+  const applyRegistrySuggestion = async (reg: any) => {
+    setIndivFullName(reg.full_name);
+    setIndivNationality(reg.nationality || "");
+    setIndivBirthdate(reg.birthdate || "");
+    setIndivPhone(reg.phone || "");
+    setNameSuggestions([]);
+    setRegistryMatch(reg);
+    if (reg.id) {
+      const { data: prev } = await supabase
+        .from('beneficiaries_individual')
+        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team_code)')
+        .eq('registry_id', reg.id)
+        .order('created_at', { ascending: false });
+      setPrevServices(prev || []);
+    }
+  };
+
   const submitIndividual = async () => {
     if (!selectedTargetId) return toast.error("اختر المهمة أولاً");
     if (!indivFullName.trim()) return toast.error("أدخل اسم المستفيد");
@@ -168,10 +246,51 @@ export default function BeneficiariesRegistration() {
     if (!target) return;
 
     setBusy(true);
+    
+    // Hash the national ID if provided
+    const hash = indivNationalId.trim() ? await sha256(indivNationalId.trim()) : null;
+    
+    let finalRegistryId = registryMatch?.id || null;
+    
+    // Upsert registry if we have an ID
+    if (hash && !registryMatch) {
+      const { data: newReg } = await supabase.from('beneficiaries_registry').insert({
+        id_hash: hash,
+        full_name: indivFullName,
+        nationality: indivNationality || null,
+        birthdate: indivBirthdate || null,
+        phone: indivPhone || null,
+        first_registered_by: user?.id,
+        first_team_code: target?.team_code || null,
+      }).select().single();
+      finalRegistryId = newReg?.id || null;
+    } else if (hash && registryMatch) {
+      // Update registry with latest data
+      await supabase.from('beneficiaries_registry').update({
+        full_name: indivFullName,
+        nationality: indivNationality || null,
+        birthdate: indivBirthdate || null,
+        phone: indivPhone || null,
+      }).eq('id', registryMatch.id);
+    } else if (!hash && indivFullName.trim()) {
+      // No ID but we still create a registry entry by name only
+      const { data: newReg } = await supabase.from('beneficiaries_registry').insert({
+        full_name: indivFullName,
+        nationality: indivNationality || null,
+        birthdate: indivBirthdate || null,
+        phone: indivPhone || null,
+        first_registered_by: user?.id,
+        first_team_code: target?.team_code || null,
+      }).select().single();
+      finalRegistryId = newReg?.id || null;
+    }
+
     const { error } = await supabase.from("beneficiaries_individual").insert({
       mission_id: target.mission_id,
       daily_report_id: target.daily_report_id,
       national_id: indivNationalId || null,
+      id_hash: hash,
+      registry_id: finalRegistryId,
       full_name: indivFullName,
       phone: indivPhone || null,
       birthdate: indivBirthdate || null,
@@ -188,7 +307,7 @@ export default function BeneficiariesRegistration() {
       toast.success("تم إضافة المستفيد بنجاح");
       setIndivNationalId(""); setIndivFullName(""); setIndivPhone("");
       setIndivBirthdate(""); setIndivNationality(""); setIndivServiceType(""); setIndivServiceQuantity("1");
-      setCustomValues({});
+      setCustomValues({}); setRegistryMatch(null); setPrevServices([]); setNameSuggestions([]);
       fetchRegistered(target);
     }
   };
@@ -299,15 +418,70 @@ export default function BeneficiariesRegistration() {
               <TabsContent value="individual">
                 <Card className="p-6 space-y-5 border-t-4 border-t-primary shadow-md">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="space-y-1.5"><Label>الاسم بالكامل *</Label><Input placeholder="اسم المستفيد" value={indivFullName} onChange={(e) => setIndivFullName(e.target.value)} /></div>
-                    <div className="space-y-1.5"><Label>رقم البطاقة</Label><Input value={indivNationalId} onChange={(e) => setIndivNationalId(e.target.value)} dir="ltr" /></div>
+                    {/* National ID with lookup */}
+                    <div className="space-y-1.5">
+                      <Label className="flex items-center gap-1">رقم البطاقة / الجواز {lookingUp && <Loader2 className="w-3 h-3 animate-spin" />}</Label>
+                      <Input 
+                        value={indivNationalId} 
+                        onChange={(e) => { setIndivNationalId(e.target.value); setRegistryMatch(null); setPrevServices([]); }}
+                        onBlur={handleIdBlur}
+                        dir="ltr" 
+                        placeholder="اكتب الرقم ثم اضغط Tab للبحث"
+                      />
+                    </div>
+                    {/* Name with autocomplete */}
+                    <div className="space-y-1.5 relative">
+                      <Label>الاسم بالكامل *</Label>
+                      <Input 
+                        placeholder="اسم المستفيد" 
+                        value={indivFullName} 
+                        onChange={(e) => handleNameChange(e.target.value)} 
+                        onBlur={() => setTimeout(() => setNameSuggestions([]), 150)}
+                      />
+                      {nameSuggestions.length > 0 && (
+                        <div className="absolute z-20 top-full mt-1 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+                          {nameSuggestions.map((s: any) => (
+                            <button key={s.id} className="w-full text-right px-3 py-2 text-sm hover:bg-primary/10 flex flex-col" onMouseDown={() => applyRegistrySuggestion(s)}>
+                              <span className="font-bold">{s.full_name}</span>
+                              <span className="text-muted-foreground text-xs">{s.nationality} • {s.birthdate || ''}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <div className="space-y-1.5"><Label>رقم التليفون</Label><Input value={indivPhone} onChange={(e) => setIndivPhone(e.target.value)} dir="ltr" /></div>
                     <div className="space-y-1.5"><Label>تاريخ الميلاد</Label><Input type="date" value={indivBirthdate} onChange={(e) => setIndivBirthdate(e.target.value)} /></div>
                     <div className="space-y-1.5"><Label>الجنسية</Label><Input value={indivNationality} onChange={(e) => setIndivNationality(e.target.value)} /></div>
                     <FieldSelect fieldKey="service_type" value={indivServiceType} onChange={setIndivServiceType} label="نوع الخدمة" />
                     <div className="space-y-1.5"><Label>عدد الخدمة</Label><Input type="number" min="1" value={indivServiceQuantity} onChange={(e) => setIndivServiceQuantity(e.target.value)} /></div>
 
-                    {customFieldDefs.map(f => (
+                  {registryMatch && (
+                    <div className="md:col-span-2 bg-info/10 border border-info/30 rounded-xl p-4">
+                      <div className="flex items-center gap-2 text-info font-bold text-sm mb-2">
+                        <Search className="w-4 h-4" />
+                        مستفيد موجود في قاعدة البيانات — تم ملء البيانات تلقائياً
+                      </div>
+                      {prevServices.length > 0 && (
+                        <>
+                          <div className="flex items-center gap-2 text-sm font-bold mt-3 mb-2 text-primary">
+                            <History className="w-4 h-4" /> الخدمات السابقة ({prevServices.length})
+                          </div>
+                          <div className="space-y-1 max-h-36 overflow-y-auto">
+                            {prevServices.map((s: any, i: number) => (
+                              <div key={i} className="flex items-center gap-3 text-xs bg-background rounded-lg px-3 py-1.5">
+                                <Badge variant="outline" className="text-xs shrink-0">{s.missions?.team_code || '—'}</Badge>
+                                <span className="font-medium">{s.missions?.mission_name || '—'}</span>
+                                <span className="text-muted-foreground">{s.service_type || '—'}</span>
+                                <span className="mr-auto text-muted-foreground">{new Date(s.created_at).toLocaleDateString('ar-EG')}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {customFieldDefs.map(f => (
                       <div key={f.field_key} className="space-y-1.5">
                         <Label>
                           {f.field_label}
