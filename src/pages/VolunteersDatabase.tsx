@@ -66,6 +66,7 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
             value={branchFilter}
             onChange={e => setBranchFilter(e.target.value)}
             className="pr-9"
+          />
         </div>
           <div className="relative flex-1">
             <Hash className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
