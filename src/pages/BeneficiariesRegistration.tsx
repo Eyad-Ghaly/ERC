@@ -182,6 +182,12 @@ export default function BeneficiariesRegistration() {
     const [{ data: ind }, { data: grp }] = await Promise.all([indivQ, groupQ]);
     setRegisteredIndivs(ind || []);
     setRegisteredGroups(grp || []);
+    
+    // Auto-decrypt if PIN is already verified
+    const currentTarget = targets.find(t => t.id === selectedTargetId);
+    if (pinVerified && teamPin && currentTarget) {
+      decryptVisibleIds(teamPin, currentTarget.team_code, ind || []);
+    }
   };
 
   useEffect(() => {
@@ -212,7 +218,7 @@ export default function BeneficiariesRegistration() {
     if (target?.team_code) {
       checkTeamPinStatus(target.team_code);
     }
-  }, [selectedTargetId, targets]);
+  }, [selectedTargetId, targets, pinVerified]); // Added pinVerified to deps
 
   const checkTeamPinStatus = async (teamCode: string) => {
     const { data } = await supabase.from('team_settings').select('team_code').eq('team_code', teamCode).maybeSingle();
@@ -251,26 +257,26 @@ export default function BeneficiariesRegistration() {
     setTempPin("");
     
     // Decrypt existing IDs
-    decryptVisibleIds(tempPin, target.team_code);
+    decryptVisibleIds(tempPin, target.team_code, registeredIndivs);
   };
 
-  const decryptVisibleIds = async (pin: string, teamCode: string) => {
+  const decryptVisibleIds = async (pin: string, teamCode: string, indivs: any[]) => {
+    if (!pin || !teamCode || !indivs.length) return;
     const results: Record<string, string> = {};
-    for (const r of registeredIndivs) {
+    for (const r of indivs) {
       if (r.encrypted_id) {
-        const decrypted = await decryptId(r.encrypted_id, pin, teamCode);
-        if (decrypted) results[r.id] = decrypted;
+        try {
+          const decrypted = await decryptId(r.encrypted_id, pin, teamCode);
+          if (decrypted) results[r.id] = decrypted;
+        } catch (e) {
+          console.error("Decryption error for record", r.id, e);
+        }
       }
     }
     setDecryptedIds(prev => ({ ...prev, ...results }));
   };
 
-  useEffect(() => {
-    const target = targets.find(t => t.id === selectedTargetId);
-    if (pinVerified && teamPin && target) {
-      decryptVisibleIds(teamPin, target.team_code);
-    }
-  }, [registeredIndivs, pinVerified, teamPin, selectedTargetId]);
+  // Removed redundant useEffect for decryption as it's now handled in fetchRegistered and handlePinSubmit
 
   // Lookup by national ID hash when ID field loses focus
   const handleIdBlur = async () => {
