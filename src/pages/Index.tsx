@@ -15,6 +15,7 @@ const TILES = [
   { role: "stakeholder", title: "Dashboard", url: "/dashboard", icon: BarChart3, desc: "مؤشرات الأداء" },
   { role: "data_manager", title: "إدارة البيانات", url: "/data-manager", icon: Database, desc: "رؤية مزدوجة وكاملة" },
   { role: "admin", title: "لوحة المدير", url: "/admin", icon: Settings, desc: "المستخدمون والقوائم" },
+  { role: "department_entry", title: "قاعدة بيانات المستفيدين", url: "/team-beneficiaries", icon: Database, desc: "سجل المستفيدين الخاص بالفريق" },
 ] as const;
 
 const Index = () => {

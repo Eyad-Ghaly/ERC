@@ -10,12 +10,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History, Lock, Unlock, Key, AlertTriangle } from "lucide-react";
+import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { encryptId, decryptId } from "@/utils/encryption";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 // Utility: SHA-256 hash of a string (browser native)
 async function sha256(text: string): Promise<string> {
@@ -44,7 +42,7 @@ function FieldSelect({ fieldKey, value, onChange, label }: { fieldKey: string; v
 }
 
 export default function BeneficiariesRegistration() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [targets, setTargets] = useState<any[]>([]);
   const [selectedTargetId, setSelectedTargetId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -77,15 +75,8 @@ export default function BeneficiariesRegistration() {
   const [groupGender, setGroupGender] = useState("");
   const [groupAgeCategory, setGroupAgeCategory] = useState("");
   const [groupCount, setGroupCount] = useState("1");
+  const [groupServiceType, setGroupServiceType] = useState("");
   const [busy, setBusy] = useState(false);
-
-  // Team PIN State
-  const [teamPin, setTeamPin] = useState("");
-  const [pinVerified, setPinVerified] = useState(false);
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [isFirstPinSetup, setIsFirstPinSetup] = useState(false);
-  const [tempPin, setTempPin] = useState("");
-  const [decryptedIds, setDecryptedIds] = useState<Record<string, string>>({});
 
   const triggerLookup = async (id: string) => {
     if (!id || id.length < 5) return;
@@ -182,12 +173,6 @@ export default function BeneficiariesRegistration() {
     const [{ data: ind }, { data: grp }] = await Promise.all([indivQ, groupQ]);
     setRegisteredIndivs(ind || []);
     setRegisteredGroups(grp || []);
-    
-    // Auto-decrypt if PIN is already verified
-    const currentTarget = targets.find(t => t.id === selectedTargetId);
-    if (pinVerified && teamPin && currentTarget) {
-      decryptVisibleIds(teamPin, currentTarget.team_code, ind || []);
-    }
   };
 
   useEffect(() => {
@@ -213,70 +198,7 @@ export default function BeneficiariesRegistration() {
       setCustomFieldDefs([]);
       setCustomValues({});
     }
-
-    // Check if team has a PIN set
-    if (target?.team_code) {
-      checkTeamPinStatus(target.team_code);
-    }
-  }, [selectedTargetId, targets, pinVerified]); // Added pinVerified to deps
-
-  const checkTeamPinStatus = async (teamCode: string) => {
-    const { data } = await supabase.from('team_settings').select('team_code').eq('team_code', teamCode).maybeSingle();
-    if (!data) {
-      setIsFirstPinSetup(true);
-      setShowPinModal(true);
-    } else if (!pinVerified) {
-      setIsFirstPinSetup(false);
-      setShowPinModal(true);
-    }
-  };
-
-  const handlePinSubmit = async () => {
-    if (tempPin.length < 4) return toast.error("يجب أن تكون كلمة المرور 4 أرقام على الأقل");
-    const target = targets.find(t => t.id === selectedTargetId);
-    if (!target) return;
-
-    const hash = await sha256(tempPin);
-
-    if (isFirstPinSetup) {
-      const { error } = await supabase.from('team_settings').insert({
-        team_code: target.team_code,
-        pin_hash: hash
-      });
-      if (error) return toast.error("فشل إعداد كلمة المرور");
-      toast.success("تم إعداد كلمة مرور الفريق بنجاح");
-    } else {
-      const { data } = await supabase.from('team_settings').select('pin_hash').eq('team_code', target.team_code).single();
-      if (data?.pin_hash !== hash) return toast.error("كلمة المرور غير صحيحة");
-      toast.success("تم التحقق من كلمة المرور");
-    }
-
-    setTeamPin(tempPin);
-    setPinVerified(true);
-    setShowPinModal(false);
-    setTempPin("");
-    
-    // Decrypt existing IDs
-    decryptVisibleIds(tempPin, target.team_code, registeredIndivs);
-  };
-
-  const decryptVisibleIds = async (pin: string, teamCode: string, indivs: any[]) => {
-    if (!pin || !teamCode || !indivs.length) return;
-    const results: Record<string, string> = {};
-    for (const r of indivs) {
-      if (r.encrypted_id) {
-        try {
-          const decrypted = await decryptId(r.encrypted_id, pin, teamCode);
-          if (decrypted) results[r.id] = decrypted;
-        } catch (e) {
-          console.error("Decryption error for record", r.id, e);
-        }
-      }
-    }
-    setDecryptedIds(prev => ({ ...prev, ...results }));
-  };
-
-  // Removed redundant useEffect for decryption as it's now handled in fetchRegistered and handlePinSubmit
+  }, [selectedTargetId, targets]);
 
   // Lookup by national ID hash when ID field loses focus
   const handleIdBlur = async () => {
@@ -385,14 +307,11 @@ export default function BeneficiariesRegistration() {
       finalRegistryId = newReg?.id || null;
     }
 
-    const encrypted = await encryptId(indivNationalId.trim(), teamPin, target.team_code);
-
     const { error } = await supabase.from("beneficiaries_individual").insert({
       mission_id: target.mission_id,
       daily_report_id: target.daily_report_id,
-      national_id: null, // PRIVACY: Stop storing plain text ID
+      national_id: indivNationalId.trim() || null,
       id_hash: hash,
-      encrypted_id: encrypted || null, // Vault storage
       registry_id: finalRegistryId,
       full_name: indivFullName,
       phone: indivPhone || null,
@@ -521,7 +440,6 @@ export default function BeneficiariesRegistration() {
               <TabsContent value="individual">
                 <Card className="p-6 space-y-5 border-t-4 border-t-primary shadow-md">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {/* National ID with lookup */}
                     <div className="space-y-1.5">
                       <Label className="flex items-center gap-1">رقم البطاقة / الجواز {lookingUp && <Loader2 className="w-3 h-3 animate-spin" />}</Label>
                       <Input 
@@ -531,18 +449,13 @@ export default function BeneficiariesRegistration() {
                           setIndivNationalId(val); 
                           setRegistryMatch(null); 
                           setPrevServices([]); 
-                          // Auto lookup if 14 digits
-                          if (val.length === 14) {
-                            // We call a wrapper that calls handleIdBlur with the value
-                            triggerLookup(val);
-                          }
+                          if (val.length === 14) triggerLookup(val);
                         }}
                         onBlur={handleIdBlur}
                         dir="ltr" 
                         placeholder="البحث بالرقم القومي (14 رقم)"
                       />
                     </div>
-                    {/* Name with autocomplete */}
                     <div className="space-y-1.5 relative">
                       <Label>الاسم بالكامل *</Label>
                       <Input 
@@ -573,12 +486,7 @@ export default function BeneficiariesRegistration() {
                         dir="ltr"
                         maxLength={11}
                         placeholder="01xxxxxxxxx"
-                        inputMode="numeric"
-                        className={indivPhone && indivPhone.length !== 11 ? 'border-destructive focus-visible:ring-destructive' : ''}
                       />
-                      {indivPhone && indivPhone.length !== 11 && indivPhone.length > 0 && (
-                        <p className="text-xs text-destructive">{11 - indivPhone.length} أرقام متبقية</p>
-                      )}
                     </div>
                     <div className="space-y-1.5"><Label>تاريخ الميلاد</Label><Input type="date" value={indivBirthdate} onChange={(e) => setIndivBirthdate(e.target.value)} /></div>
                     <div className="space-y-1.5"><Label>الجنسية</Label><Input value={indivNationality} onChange={(e) => setIndivNationality(e.target.value)} /></div>
@@ -613,75 +521,41 @@ export default function BeneficiariesRegistration() {
 
                   {customFieldDefs.map(f => (
                       <div key={f.field_key} className="space-y-1.5">
-                        <Label>
-                          {f.field_label}
-                          {f.is_required && <span className="text-destructive ms-1">*</span>}
-                        </Label>
+                        <Label>{f.field_label}{f.is_required && "*"}</Label>
                         {f.field_type === "select" ? (
-                          <Select
-                            value={customValues[f.field_key] ?? ""}
-                            onValueChange={(v) => setCustomValues(prev => ({ ...prev, [f.field_key]: v }))}
-                          >
-                            <SelectTrigger className="border-primary/30"><SelectValue placeholder="اختر..." /></SelectTrigger>
-                            <SelectContent>
-                              {(f.field_options || []).map((opt: string) => (
-                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                              ))}
-                            </SelectContent>
+                          <Select value={customValues[f.field_key] ?? ""} onValueChange={(v) => setCustomValues(prev => ({ ...prev, [f.field_key]: v }))}>
+                            <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
+                            <SelectContent>{(f.field_options || []).map((opt: string) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}</SelectContent>
                           </Select>
                         ) : (
-                          <Input
-                            type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"}
-                            value={customValues[f.field_key] ?? ""}
-                            onChange={(e) => setCustomValues(prev => ({ ...prev, [f.field_key]: e.target.value }))}
-                            className="border-primary/30"
-                          />
+                          <Input type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"} value={customValues[f.field_key] ?? ""} onChange={(e) => setCustomValues(prev => ({ ...prev, [f.field_key]: e.target.value }))} />
                         )}
                       </div>
                     ))}
                   </div>
 
-                  {customFieldDefs.length > 0 && (
-                    <div className="text-xs text-muted-foreground bg-primary/5 border border-primary/20 rounded p-2">
-                      ✨ يتضمن هذا النموذج حقولاً مخصصة لفريق <code className="font-bold">{targets.find(t => t.id === selectedTargetId)?.team_code}</code>
-                    </div>
-                  )}
-
                   <Button onClick={submitIndividual} disabled={busy} className="w-full md:w-auto mt-4"><UserPlus className="w-4 h-4 ml-2"/> حفظ المستفيد الفردي</Button>
                 </Card>
               </TabsContent>
-
 
               <TabsContent value="group">
                 <Card className="p-6 space-y-5 border-t-4 border-t-secondary shadow-md">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-1.5"><Label>الجنسية</Label><Input value={groupNationality} onChange={(e) => setGroupNationality(e.target.value)} /></div>
-                    
                     <div className="space-y-1.5">
                       <Label>النوع</Label>
                       <Select value={groupGender} onValueChange={setGroupGender}>
                         <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ذكر">ذكر</SelectItem>
-                          <SelectItem value="أنثى">أنثى</SelectItem>
-                          <SelectItem value="مختلط">مختلط</SelectItem>
-                        </SelectContent>
+                        <SelectContent><SelectItem value="ذكر">ذكر</SelectItem><SelectItem value="أنثى">أنثى</SelectItem><SelectItem value="مختلط">مختلط</SelectItem></SelectContent>
                       </Select>
                     </div>
-
                     <div className="space-y-1.5">
                       <Label>الفئة العمرية</Label>
                       <Select value={groupAgeCategory} onValueChange={setGroupAgeCategory}>
                         <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="رضيع">رضيع</SelectItem>
-                          <SelectItem value="طفل">طفل</SelectItem>
-                          <SelectItem value="بالغ">بالغ</SelectItem>
-                          <SelectItem value="كبار سن">كبار سن</SelectItem>
-                        </SelectContent>
+                        <SelectContent><SelectItem value="رضيع">رضيع</SelectItem><SelectItem value="طفل">طفل</SelectItem><SelectItem value="بالغ">بالغ</SelectItem><SelectItem value="كبار سن">كبار سن</SelectItem></SelectContent>
                       </Select>
                     </div>
-
                     <FieldSelect fieldKey="service_type" value={groupServiceType} onChange={setGroupServiceType} label="نوع الخدمة" />
                     <div className="space-y-1.5"><Label>العدد *</Label><Input type="number" min="1" value={groupCount} onChange={(e) => setGroupCount(e.target.value)} /></div>
                   </div>
@@ -692,19 +566,13 @@ export default function BeneficiariesRegistration() {
 
             {statusFilter === 'pending' && (
               <Card className="p-5 bg-primary/5 border-primary/20 flex flex-col md:flex-row items-center justify-between gap-4 mt-8">
-                <div className="text-sm">
-                  <strong>هل انتهيت من التسجيل؟</strong> اضغط على هذا الزر لإنهاء حالة إدخال المستفيدين وإخفائها من هذه القائمة.
-                </div>
-                <Button variant="default" onClick={finishRegistration} disabled={busy}>
-                  <CheckCircle2 className="w-4 h-4 ml-2" /> إنهاء تسجيل المستفيدين للمهمة
-                </Button>
+                <div className="text-sm"><strong>هل انتهيت من التسجيل؟</strong> اضغط لإنهاء حالة إدخال المستفيدين.</div>
+                <Button variant="default" onClick={finishRegistration} disabled={busy}><CheckCircle2 className="w-4 h-4 ml-2" /> إنهاء تسجيل المستفيدين للمهمة</Button>
               </Card>
             )}
 
-            {/* مسجلة مسبقاً */}
             <div className="space-y-4 mt-10">
               <h3 className="font-bold text-lg border-b border-border pb-2 text-primary">المستفيدون المسجلون مسبقاً</h3>
-              
               {registeredIndivs.length > 0 && (
                 <Card className="p-4 shadow-sm">
                   <h4 className="font-bold text-sm mb-3">تسجيل فردي</h4>
@@ -716,15 +584,7 @@ export default function BeneficiariesRegistration() {
                           <TableRow key={r.id}>
                             <TableCell className="font-medium">{r.full_name}</TableCell>
                             <TableCell dir="ltr">{r.phone || "—"}</TableCell>
-                            <TableCell dir="ltr">
-                              {decryptedIds[r.id] ? (
-                                <span className="font-bold text-primary">{decryptedIds[r.id]}</span>
-                              ) : (
-                                <span className="text-muted-foreground flex items-center gap-1">
-                                  <Lock className="w-3 h-3" /> مشفر
-                                </span>
-                              )}
-                            </TableCell>
+                            <TableCell dir="ltr">{r.national_id || "—"}</TableCell>
                             <TableCell>{r.service_type || "—"}</TableCell>
                             <TableCell>{r.service_quantity}</TableCell>
                           </TableRow>
@@ -734,75 +594,10 @@ export default function BeneficiariesRegistration() {
                   </div>
                 </Card>
               )}
-
-              {registeredGroups.length > 0 && (
-                <Card className="p-4 shadow-sm">
-                  <h4 className="font-bold text-sm mb-3">تسجيل جماعي</h4>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader><TableRow><TableHead>الجنسية</TableHead><TableHead>النوع</TableHead><TableHead>الفئة العمرية</TableHead><TableHead>الخدمة</TableHead><TableHead>العدد</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {registeredGroups.map(r => (
-                          <TableRow key={r.id}>
-                            <TableCell>{r.nationality || "—"}</TableCell>
-                            <TableCell>{r.gender || "—"}</TableCell>
-                            <TableCell>{r.age_category || "—"}</TableCell>
-                            <TableCell>{r.service_type || "—"}</TableCell>
-                            <TableCell className="font-bold">{r.count}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </Card>
-              )}
-
-              {registeredIndivs.length === 0 && registeredGroups.length === 0 && (
-                <Card className="p-8 text-center text-muted-foreground border-dashed">
-                  لم يتم تسجيل أي مستفيدين حتى الآن في هذه المهمة
-                </Card>
-              )}
             </div>
           </div>
         )}
       </div>
-
-      <Dialog open={showPinModal} onOpenChange={(open) => !busy && setShowPinModal(open)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Key className="w-5 h-5 text-primary" />
-              {isFirstPinSetup ? "إعداد كلمة مرور الفريق" : "تأمين بيانات الفريق"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-primary mt-0.5" />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                هذا النظام يستخدم التشفير التام. كلمة المرور هذه تُستخدم لتشفير أرقام البطاقات ولا تُخزن بشكل صريح. 
-                <strong className="block mt-1 text-primary">إذا فقدت هذه الكلمة، لن يتمكن أحد من استعادة الأرقام، حتى إدارة النظام.</strong>
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>{isFirstPinSetup ? "اختر كلمة مرور للفريق (PIN)" : "أدخل كلمة مرور الفريق للاطلاع على البيانات"}</Label>
-              <Input 
-                type="password" 
-                value={tempPin} 
-                onChange={e => setTempPin(e.target.value)} 
-                placeholder="****"
-                className="text-center text-2xl tracking-[1em] font-mono"
-                maxLength={8}
-                onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handlePinSubmit} className="w-full">
-              {isFirstPinSetup ? "حفظ وإعداد الخزنة" : "فتح الخزنة"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </AppLayout>
   );
 }

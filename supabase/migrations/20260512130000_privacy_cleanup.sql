@@ -20,10 +20,10 @@ SET registry_id = br.id
 FROM public.beneficiaries_registry br
 WHERE bi.id_hash = br.id_hash AND bi.registry_id IS NULL;
 
--- 5. PRIVACY CLEANUP: Set national_id to NULL to stop storing plain text IDs
-UPDATE public.beneficiaries_individual
-SET national_id = NULL
-WHERE id_hash IS NOT NULL;
+-- 5. [DISABLED] PRIVACY CLEANUP: The user wants to keep the IDs in the team-specific table
+-- UPDATE public.beneficiaries_individual
+-- SET national_id = NULL
+-- WHERE id_hash IS NOT NULL;
 
 -- 6. Also clean up registry if national_id was accidentally stored there (it wasn't in the schema but just in case)
 -- (The schema for beneficiaries_registry didn't even have national_id, so it's fine)
