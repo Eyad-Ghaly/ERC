@@ -153,6 +153,7 @@ export type Database = {
           updated_at: string
           registry_id: string | null
           id_hash: string | null
+          encrypted_id: string | null
         }
         Insert: {
           birthdate?: string | null
@@ -169,6 +170,7 @@ export type Database = {
           updated_at?: string
           registry_id?: string | null
           id_hash?: string | null
+          encrypted_id?: string | null
         }
         Update: {
           birthdate?: string | null
@@ -185,6 +187,7 @@ export type Database = {
           updated_at?: string
           registry_id?: string | null
           id_hash?: string | null
+          encrypted_id?: string | null
         }
         Relationships: [
           {
@@ -987,6 +990,30 @@ export type Database = {
           gender?: string | null
           education_status?: string | null
           renewal_2026?: string | null
+        }
+        Relationships: []
+      }
+      team_settings: {
+        Row: {
+          created_at: string
+          id: string
+          pin_hash: string
+          team_code: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pin_hash: string
+          team_code: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pin_hash?: string
+          team_code?: string
+          updated_at?: string
         }
         Relationships: []
       }

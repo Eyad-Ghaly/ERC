@@ -10,10 +10,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { encryptId, decryptId } from "@/utils/encryption";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Lock, Unlock, Key, AlertTriangle } from "lucide-react";
 
 // Utility: SHA-256 hash of a string (browser native)
 async function sha256(text: string): Promise<string> {
@@ -75,8 +75,15 @@ export default function BeneficiariesRegistration() {
   const [groupGender, setGroupGender] = useState("");
   const [groupAgeCategory, setGroupAgeCategory] = useState("");
   const [groupCount, setGroupCount] = useState("1");
-  const [groupServiceType, setGroupServiceType] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Team PIN State
+  const [teamPin, setTeamPin] = useState("");
+  const [pinVerified, setPinVerified] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [isFirstPinSetup, setIsFirstPinSetup] = useState(false);
+  const [tempPin, setTempPin] = useState("");
+  const [decryptedIds, setDecryptedIds] = useState<Record<string, string>>({});
 
   const triggerLookup = async (id: string) => {
     if (!id || id.length < 5) return;
@@ -198,7 +205,70 @@ export default function BeneficiariesRegistration() {
       setCustomFieldDefs([]);
       setCustomValues({});
     }
+
+    // Check if team has a PIN set
+    if (target?.team_code) {
+      checkTeamPinStatus(target.team_code);
+    }
   }, [selectedTargetId, targets]);
+
+  const checkTeamPinStatus = async (teamCode: string) => {
+    const { data } = await supabase.from('team_settings').select('team_code').eq('team_code', teamCode).maybeSingle();
+    if (!data) {
+      setIsFirstPinSetup(true);
+      setShowPinModal(true);
+    } else if (!pinVerified) {
+      setIsFirstPinSetup(false);
+      setShowPinModal(true);
+    }
+  };
+
+  const handlePinSubmit = async () => {
+    if (tempPin.length < 4) return toast.error("يجب أن تكون كلمة المرور 4 أرقام على الأقل");
+    const target = targets.find(t => t.id === selectedTargetId);
+    if (!target) return;
+
+    const hash = await sha256(tempPin);
+
+    if (isFirstPinSetup) {
+      const { error } = await supabase.from('team_settings').insert({
+        team_code: target.team_code,
+        pin_hash: hash
+      });
+      if (error) return toast.error("فشل إعداد كلمة المرور");
+      toast.success("تم إعداد كلمة مرور الفريق بنجاح");
+    } else {
+      const { data } = await supabase.from('team_settings').select('pin_hash').eq('team_code', target.team_code).single();
+      if (data?.pin_hash !== hash) return toast.error("كلمة المرور غير صحيحة");
+      toast.success("تم التحقق من كلمة المرور");
+    }
+
+    setTeamPin(tempPin);
+    setPinVerified(true);
+    setShowPinModal(false);
+    setTempPin("");
+    
+    // Decrypt existing IDs
+    decryptVisibleIds(tempPin, target.team_code);
+  };
+
+  const decryptVisibleIds = async (pin: string, teamCode: string) => {
+    const results: Record<string, string> = {};
+    for (const r of registeredIndivs) {
+      if (r.encrypted_id) {
+        const decrypted = await decryptId(r.encrypted_id, pin, teamCode);
+        if (decrypted) results[r.id] = decrypted;
+      }
+    }
+    setDecryptedIds(prev => ({ ...prev, ...results }));
+  };
+
+  useEffect(() => {
+    const target = targets.find(t => t.id === selectedTargetId);
+    if (pinVerified && teamPin && target) {
+      decryptVisibleIds(teamPin, target.team_code);
+    }
+  }, [registeredIndivs, pinVerified, teamPin, selectedTargetId]);
 
   // Lookup by national ID hash when ID field loses focus
   const handleIdBlur = async () => {
@@ -307,11 +377,14 @@ export default function BeneficiariesRegistration() {
       finalRegistryId = newReg?.id || null;
     }
 
+    const encrypted = await encryptId(indivNationalId.trim(), teamPin, target.team_code);
+
     const { error } = await supabase.from("beneficiaries_individual").insert({
       mission_id: target.mission_id,
       daily_report_id: target.daily_report_id,
       national_id: null, // PRIVACY: Stop storing plain text ID
       id_hash: hash,
+      encrypted_id: encrypted || null, // Vault storage
       registry_id: finalRegistryId,
       full_name: indivFullName,
       phone: indivPhone || null,
@@ -636,7 +709,13 @@ export default function BeneficiariesRegistration() {
                             <TableCell className="font-medium">{r.full_name}</TableCell>
                             <TableCell dir="ltr">{r.phone || "—"}</TableCell>
                             <TableCell dir="ltr">
-                              {r.national_id ? r.national_id : (r.id_hash ? "مُشفر للخصوصية" : "—")}
+                              {decryptedIds[r.id] ? (
+                                <span className="font-bold text-primary">{decryptedIds[r.id]}</span>
+                              ) : (
+                                <span className="text-muted-foreground flex items-center gap-1">
+                                  <Lock className="w-3 h-3" /> مشفر
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell>{r.service_type || "—"}</TableCell>
                             <TableCell>{r.service_quantity}</TableCell>
@@ -679,6 +758,43 @@ export default function BeneficiariesRegistration() {
           </div>
         )}
       </div>
+
+      <Dialog open={showPinModal} onOpenChange={(open) => !busy && setShowPinModal(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5 text-primary" />
+              {isFirstPinSetup ? "إعداد كلمة مرور الفريق" : "تأمين بيانات الفريق"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-primary mt-0.5" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                هذا النظام يستخدم التشفير التام. كلمة المرور هذه تُستخدم لتشفير أرقام البطاقات ولا تُخزن بشكل صريح. 
+                <strong className="block mt-1 text-primary">إذا فقدت هذه الكلمة، لن يتمكن أحد من استعادة الأرقام، حتى إدارة النظام.</strong>
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>{isFirstPinSetup ? "اختر كلمة مرور للفريق (PIN)" : "أدخل كلمة مرور الفريق للاطلاع على البيانات"}</Label>
+              <Input 
+                type="password" 
+                value={tempPin} 
+                onChange={e => setTempPin(e.target.value)} 
+                placeholder="****"
+                className="text-center text-2xl tracking-[1em] font-mono"
+                maxLength={8}
+                onKeyDown={(e) => e.key === 'Enter' && handlePinSubmit()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handlePinSubmit} className="w-full">
+              {isFirstPinSetup ? "حفظ وإعداد الخزنة" : "فتح الخزنة"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
