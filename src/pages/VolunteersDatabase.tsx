@@ -14,6 +14,9 @@ interface VolunteerWithTeams {
   branch: string | null;
   phone_number: string | null;
   national_id: string | null;
+  gender: string | null;
+  education_status: string | null;
+  renewal_2026: string | null;
   volunteer_teams: { team_code: string; is_approved: boolean }[];
 }
 
@@ -34,6 +37,7 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
         .from("volunteers_base")
         .select(`
           id, full_name, membership_number, branch, phone_number, national_id,
+          gender, education_status, renewal_2026,
           volunteer_teams ( team_code, is_approved )
         `);
 
@@ -96,7 +100,9 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
                   <TableHead>الاسم</TableHead>
                   <TableHead>الفرع</TableHead>
                   <TableHead>رقم العضوية</TableHead>
-                  <TableHead>رقم التليفون</TableHead>
+                  <TableHead>النوع</TableHead>
+                  <TableHead>حالة التعليم</TableHead>
+                  <TableHead>تجديد 2026</TableHead>
                   <TableHead>الفرق المنضم إليها</TableHead>
                 </TableRow>
               </TableHeader>
@@ -111,7 +117,17 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
                       <TableCell className="font-bold">{v.full_name}</TableCell>
                       <TableCell>{v.branch || "—"}</TableCell>
                       <TableCell dir="ltr" className="text-right">{v.membership_number || "—"}</TableCell>
-                      <TableCell dir="ltr" className="text-right">{v.phone_number || "—"}</TableCell>
+                      <TableCell>{v.gender || "—"}</TableCell>
+                      <TableCell>{v.education_status || "—"}</TableCell>
+                      <TableCell>
+                        {v.renewal_2026 ? (
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                            {v.renewal_2026}
+                          </Badge>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1.5">
                           {v.volunteer_teams && v.volunteer_teams.length > 0 ? (

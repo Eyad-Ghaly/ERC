@@ -76,8 +76,32 @@ export default function BeneficiariesRegistration() {
   const [groupAgeCategory, setGroupAgeCategory] = useState("");
   const [groupCount, setGroupCount] = useState("1");
   const [groupServiceType, setGroupServiceType] = useState("");
-
   const [busy, setBusy] = useState(false);
+
+  const triggerLookup = async (id: string) => {
+    if (!id || id.length < 5) return;
+    setLookingUp(true);
+    const hash = await sha256(id);
+    const { data } = await supabase.from('beneficiaries_registry').select('*').eq('id_hash', hash).maybeSingle();
+    if (data) {
+      setRegistryMatch(data);
+      setIndivFullName(data.full_name || indivFullName);
+      setIndivNationality(data.nationality || indivNationality);
+      setIndivBirthdate(data.birthdate || indivBirthdate);
+      setIndivPhone(data.phone || indivPhone);
+      // Fetch previous services
+      const { data: prev } = await supabase
+        .from('beneficiaries_individual')
+        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team_code)')
+        .eq('registry_id', data.id)
+        .order('created_at', { ascending: false });
+      setPrevServices(prev || []);
+    } else {
+      setRegistryMatch(null);
+      setPrevServices([]);
+    }
+    setLookingUp(false);
+  };
 
   const fetchTargets = async () => {
     setLoading(true);
@@ -286,7 +310,7 @@ export default function BeneficiariesRegistration() {
     const { error } = await supabase.from("beneficiaries_individual").insert({
       mission_id: target.mission_id,
       daily_report_id: target.daily_report_id,
-      national_id: indivNationalId || null,
+      national_id: null, // PRIVACY: Stop storing plain text ID
       id_hash: hash,
       registry_id: finalRegistryId,
       full_name: indivFullName,
@@ -421,10 +445,20 @@ export default function BeneficiariesRegistration() {
                       <Label className="flex items-center gap-1">رقم البطاقة / الجواز {lookingUp && <Loader2 className="w-3 h-3 animate-spin" />}</Label>
                       <Input 
                         value={indivNationalId} 
-                        onChange={(e) => { setIndivNationalId(e.target.value); setRegistryMatch(null); setPrevServices([]); }}
+                        onChange={(e) => { 
+                          const val = e.target.value.trim();
+                          setIndivNationalId(val); 
+                          setRegistryMatch(null); 
+                          setPrevServices([]); 
+                          // Auto lookup if 14 digits
+                          if (val.length === 14) {
+                            // We call a wrapper that calls handleIdBlur with the value
+                            triggerLookup(val);
+                          }
+                        }}
                         onBlur={handleIdBlur}
                         dir="ltr" 
-                        placeholder="اكتب الرقم ثم اضغط Tab للبحث"
+                        placeholder="البحث بالرقم القومي (14 رقم)"
                       />
                     </div>
                     {/* Name with autocomplete */}
@@ -601,7 +635,9 @@ export default function BeneficiariesRegistration() {
                           <TableRow key={r.id}>
                             <TableCell className="font-medium">{r.full_name}</TableCell>
                             <TableCell dir="ltr">{r.phone || "—"}</TableCell>
-                            <TableCell dir="ltr">{r.national_id || "—"}</TableCell>
+                            <TableCell dir="ltr">
+                              {r.national_id ? r.national_id : (r.id_hash ? "مُشفر للخصوصية" : "—")}
+                            </TableCell>
                             <TableCell>{r.service_type || "—"}</TableCell>
                             <TableCell>{r.service_quantity}</TableCell>
                           </TableRow>

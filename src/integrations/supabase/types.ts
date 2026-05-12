@@ -151,6 +151,8 @@ export type Database = {
           service_quantity: number | null
           service_type: string | null
           updated_at: string
+          registry_id: string | null
+          id_hash: string | null
         }
         Insert: {
           birthdate?: string | null
@@ -165,6 +167,8 @@ export type Database = {
           service_quantity?: number | null
           service_type?: string | null
           updated_at?: string
+          registry_id?: string | null
+          id_hash?: string | null
         }
         Update: {
           birthdate?: string | null
@@ -179,6 +183,8 @@ export type Database = {
           service_quantity?: number | null
           service_type?: string | null
           updated_at?: string
+          registry_id?: string | null
+          id_hash?: string | null
         }
         Relationships: [
           {
@@ -948,6 +954,9 @@ export type Database = {
           nationality: string | null
           phone_number: string | null
           residence: string | null
+          gender: string | null
+          education_status: string | null
+          renewal_2026: string | null
         }
         Insert: {
           birthdate?: string | null
@@ -960,6 +969,9 @@ export type Database = {
           nationality?: string | null
           phone_number?: string | null
           residence?: string | null
+          gender?: string | null
+          education_status?: string | null
+          renewal_2026?: string | null
         }
         Update: {
           birthdate?: string | null
@@ -972,6 +984,9 @@ export type Database = {
           nationality?: string | null
           phone_number?: string | null
           residence?: string | null
+          gender?: string | null
+          education_status?: string | null
+          renewal_2026?: string | null
         }
         Relationships: []
       }
