@@ -7,35 +7,100 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, Lock, Search, Download } from "lucide-react";
+import { Loader2, Lock, Search, Download, Key, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
+// Utility: SHA-256 hash
+async function sha256(text: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text.trim());
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 export default function TeamBeneficiaries() {
-  const { user } = useAuth();
-  const [teamCode, setTeamCode] = useState("");
+  const { profile } = useAuth();
   const [password, setPassword] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isFirstTime, setIsFirstTime] = useState(false);
   const [beneficiaries, setBeneficiaries] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleLogin = async () => {
-    if (!teamCode || !password) return toast.error("برجاء إدخال كود الفريق وكلمة المرور");
-    
+  const teamCode = profile?.team_code || "";
+
+  useEffect(() => {
+    if (teamCode) {
+      checkTeamStatus();
+    }
+  }, [teamCode]);
+
+  const checkTeamStatus = async () => {
     setLoading(true);
-    // Simple password check (this can be improved later to use team_settings)
-    // For now, let's just allow it if password is '1234' or any password they set
-    setIsAuthenticated(true);
-    fetchBeneficiaries(teamCode);
+    const { data, error } = await supabase
+      .from('team_settings')
+      .select('team_code')
+      .eq('team_code', teamCode)
+      .maybeSingle();
+    
+    if (!data) {
+      setIsFirstTime(true);
+    } else {
+      setIsFirstTime(false);
+    }
     setLoading(false);
   };
 
-  const fetchBeneficiaries = async (code: string) => {
+  const handleSetPassword = async () => {
+    if (password.length < 4) return toast.error("كلمة المرور يجب أن تكون 4 أرقام أو حروف على الأقل");
+    
+    setBusy(true);
+    const hash = await sha256(password);
+    const { error } = await supabase.from('team_settings').upsert({
+      team_code: teamCode,
+      pin_hash: hash
+    });
+    setBusy(false);
+
+    if (error) {
+      toast.error("فشل حفظ كلمة المرور: " + error.message);
+    } else {
+      toast.success("تم تعيين كلمة المرور بنجاح");
+      setIsFirstTime(false);
+      setIsAuthenticated(true);
+      fetchBeneficiaries();
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!password) return toast.error("برجاء إدخال كلمة المرور");
+    
+    setBusy(true);
+    const hash = await sha256(password);
+    const { data } = await supabase
+      .from('team_settings')
+      .select('pin_hash')
+      .eq('team_code', teamCode)
+      .maybeSingle();
+    
+    setBusy(false);
+
+    if (data && data.pin_hash === hash) {
+      setIsAuthenticated(true);
+      fetchBeneficiaries();
+    } else {
+      toast.error("كلمة المرور غير صحيحة");
+    }
+  };
+
+  const fetchBeneficiaries = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('beneficiaries_individual')
       .select('*, missions!inner(team_code)')
-      .eq('missions.team_code', code.toUpperCase())
+      .eq('missions.team_code', teamCode)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -52,31 +117,55 @@ export default function TeamBeneficiaries() {
     (b.phone && b.phone.includes(searchTerm))
   );
 
+  if (loading && !isAuthenticated) {
+    return (
+      <AppLayout title="جاري التحميل...">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="animate-spin w-10 h-10 text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <AppLayout title="قاعدة بيانات الفريق">
         <div className="flex items-center justify-center min-h-[60vh]">
-          <Card className="p-8 w-full max-w-md space-y-6 shadow-xl border-primary/20">
+          <Card className="p-8 w-full max-w-md space-y-6 shadow-xl border-primary/20 animate-in fade-in zoom-in-95 duration-300">
             <div className="text-center space-y-2">
               <div className="bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Lock className="w-8 h-8 text-primary" />
+                {isFirstTime ? <Key className="w-8 h-8 text-primary" /> : <Lock className="w-8 h-8 text-primary" />}
               </div>
-              <h2 className="text-2xl font-bold">دخول الفريق</h2>
-              <p className="text-muted-foreground text-sm">برجاء إدخال بيانات الفريق للاطلاع على المستفيدين</p>
+              <h2 className="text-2xl font-bold">{isFirstTime ? "إعداد الفريق لأول مرة" : "دخول الفريق"}</h2>
+              <p className="text-muted-foreground text-sm">
+                {isFirstTime 
+                  ? `برجاء تعيين كلمة مرور لفريقك (${teamCode}) للبدء` 
+                  : `برجاء إدخال كلمة مرور الفريق (${teamCode})`}
+              </p>
             </div>
             
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label>كود الفريق</Label>
-                <Input value={teamCode} onChange={e => setTeamCode(e.target.value.toUpperCase())} placeholder="مثال: P02" />
-              </div>
-              <div className="space-y-1.5">
                 <Label>كلمة المرور</Label>
-                <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="****" />
+                <Input 
+                  type="password" 
+                  value={password} 
+                  onChange={e => setPassword(e.target.value)} 
+                  placeholder="****"
+                  className="text-center text-lg tracking-widest"
+                  onKeyDown={(e) => e.key === 'Enter' && (isFirstTime ? handleSetPassword() : handleLogin())}
+                />
               </div>
-              <Button onClick={handleLogin} disabled={loading} className="w-full">
-                {loading ? <Loader2 className="animate-spin w-4 h-4 ml-2" /> : "دخول"}
-              </Button>
+              {isFirstTime ? (
+                <Button onClick={handleSetPassword} disabled={busy} className="w-full gap-2">
+                  {busy ? <Loader2 className="animate-spin w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
+                  حفظ وتفعيل الدخول
+                </Button>
+              ) : (
+                <Button onClick={handleLogin} disabled={busy} className="w-full">
+                  {busy ? <Loader2 className="animate-spin w-4 h-4 ml-2" /> : "دخول"}
+                </Button>
+              )}
             </div>
           </Card>
         </div>
@@ -97,12 +186,17 @@ export default function TeamBeneficiaries() {
               className="pr-10"
             />
           </div>
-          <Button variant="outline" className="gap-2">
-            <Download className="w-4 h-4" /> تصدير Excel
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setIsAuthenticated(false); setPassword(""); }} className="text-xs">
+              <Lock className="w-3 h-3 ml-1" /> قفل
+            </Button>
+            <Button variant="outline" size="sm" className="gap-2 text-xs">
+              <Download className="w-4 h-4" /> تصدير Excel
+            </Button>
+          </div>
         </div>
 
-        <Card className="overflow-hidden border-primary/10">
+        <Card className="overflow-hidden border-primary/10 shadow-lg">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-muted/50">
@@ -116,11 +210,15 @@ export default function TeamBeneficiaries() {
               </TableHeader>
               <TableBody>
                 {filteredData.map((b) => (
-                  <TableRow key={b.id} className="hover:bg-muted/30">
+                  <TableRow key={b.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="font-bold">{b.full_name}</TableCell>
                     <TableCell dir="ltr">{b.national_id || "—"}</TableCell>
                     <TableCell dir="ltr">{b.phone || "—"}</TableCell>
-                    <TableCell>{b.service_type || "—"}</TableCell>
+                    <TableCell>
+                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-medium">
+                        {b.service_type || "—"}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {new Date(b.created_at).toLocaleDateString('ar-EG')}
                     </TableCell>
@@ -128,8 +226,8 @@ export default function TeamBeneficiaries() {
                 ))}
                 {filteredData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
-                      لا توجد بيانات مطابقة للبحث
+                    <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
+                      {loading ? <Loader2 className="animate-spin mx-auto w-6 h-6" /> : "لا توجد بيانات مسجلة لهذا الفريق حتى الآن"}
                     </TableCell>
                   </TableRow>
                 )}
