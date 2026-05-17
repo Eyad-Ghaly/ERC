@@ -60,6 +60,27 @@ export default function MissionDetail() {
   if (loading) return <AppLayout title="..."><Card className="p-8">جاري التحميل...</Card></AppLayout>;
   if (!mission) return <AppLayout title="غير موجود"><Card className="p-8">المهمة غير موجودة</Card></AppLayout>;
 
+  const isYouthOnly = (hasRole("youth_room") || hasRole("branch_youth")) && !hasRole("admin") && !hasRole("joker") && !hasRole("operations_room") && !hasRole("operations_supervisor");
+
+  if (isYouthOnly && !mission.is_open_mission && ["planned", "coded", "entered"].includes(mission.status)) {
+    return (
+      <AppLayout title="غير مصرح">
+        <Card className="p-8 text-center text-muted-foreground card-elevated">
+          هذه الاستمارة لم تصل بعد إلى غرفة الشباب والتطوع. (الحالة الحالية: {STATUS_LABELS[mission.status] ?? mission.status})
+        </Card>
+      </AppLayout>
+    );
+  }
+
+  const isSentToSupervisor = ["sent_to_youth", "monitored"].includes(mission.status);
+  const canUserEdit = canEdit && (!isSentToSupervisor || isSup);
+
+  const markSupervisorEdit = async () => {
+    if (isSentToSupervisor && isSup) {
+      await supabase.from("missions").update({ supervisor_modified: true, supervisor_modified_at: new Date().toISOString() }).eq("id", mission.id);
+    }
+  };
+
   const updateMission = (patch: Partial<typeof mission>) => setMission({ ...mission, ...patch });
 
   const save = async (extraPatch: any = {}) => {
@@ -70,6 +91,10 @@ export default function MissionDetail() {
         patch[k] = mission[k];
       }
     });
+    if (isSentToSupervisor && isSup) {
+      patch.supervisor_modified = true;
+      patch.supervisor_modified_at = new Date().toISOString();
+    }
     Object.assign(patch, extraPatch);
     const { error } = await supabase.from("missions").update(patch as any).eq("id", mission.id);
     setBusy(false);
@@ -112,6 +137,7 @@ export default function MissionDetail() {
   // Volunteer ops
   const addVol = async () => {
     await supabase.from("mission_volunteers").insert({ mission_id: mission.id, full_name: "متطوع جديد", added_in_ops: true });
+    await markSupervisorEdit();
     reloadVolunteers();
   };
   const addVolFromDB = async (v: VolunteerData) => {
@@ -122,32 +148,37 @@ export default function MissionDetail() {
       branch: v.branch,
       added_in_ops: true
     });
+    await markSupervisorEdit();
     reloadVolunteers();
   };
   const updateVol = async (vid: string, patch: any) => {
     await supabase.from("mission_volunteers").update(patch).eq("id", vid);
+    await markSupervisorEdit();
     reloadVolunteers();
   };
   const removeVol = async (vid: string) => {
     await supabase.from("mission_volunteers").update({ removed: true }).eq("id", vid);
+    await markSupervisorEdit();
     reloadVolunteers();
   };
 
   // Drivers
   const addDriver = async () => {
     await supabase.from("mission_drivers").insert({ mission_id: mission.id, driver_name: "" });
+    await markSupervisorEdit();
     reloadDrivers();
   };
-  const updateDriver = async (did: string, patch: any) => { await supabase.from("mission_drivers").update(patch).eq("id", did); reloadDrivers(); };
-  const delDriver = async (did: string) => { await supabase.from("mission_drivers").delete().eq("id", did); reloadDrivers(); };
+  const updateDriver = async (did: string, patch: any) => { await supabase.from("mission_drivers").update(patch).eq("id", did); await markSupervisorEdit(); reloadDrivers(); };
+  const delDriver = async (did: string) => { await supabase.from("mission_drivers").delete().eq("id", did); await markSupervisorEdit(); reloadDrivers(); };
 
   // Routes
   const addRoute = async () => {
     await supabase.from("mission_routes").insert({ mission_id: mission.id, place: "", position: routes.length });
+    await markSupervisorEdit();
     reloadRoutes();
   };
-  const updateRoute = async (rid: string, patch: any) => { await supabase.from("mission_routes").update(patch).eq("id", rid); reloadRoutes(); };
-  const delRoute = async (rid: string) => { await supabase.from("mission_routes").delete().eq("id", rid); reloadRoutes(); };
+  const updateRoute = async (rid: string, patch: any) => { await supabase.from("mission_routes").update(patch).eq("id", rid); await markSupervisorEdit(); reloadRoutes(); };
+  const delRoute = async (rid: string) => { await supabase.from("mission_routes").delete().eq("id", rid); await markSupervisorEdit(); reloadRoutes(); };
 
   const startNewDay = async () => {
     setBusy(true);
@@ -196,6 +227,37 @@ export default function MissionDetail() {
           </div>
         </Card>
 
+        {/* Supervisor modification alert */}
+        {mission.supervisor_modified && (
+          <Card className="p-4 bg-warning/15 border-warning/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
+              <div>
+                <h4 className="font-bold text-warning">تعديل المشرف</h4>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  تم تعديل بيانات هذه المهمة أو المتطوعين من قِبل المشرف بعد إرسالها من غرفة الشباب.
+                  {mission.supervisor_modified_at && ` (تاريخ التعديل: ${new Date(mission.supervisor_modified_at).toLocaleString("ar-EG")})`}
+                </p>
+              </div>
+            </div>
+            {isSup ? (
+              <div className="w-full md:w-auto flex items-center gap-2">
+                <Input 
+                  placeholder="إضافة ملاحظة التعديل..." 
+                  value={mission.supervisor_edit_note ?? ""} 
+                  onChange={(e) => updateMission({ supervisor_edit_note: e.target.value })}
+                  onBlur={() => save({ supervisor_modified: true })}
+                  className="bg-background min-w-[250px]"
+                />
+              </div>
+            ) : mission.supervisor_edit_note ? (
+              <div className="text-sm bg-background/50 p-2 rounded border border-warning/20 mt-2 md:mt-0 w-full md:w-auto">
+                <strong className="text-warning">ملاحظة المشرف: </strong> {mission.supervisor_edit_note}
+              </div>
+            ) : null}
+          </Card>
+        )}
+
         {/* Visible mission data */}
         <Card className="card-elevated p-5 space-y-4">
           <h3 className="font-bold">بيانات المهمة</h3>
@@ -222,23 +284,30 @@ export default function MissionDetail() {
         {/* Operations Room editing */}
         {(isOps || isJoker || isSup) && (
           <Card className="card-elevated p-5 space-y-4">
-            <h3 className="font-bold">إعداد التنفيذ (غرفة العمليات)</h3>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="font-bold">إعداد التنفيذ (غرفة العمليات)</h3>
+              {isSentToSupervisor && !isSup && (
+                <span className="text-xs bg-destructive/15 text-destructive px-2 py-1 rounded font-bold">
+                  مغلق للتعديل (تم الإرسال للمشرف)
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1.5"><Label>الإقليم</Label>
-                <Select value={mission.region ?? ""} onValueChange={(v) => updateMission({ region: v })}>
+                <Select disabled={!canUserEdit} value={mission.region ?? ""} onValueChange={(v) => updateMission({ region: v })}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>{Object.entries(REGIONS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5"><Label>نوع المهمة</Label>
-                <Select value={mission.mission_type ?? ""} onValueChange={(v) => updateMission({ mission_type: v })}>
+                <Select disabled={!canUserEdit} value={mission.mission_type ?? ""} onValueChange={(v) => updateMission({ mission_type: v })}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>{Object.entries(MISSION_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               {mission.mission_type === "external" && (
                 <div className="space-y-1.5"><Label>المواصلات</Label>
-                  <Select value={mission.transport_mode ?? ""} onValueChange={(v) => updateMission({ transport_mode: v })}>
+                  <Select disabled={!canUserEdit} value={mission.transport_mode ?? ""} onValueChange={(v) => updateMission({ transport_mode: v })}>
                     <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                     <SelectContent>{Object.entries(TRANSPORT_MODES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                   </Select>
@@ -249,12 +318,12 @@ export default function MissionDetail() {
             {mission.mission_type === "external" && mission.transport_mode === "driver" && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between"><Label>السائقون والعربيات</Label>
-                  <Button size="sm" variant="outline" onClick={addDriver}><Plus className="w-4 h-4 ms-1" />إضافة سائق</Button></div>
+                  {canUserEdit && <Button size="sm" variant="outline" onClick={addDriver}><Plus className="w-4 h-4 ms-1" />إضافة سائق</Button>}</div>
                 {drivers.map((d) => (
                   <div key={d.id} className="grid grid-cols-12 gap-2">
-                    <Input className="col-span-6" placeholder="اسم السائق" defaultValue={d.driver_name} onBlur={(e) => updateDriver(d.id, { driver_name: e.target.value })} />
-                    <Input className="col-span-5" placeholder="رقم العربية" defaultValue={d.vehicle_number ?? ""} onBlur={(e) => updateDriver(d.id, { vehicle_number: e.target.value })} dir="ltr" />
-                    <Button size="icon" variant="ghost" onClick={() => delDriver(d.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    <Input disabled={!canUserEdit} className="col-span-6" placeholder="اسم السائق" defaultValue={d.driver_name} onBlur={(e) => updateDriver(d.id, { driver_name: e.target.value })} />
+                    <Input disabled={!canUserEdit} className="col-span-5" placeholder="رقم العربية" defaultValue={d.vehicle_number ?? ""} onBlur={(e) => updateDriver(d.id, { vehicle_number: e.target.value })} dir="ltr" />
+                    {canUserEdit && <Button size="icon" variant="ghost" onClick={() => delDriver(d.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
                   </div>
                 ))}
               </div>
@@ -263,12 +332,12 @@ export default function MissionDetail() {
             {mission.mission_type === "external" && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between"><Label>خط السير</Label>
-                  <Button size="sm" variant="outline" onClick={addRoute}><Plus className="w-4 h-4 ms-1" />نقطة مرور</Button></div>
+                  {canUserEdit && <Button size="sm" variant="outline" onClick={addRoute}><Plus className="w-4 h-4 ms-1" />نقطة مرور</Button>}</div>
                 {routes.map((r) => (
                   <div key={r.id} className="grid grid-cols-12 gap-2">
-                    <Input className="col-span-7" placeholder="المكان" defaultValue={r.place} onBlur={(e) => updateRoute(r.id, { place: e.target.value })} />
-                    <Input className="col-span-4" type="datetime-local" defaultValue={r.route_time?.slice(0, 16) ?? ""} onBlur={(e) => updateRoute(r.id, { route_time: e.target.value || null })} />
-                    <Button size="icon" variant="ghost" onClick={() => delRoute(r.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    <Input disabled={!canUserEdit} className="col-span-7" placeholder="المكان" defaultValue={r.place} onBlur={(e) => updateRoute(r.id, { place: e.target.value })} />
+                    <Input disabled={!canUserEdit} className="col-span-4" type="datetime-local" defaultValue={r.route_time?.slice(0, 16) ?? ""} onBlur={(e) => updateRoute(r.id, { route_time: e.target.value || null })} />
+                    {canUserEdit && <Button size="icon" variant="ghost" onClick={() => delRoute(r.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
                   </div>
                 ))}
               </div>
@@ -276,20 +345,20 @@ export default function MissionDetail() {
 
             {/* Ops box */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border">
-              <div className="space-y-1.5"><Label>المشرف</Label><Input value={mission.supervisor ?? ""} onChange={(e) => updateMission({ supervisor: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>القائم بتعبئة الاستمارة</Label><Input value={mission.filler_volunteer ?? ""} onChange={(e) => updateMission({ filler_volunteer: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>القائم بمراجعة الاستمارة</Label><Input value={mission.reviewer_volunteer ?? ""} onChange={(e) => updateMission({ reviewer_volunteer: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>المشرف المراجع</Label><Input value={mission.reviewing_supervisor ?? ""} onChange={(e) => updateMission({ reviewing_supervisor: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>المتطوع المستكمل للاستمارة</Label><Input value={mission.completing_volunteer ?? ""} onChange={(e) => updateMission({ completing_volunteer: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>الجوكر</Label><Input value={mission.joker_name ?? ""} onChange={(e) => updateMission({ joker_name: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>المشرف</Label><Input disabled={!canUserEdit} value={mission.supervisor ?? ""} onChange={(e) => updateMission({ supervisor: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>القائم بتعبئة الاستمارة</Label><Input disabled={!canUserEdit} value={mission.filler_volunteer ?? ""} onChange={(e) => updateMission({ filler_volunteer: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>القائم بمراجعة الاستمارة</Label><Input disabled={!canUserEdit} value={mission.reviewer_volunteer ?? ""} onChange={(e) => updateMission({ reviewer_volunteer: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>المشرف المراجع</Label><Input disabled={!canUserEdit} value={mission.reviewing_supervisor ?? ""} onChange={(e) => updateMission({ reviewing_supervisor: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>المتطوع المستكمل للاستمارة</Label><Input disabled={!canUserEdit} value={mission.completing_volunteer ?? ""} onChange={(e) => updateMission({ completing_volunteer: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>الجوكر</Label><Input disabled={!canUserEdit} value={mission.joker_name ?? ""} onChange={(e) => updateMission({ joker_name: e.target.value })} /></div>
               <div className="space-y-1.5 md:col-span-2"><Label>مصدر البيانات</Label>
                 <div className="flex flex-wrap gap-3 mt-1">
                   {Object.entries(DATA_SOURCES).map(([k, v]) => {
                     const sources: string[] = mission.data_sources ?? [];
                     const has = sources.includes(k);
                     return (
-                      <label key={k} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox checked={has} onCheckedChange={() => updateMission({ data_sources: has ? sources.filter((x) => x !== k) : [...sources, k] })} />
+                      <label key={k} className={`flex items-center gap-2 text-sm ${canUserEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+                        <Checkbox disabled={!canUserEdit} checked={has} onCheckedChange={() => updateMission({ data_sources: has ? sources.filter((x) => x !== k) : [...sources, k] })} />
                         {v}
                       </label>
                     );
@@ -302,9 +371,9 @@ export default function MissionDetail() {
 
         {/* Volunteers */}
         <Card className="card-elevated p-5 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="font-bold">المتطوعون</h3>
-            {canEdit && (
+            {canUserEdit && (
               <div className="flex gap-2">
                 <Dialog>
                   <DialogTrigger asChild>
@@ -318,35 +387,40 @@ export default function MissionDetail() {
                 <Button size="sm" variant="outline" onClick={addVol}><Plus className="w-4 h-4 ms-1" />متطوع جديد</Button>
               </div>
             )}
+            {isSentToSupervisor && !isSup && (
+              <span className="text-xs bg-destructive/15 text-destructive px-2 py-1 rounded font-bold">
+                مغلق للتعديل (تم الإرسال للمشرف)
+              </span>
+            )}
           </div>
           {volunteers.filter((v) => !v.removed).length === 0 && <p className="text-sm text-muted-foreground">لا يوجد متطوعون</p>}
           {volunteers.filter((v) => !v.removed).map((v) => (
             <Card key={v.id} className="p-3 space-y-2 bg-muted/30">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                <Input className="md:col-span-3" defaultValue={v.full_name} onBlur={(e) => updateVol(v.id, { full_name: e.target.value })} placeholder="الاسم" />
-                <Input className="md:col-span-2" defaultValue={v.membership_number ?? ""} onBlur={(e) => updateVol(v.id, { membership_number: e.target.value })} placeholder="رقم العضوية" dir="ltr" />
-                <Input className="md:col-span-2" defaultValue={v.branch ?? ""} onBlur={(e) => updateVol(v.id, { branch: e.target.value })} placeholder="الفرع" />
-                <Input className="md:col-span-2" type="datetime-local" defaultValue={v.arrival_time?.slice(0, 16) ?? ""} onBlur={(e) => updateVol(v.id, { arrival_time: e.target.value || null })} />
-                <Input className="md:col-span-2" type="datetime-local" defaultValue={v.departure_time?.slice(0, 16) ?? ""} onBlur={(e) => updateVol(v.id, { departure_time: e.target.value || null })} />
-                <Button size="icon" variant="ghost" onClick={() => removeVol(v.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                <Input disabled={!canUserEdit} className="md:col-span-3" defaultValue={v.full_name} onBlur={(e) => updateVol(v.id, { full_name: e.target.value })} placeholder="الاسم" />
+                <Input disabled={!canUserEdit} className="md:col-span-2" defaultValue={v.membership_number ?? ""} onBlur={(e) => updateVol(v.id, { membership_number: e.target.value })} placeholder="رقم العضوية" dir="ltr" />
+                <Input disabled={!canUserEdit} className="md:col-span-2" defaultValue={v.branch ?? ""} onBlur={(e) => updateVol(v.id, { branch: e.target.value })} placeholder="الفرع" />
+                <Input disabled={!canUserEdit} className="md:col-span-2" type="datetime-local" defaultValue={v.arrival_time?.slice(0, 16) ?? ""} onBlur={(e) => updateVol(v.id, { arrival_time: e.target.value || null })} />
+                <Input disabled={!canUserEdit} className="md:col-span-2" type="datetime-local" defaultValue={v.departure_time?.slice(0, 16) ?? ""} onBlur={(e) => updateVol(v.id, { departure_time: e.target.value || null })} />
+                {canUserEdit && <Button size="icon" variant="ghost" onClick={() => removeVol(v.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
                 <div className="text-muted-foreground">الساعات: <strong className="text-foreground">{v.hours ? Number(v.hours).toFixed(2) : "—"}</strong></div>
                 {isYouth && (
                   <div className="space-y-1"><Label className="text-xs">النقاط</Label>
-                    <Select value={String(v.points ?? "")} onValueChange={(val) => updateVol(v.id, { points: Number(val) })}>
+                    <Select disabled={!canUserEdit} value={String(v.points ?? "")} onValueChange={(val) => updateVol(v.id, { points: Number(val) })}>
                       <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
                       <SelectContent>{POINTS_OPTIONS.map((p) => <SelectItem key={p} value={String(p)}>{p}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 )}
                 <div className="space-y-1"><Label className="text-xs">سبب التغيير</Label>
-                  <Select value={v.change_reason ?? ""} onValueChange={(val) => updateVol(v.id, { change_reason: val })}>
+                  <Select disabled={!canUserEdit} value={v.change_reason ?? ""} onValueChange={(val) => updateVol(v.id, { change_reason: val })}>
                     <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
                     <SelectContent>{Object.entries(VOLUNTEER_CHANGE_REASONS).map(([k, vv]) => <SelectItem key={k} value={k}>{vv}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                {isYouth && (
+                {isYouth && canUserEdit && (
                   <div className="space-y-1"><Label className="text-xs">ملاحظة</Label>
                     <Select value="" onValueChange={async (val) => {
                       await supabase.from("volunteer_notes").insert({ mission_id: mission.id, volunteer_id: v.id, note_type: val as any });
@@ -374,9 +448,9 @@ export default function MissionDetail() {
           <Card className="card-elevated p-5 space-y-4">
             <h3 className="font-bold">صندوق غرفة الشباب</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>اسم الراصد</Label><Input value={mission.monitor_name ?? ""} onChange={(e) => updateMission({ monitor_name: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>اسم المراجع</Label><Input value={mission.youth_reviewer ?? ""} onChange={(e) => updateMission({ youth_reviewer: e.target.value })} /></div>
-              <div className="space-y-1.5 md:col-span-2"><Label>ملاحظات</Label><Textarea rows={3} value={mission.youth_notes ?? ""} onChange={(e) => updateMission({ youth_notes: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>اسم الراصد</Label><Input disabled={!canUserEdit} value={mission.monitor_name ?? ""} onChange={(e) => updateMission({ monitor_name: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>اسم المراجع</Label><Input disabled={!canUserEdit} value={mission.youth_reviewer ?? ""} onChange={(e) => updateMission({ youth_reviewer: e.target.value })} /></div>
+              <div className="space-y-1.5 md:col-span-2"><Label>ملاحظات</Label><Textarea disabled={!canUserEdit} rows={3} value={mission.youth_notes ?? ""} onChange={(e) => updateMission({ youth_notes: e.target.value })} /></div>
             </div>
           </Card>
         )}
@@ -388,7 +462,7 @@ export default function MissionDetail() {
         {!mission.is_open_mission && (
           <Card className="card-elevated p-5">
             <div className="flex flex-wrap gap-2 justify-end">
-              {canEdit && mission.status !== "monitored" && (
+              {canUserEdit && (mission.status !== "monitored" || isSup) && (
                 <Button variant="outline" onClick={() => save()} disabled={busy}><Save className="w-4 h-4 ms-2" />حفظ</Button>
               )}
               {isOps && mission.status === "coded" && (

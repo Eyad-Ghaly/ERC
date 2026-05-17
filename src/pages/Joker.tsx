@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { REGIONS } from "@/lib/constants";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Search, Eye } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Row {
   id: string; mission_code: string; mission_name: string;
@@ -17,11 +18,14 @@ interface Row {
 }
 
 export default function Joker({ titleOverride, embedded }: { titleOverride?: string, embedded?: boolean }) {
+  const { hasRole } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState("all");
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const isYouthOnly = (hasRole("youth_room") || hasRole("branch_youth")) && !hasRole("admin") && !hasRole("joker") && !hasRole("operations_room") && !hasRole("operations_supervisor");
 
   useEffect(() => {
     (async () => {
@@ -29,13 +33,16 @@ export default function Joker({ titleOverride, embedded }: { titleOverride?: str
       let q = supabase.from("missions")
         .select("id, mission_code, mission_name, governorate, activity_date, status, region")
         .order("activity_date", { ascending: false });
+      if (isYouthOnly) {
+        q = q.in("status", ["reviewed", "sent_to_youth", "sent_to_supervisor", "monitored", "open_active"]);
+      }
       if (region !== "all") q = q.eq("region", region as any);
       if (date) q = q.eq("activity_date", date);
       const { data } = await q;
       setRows((data ?? []) as Row[]);
       setLoading(false);
     })();
-  }, [region, date]);
+  }, [region, date, isYouthOnly]);
 
   const filtered = rows.filter((r) => !search ||
     r.mission_code.toLowerCase().includes(search.toLowerCase()) ||
