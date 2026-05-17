@@ -74,6 +74,7 @@ export default function MissionDetail() {
 
   const isSentToSupervisor = ["sent_to_youth", "monitored"].includes(mission.status);
   const canUserEdit = canEdit && (!isSentToSupervisor || isSup);
+  const canEditOpsBox = (isOps || isJoker || isSup) && (!isSentToSupervisor || isSup);
 
   const markSupervisorEdit = async () => {
     if (isSentToSupervisor && isSup) {
@@ -282,32 +283,32 @@ export default function MissionDetail() {
         </Card>
 
         {/* Operations Room editing */}
-        {(isOps || isJoker || isSup) && (
+        {(isOps || isJoker || isSup || isYouth) && (
           <Card className="card-elevated p-5 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="font-bold">إعداد التنفيذ (غرفة العمليات)</h3>
-              {isSentToSupervisor && !isSup && (
+              {!canEditOpsBox && (
                 <span className="text-xs bg-destructive/15 text-destructive px-2 py-1 rounded font-bold">
-                  مغلق للتعديل (تم الإرسال للمشرف)
+                  {isYouth && !isOps && !isJoker && !isSup ? "للاطلاع فقط (خاص بغرفة العمليات)" : "مغلق للتعديل (تم الإرسال للمشرف)"}
                 </span>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1.5"><Label>الإقليم</Label>
-                <Select disabled={!canUserEdit} value={mission.region ?? ""} onValueChange={(v) => updateMission({ region: v })}>
+                <Select disabled={!canEditOpsBox} value={mission.region ?? ""} onValueChange={(v) => updateMission({ region: v })}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>{Object.entries(REGIONS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5"><Label>نوع المهمة</Label>
-                <Select disabled={!canUserEdit} value={mission.mission_type ?? ""} onValueChange={(v) => updateMission({ mission_type: v })}>
+                <Select disabled={!canEditOpsBox} value={mission.mission_type ?? ""} onValueChange={(v) => updateMission({ mission_type: v })}>
                   <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                   <SelectContent>{Object.entries(MISSION_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               {mission.mission_type === "external" && (
                 <div className="space-y-1.5"><Label>المواصلات</Label>
-                  <Select disabled={!canUserEdit} value={mission.transport_mode ?? ""} onValueChange={(v) => updateMission({ transport_mode: v })}>
+                  <Select disabled={!canEditOpsBox} value={mission.transport_mode ?? ""} onValueChange={(v) => updateMission({ transport_mode: v })}>
                     <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
                     <SelectContent>{Object.entries(TRANSPORT_MODES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
                   </Select>
@@ -318,12 +319,12 @@ export default function MissionDetail() {
             {mission.mission_type === "external" && mission.transport_mode === "driver" && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between"><Label>السائقون والعربيات</Label>
-                  {canUserEdit && <Button size="sm" variant="outline" onClick={addDriver}><Plus className="w-4 h-4 ms-1" />إضافة سائق</Button>}</div>
+                  {canEditOpsBox && <Button size="sm" variant="outline" onClick={addDriver}><Plus className="w-4 h-4 ms-1" />إضافة سائق</Button>}</div>
                 {drivers.map((d) => (
                   <div key={d.id} className="grid grid-cols-12 gap-2">
-                    <Input disabled={!canUserEdit} className="col-span-6" placeholder="اسم السائق" defaultValue={d.driver_name} onBlur={(e) => updateDriver(d.id, { driver_name: e.target.value })} />
-                    <Input disabled={!canUserEdit} className="col-span-5" placeholder="رقم العربية" defaultValue={d.vehicle_number ?? ""} onBlur={(e) => updateDriver(d.id, { vehicle_number: e.target.value })} dir="ltr" />
-                    {canUserEdit && <Button size="icon" variant="ghost" onClick={() => delDriver(d.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
+                    <Input disabled={!canEditOpsBox} className="col-span-6" placeholder="اسم السائق" defaultValue={d.driver_name} onBlur={(e) => updateDriver(d.id, { driver_name: e.target.value })} />
+                    <Input disabled={!canEditOpsBox} className="col-span-5" placeholder="رقم العربية" defaultValue={d.vehicle_number ?? ""} onBlur={(e) => updateDriver(d.id, { vehicle_number: e.target.value })} dir="ltr" />
+                    {canEditOpsBox && <Button size="icon" variant="ghost" onClick={() => delDriver(d.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
                   </div>
                 ))}
               </div>
@@ -332,12 +333,12 @@ export default function MissionDetail() {
             {mission.mission_type === "external" && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between"><Label>خط السير</Label>
-                  {canUserEdit && <Button size="sm" variant="outline" onClick={addRoute}><Plus className="w-4 h-4 ms-1" />نقطة مرور</Button>}</div>
+                  {canEditOpsBox && <Button size="sm" variant="outline" onClick={addRoute}><Plus className="w-4 h-4 ms-1" />نقطة مرور</Button>}</div>
                 {routes.map((r) => (
                   <div key={r.id} className="grid grid-cols-12 gap-2">
-                    <Input disabled={!canUserEdit} className="col-span-7" placeholder="المكان" defaultValue={r.place} onBlur={(e) => updateRoute(r.id, { place: e.target.value })} />
-                    <Input disabled={!canUserEdit} className="col-span-4" type="datetime-local" defaultValue={r.route_time?.slice(0, 16) ?? ""} onBlur={(e) => updateRoute(r.id, { route_time: e.target.value || null })} />
-                    {canUserEdit && <Button size="icon" variant="ghost" onClick={() => delRoute(r.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
+                    <Input disabled={!canEditOpsBox} className="col-span-7" placeholder="المكان" defaultValue={r.place} onBlur={(e) => updateRoute(r.id, { place: e.target.value })} />
+                    <Input disabled={!canEditOpsBox} className="col-span-4" type="datetime-local" defaultValue={r.route_time?.slice(0, 16) ?? ""} onBlur={(e) => updateRoute(r.id, { route_time: e.target.value || null })} />
+                    {canEditOpsBox && <Button size="icon" variant="ghost" onClick={() => delRoute(r.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
                   </div>
                 ))}
               </div>
@@ -345,20 +346,20 @@ export default function MissionDetail() {
 
             {/* Ops box */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-border">
-              <div className="space-y-1.5"><Label>المشرف</Label><Input disabled={!canUserEdit} value={mission.supervisor ?? ""} onChange={(e) => updateMission({ supervisor: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>القائم بتعبئة الاستمارة</Label><Input disabled={!canUserEdit} value={mission.filler_volunteer ?? ""} onChange={(e) => updateMission({ filler_volunteer: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>القائم بمراجعة الاستمارة</Label><Input disabled={!canUserEdit} value={mission.reviewer_volunteer ?? ""} onChange={(e) => updateMission({ reviewer_volunteer: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>المشرف المراجع</Label><Input disabled={!canUserEdit} value={mission.reviewing_supervisor ?? ""} onChange={(e) => updateMission({ reviewing_supervisor: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>المتطوع المستكمل للاستمارة</Label><Input disabled={!canUserEdit} value={mission.completing_volunteer ?? ""} onChange={(e) => updateMission({ completing_volunteer: e.target.value })} /></div>
-              <div className="space-y-1.5"><Label>الجوكر</Label><Input disabled={!canUserEdit} value={mission.joker_name ?? ""} onChange={(e) => updateMission({ joker_name: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>المشرف</Label><Input disabled={!canEditOpsBox} value={mission.supervisor ?? ""} onChange={(e) => updateMission({ supervisor: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>القائم بتعبئة الاستمارة</Label><Input disabled={!canEditOpsBox} value={mission.filler_volunteer ?? ""} onChange={(e) => updateMission({ filler_volunteer: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>القائم بمراجعة الاستمارة</Label><Input disabled={!canEditOpsBox} value={mission.reviewer_volunteer ?? ""} onChange={(e) => updateMission({ reviewer_volunteer: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>المشرف المراجع</Label><Input disabled={!canEditOpsBox} value={mission.reviewing_supervisor ?? ""} onChange={(e) => updateMission({ reviewing_supervisor: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>المتطوع المستكمل للاستمارة</Label><Input disabled={!canEditOpsBox} value={mission.completing_volunteer ?? ""} onChange={(e) => updateMission({ completing_volunteer: e.target.value })} /></div>
+              <div className="space-y-1.5"><Label>الجوكر</Label><Input disabled={!canEditOpsBox} value={mission.joker_name ?? ""} onChange={(e) => updateMission({ joker_name: e.target.value })} /></div>
               <div className="space-y-1.5 md:col-span-2"><Label>مصدر البيانات</Label>
                 <div className="flex flex-wrap gap-3 mt-1">
                   {Object.entries(DATA_SOURCES).map(([k, v]) => {
                     const sources: string[] = mission.data_sources ?? [];
                     const has = sources.includes(k);
                     return (
-                      <label key={k} className={`flex items-center gap-2 text-sm ${canUserEdit ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
-                        <Checkbox disabled={!canUserEdit} checked={has} onCheckedChange={() => updateMission({ data_sources: has ? sources.filter((x) => x !== k) : [...sources, k] })} />
+                      <label key={k} className={`flex items-center gap-2 text-sm ${canEditOpsBox ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+                        <Checkbox disabled={!canEditOpsBox} checked={has} onCheckedChange={() => updateMission({ data_sources: has ? sources.filter((x) => x !== k) : [...sources, k] })} />
                         {v}
                       </label>
                     );
