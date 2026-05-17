@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { VolunteerPicker, VolunteerData } from "@/components/VolunteerPicker";
 export default function MissionDetail() {
   const { id } = useParams();
-  const { hasRole } = useAuth();
+  const { hasRole, roles } = useAuth();
   const [mission, setMission] = useState<any | null>(null);
   const [volunteers, setVolunteers] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -31,15 +31,16 @@ export default function MissionDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const isOps = hasRole("operations_room") || hasRole("operations_supervisor") || hasRole("admin");
-  const isJoker = hasRole("joker") || hasRole("admin");
-  const isSup = hasRole("operations_supervisor") || hasRole("admin");
-  const isYouth = hasRole("youth_room") || hasRole("admin");
-  const isData = hasRole("data_manager") || hasRole("admin");
+  const primaryRole = roles[0];
+  const isOps = primaryRole === "operations_room" || primaryRole === "operations_supervisor" || primaryRole === "admin";
+  const isJoker = primaryRole === "joker" || primaryRole === "admin";
+  const isSup = primaryRole === "operations_supervisor" || primaryRole === "admin";
+  const isYouth = primaryRole === "youth_room" || primaryRole === "admin";
+  const isData = primaryRole === "data_manager" || primaryRole === "admin";
   const canEdit = isOps || isJoker || isSup || isYouth || isData;
 
   // Hidden in operations room (sensitive). Visible to joker/supervisor/data/admin.
-  const opsHide = !(isJoker || isSup || isData || hasRole("admin"));
+  const opsHide = !(isJoker || isSup || isData || primaryRole === "admin");
 
   const load = async () => {
     if (!id) return;
@@ -60,7 +61,7 @@ export default function MissionDetail() {
   if (loading) return <AppLayout title="..."><Card className="p-8">جاري التحميل...</Card></AppLayout>;
   if (!mission) return <AppLayout title="غير موجود"><Card className="p-8">المهمة غير موجودة</Card></AppLayout>;
 
-  const isYouthOnly = (hasRole("youth_room") || hasRole("branch_youth")) && !hasRole("admin") && !hasRole("joker") && !hasRole("operations_room") && !hasRole("operations_supervisor");
+  const isYouthOnly = primaryRole === "youth_room" || primaryRole === "branch_youth";
 
   if (isYouthOnly && !mission.is_open_mission && ["planned", "coded", "entered"].includes(mission.status)) {
     return (
@@ -73,11 +74,11 @@ export default function MissionDetail() {
   }
 
   const isSentToSupervisor = ["sent_to_youth", "monitored"].includes(mission.status);
-  const canUserEdit = canEdit && (!isSentToSupervisor || isSup);
-  const canEditOpsBox = (isOps || isJoker || isSup) && (!isSentToSupervisor || isSup);
+  const canUserEdit = canEdit && (!isSentToSupervisor || isSup || isJoker);
+  const canEditOpsBox = (isOps || isJoker || isSup) && (!isSentToSupervisor || isSup || isJoker);
 
   const markSupervisorEdit = async () => {
-    if (isSentToSupervisor && isSup) {
+    if (isSentToSupervisor && (isSup || isJoker)) {
       await supabase.from("missions").update({ supervisor_modified: true, supervisor_modified_at: new Date().toISOString() }).eq("id", mission.id);
     }
   };

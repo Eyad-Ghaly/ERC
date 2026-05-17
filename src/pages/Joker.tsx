@@ -18,14 +18,15 @@ interface Row {
 }
 
 export default function Joker({ titleOverride, embedded }: { titleOverride?: string, embedded?: boolean }) {
-  const { hasRole } = useAuth();
+  const { hasRole, roles } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState("all");
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const isYouthOnly = (hasRole("youth_room") || hasRole("branch_youth")) && !hasRole("admin") && !hasRole("joker") && !hasRole("operations_room") && !hasRole("operations_supervisor");
+  const primaryRole = roles[0];
+  const isYouthOnly = primaryRole === "youth_room" || primaryRole === "branch_youth";
 
   useEffect(() => {
     (async () => {
