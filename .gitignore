@@ -1,3 +1,9 @@
+# === SENSITIVE: Never commit these ===
+.env
+.env.*
+SYSTEM_PROMPT.md
+*.zip
+
 # Logs
 logs
 *.log
