@@ -30,3 +30,9 @@ dist-ssr
 .env.production.local
 .env.test.local
 
+# Supabase Schema & Local Database Secrets (Private)
+supabase/
+*.sql
+src/integrations/supabase/types.ts
+
+
