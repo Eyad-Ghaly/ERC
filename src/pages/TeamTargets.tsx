@@ -9,11 +9,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Save, Loader2, Target } from "lucide-react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function TeamTargets() {
   const { user, profile, hasRole } = useAuth();
   
-  const [selectedTeam, setSelectedTeam] = useState(profile?.team_code || "");
+  const [selectedTeam, setSelectedTeam] = useState<string | undefined>(profile?.team_code || undefined);
   const [targetMonth, setTargetMonth] = useState(() => {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -65,10 +66,10 @@ export default function TeamTargets() {
         .maybeSingle();
 
       if (data) {
-        setTargetMissions(data.target_missions);
-        setTargetUniqueVolunteers(data.target_unique_volunteers);
-        setTargetVolunteerParticipations(data.target_volunteer_participations);
-        setTargetBeneficiaries(data.target_beneficiaries);
+        setTargetMissions(data.target_missions ?? 0);
+        setTargetUniqueVolunteers(data.target_unique_volunteers ?? 0);
+        setTargetVolunteerParticipations(data.target_volunteer_participations ?? 0);
+        setTargetBeneficiaries(data.target_beneficiaries ?? 0);
         setCustomTargets((data.custom_targets as Record<string, number>) || {});
       } else {
         setTargetMissions(0);
@@ -117,18 +118,19 @@ export default function TeamTargets() {
 
   return (
     <AppLayout title="مستهدفات الفريق (KPIs)">
-      <div className="max-w-4xl space-y-6">
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-6 text-primary">
-            <Target className="w-6 h-6" />
-            <h2 className="text-xl font-bold">تحديد مستهدفات الأداء الشهري</h2>
-          </div>
+      <ErrorBoundary>
+        <div className="max-w-4xl space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-6 text-primary">
+              <Target className="w-6 h-6" />
+              <h2 className="text-xl font-bold">تحديد مستهدفات الأداء الشهري</h2>
+            </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {isElevated ? (
-              <div className="space-y-2">
-                <Label>كود الفريق</Label>
-                <Select value={selectedTeam} onValueChange={setSelectedTeam}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              {isElevated ? (
+                <div className="space-y-2">
+                  <Label>كود الفريق</Label>
+                  <Select value={selectedTeam} onValueChange={setSelectedTeam}>
                   <SelectTrigger dir="ltr" className="text-right">
                     <SelectValue placeholder="اختر الفريق..." />
                   </SelectTrigger>
@@ -142,7 +144,7 @@ export default function TeamTargets() {
             ) : (
               <div className="space-y-2">
                 <Label>كود الفريق (ثابت)</Label>
-                <Input value={selectedTeam} disabled className="bg-muted font-mono" dir="ltr" />
+                <Input value={selectedTeam || ""} disabled className="bg-muted font-mono" dir="ltr" />
               </div>
             )}
 
@@ -231,6 +233,7 @@ export default function TeamTargets() {
           )}
         </Card>
       </div>
+      </ErrorBoundary>
     </AppLayout>
   );
 }
