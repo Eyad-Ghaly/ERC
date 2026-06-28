@@ -22,6 +22,7 @@ const items: NavItem[] = [
   { title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, roles: ["department_entry", "data_manager", "admin"] },
   { title: "إدخال مهمة جديدة", url: "/department-entry", icon: FilePlus, roles: ["department_entry", "admin"] },
   { title: "تسجيل المستفيدين", url: "/beneficiaries-registration", icon: UserPlus, roles: ["department_entry", "admin"] },
+  { title: "طلب إمداد بالمتطوعين", url: "/volunteer-supply-request/new", icon: UserPlus, roles: ["department_entry", "management", "admin"] },
   { title: "غرفة العمليات", url: "/operations-room", icon: Radio, roles: ["operations_room", "operations_supervisor", "admin"] },
   { title: "الجوكر", url: "/joker", icon: Sparkles, roles: ["joker", "admin"] },
   { title: "مشرف غرفة العمليات", url: "/supervisor", icon: ShieldCheck, roles: ["operations_supervisor", "admin"] },
