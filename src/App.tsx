@@ -24,6 +24,7 @@ import BeneficiariesRegistration from "./pages/BeneficiariesRegistration.tsx";
 import VolunteersDatabase from "./pages/VolunteersDatabase.tsx";
 import BranchYouthDashboard from "./pages/BranchYouthDashboard.tsx";
 import TeamBeneficiaries from "./pages/TeamBeneficiaries.tsx";
+import VolunteerSupplyRequestNew from "./pages/VolunteerSupplyRequestNew.tsx";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/data-manager" element={<ProtectedRoute roles={["data_manager"]}><DataManager /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><Admin /></ProtectedRoute>} />
             <Route path="/team-beneficiaries" element={<ProtectedRoute roles={["department_entry"]}><TeamBeneficiaries /></ProtectedRoute>} />
+            <Route path="/volunteer-supply-request/new" element={<ProtectedRoute roles={["department_entry", "management"]}><VolunteerSupplyRequestNew /></ProtectedRoute>} />
             <Route path="/missions/:id" element={<ProtectedRoute><MissionDetail /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
