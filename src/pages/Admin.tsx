@@ -37,6 +37,7 @@ export default function Admin() {
           <TabsTrigger value="team_kpis">مؤشرات مخصصة</TabsTrigger>
           <TabsTrigger value="feedback_questions">أسئلة تقييم الفريق</TabsTrigger>
           <TabsTrigger value="volunteer_approvals">اعتماد المتطوعين</TabsTrigger>
+          <TabsTrigger value="teams_depts">الهيكل والفرق</TabsTrigger>
           <TabsTrigger value="audit">سجل التعديلات</TabsTrigger>
         </TabsList>
         <TabsContent value="users"><UsersTab /></TabsContent>
@@ -46,6 +47,7 @@ export default function Admin() {
         <TabsContent value="team_kpis"><TeamCustomKpisTab /></TabsContent>
         <TabsContent value="feedback_questions"><FeedbackQuestionsTab /></TabsContent>
         <TabsContent value="volunteer_approvals"><VolunteerApprovalsTab /></TabsContent>
+        <TabsContent value="teams_depts"><TeamsDeptsTab /></TabsContent>
         <TabsContent value="audit"><AuditTab /></TabsContent>
       </Tabs>
     </AppLayout>
@@ -685,3 +687,101 @@ function VolunteerApprovalsTab() {
     </Card>
   );
 }
+
+function TeamsDeptsTab() {
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [deptCode, setDeptCode] = useState("");
+  const [deptName, setDeptName] = useState("");
+  const [teamCode, setTeamCode] = useState("");
+  const [teamName, setTeamName] = useState("");
+  const [selectedDeptId, setSelectedDeptId] = useState("");
+
+  const load = async () => {
+    const { data: d } = await supabase.from("departments").select("*").order("code");
+    const { data: t } = await supabase.from("teams").select("*, department:departments(name, code)").order("code");
+    setDepartments(d ?? []);
+    setTeams(t ?? []);
+  };
+  useEffect(() => { load(); }, []);
+
+  const addDept = async () => {
+    if (!deptCode || !deptName) return;
+    const { error } = await supabase.from("departments").insert({ code: deptCode, name: deptName });
+    if (error) toast.error(error.message);
+    else { setDeptCode(""); setDeptName(""); toast.success("تمت الإضافة"); load(); }
+  };
+
+  const addTeam = async () => {
+    if (!teamCode || !teamName || !selectedDeptId) return;
+    const { error } = await supabase.from("teams").insert({ code: teamCode, name: teamName, department_id: selectedDeptId });
+    if (error) toast.error(error.message);
+    else { setTeamCode(""); setTeamName(""); setSelectedDeptId(""); toast.success("تمت الإضافة"); load(); }
+  };
+
+  const delDept = async (id: string) => {
+    const { error } = await supabase.from("departments").delete().eq("id", id);
+    if (error) toast.error("لا يمكن الحذف (قد يكون هناك فرق أو مستخدمين مرتبطين)"); else load();
+  };
+
+  const delTeam = async (id: string) => {
+    const { error } = await supabase.from("teams").delete().eq("id", id);
+    if (error) toast.error("لا يمكن الحذف"); else load();
+  };
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-4">
+      <Card className="card-elevated p-4 space-y-4">
+        <h3 className="font-bold text-lg">الإدارات</h3>
+        <div className="flex gap-2 flex-wrap items-end">
+          <div className="space-y-1.5"><Label>كود الإدارة</Label><Input className="w-24" value={deptCode} onChange={e=>setDeptCode(e.target.value)} dir="ltr" placeholder="D01" /></div>
+          <div className="space-y-1.5"><Label>اسم الإدارة</Label><Input value={deptName} onChange={e=>setDeptName(e.target.value)} placeholder="إدارة..." /></div>
+          <Button onClick={addDept}><Plus className="w-4 h-4 ms-1" /> إضافة</Button>
+        </div>
+        <Table>
+          <TableHeader><TableRow><TableHead>الكود</TableHead><TableHead>الاسم</TableHead><TableHead></TableHead></TableRow></TableHeader>
+          <TableBody>
+            {departments.map(d => (
+              <TableRow key={d.id}>
+                <TableCell className="font-mono">{d.code}</TableCell>
+                <TableCell>{d.name}</TableCell>
+                <TableCell><Button size="icon" variant="ghost" onClick={() => delDept(d.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <Card className="card-elevated p-4 space-y-4">
+        <h3 className="font-bold text-lg">الفرق</h3>
+        <div className="flex gap-2 flex-wrap items-end">
+          <div className="space-y-1.5"><Label>الإدارة</Label>
+            <Select value={selectedDeptId} onValueChange={setSelectedDeptId}>
+              <SelectTrigger className="w-32"><SelectValue placeholder="اختر..." /></SelectTrigger>
+              <SelectContent>
+                {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5"><Label>الكود</Label><Input className="w-24" value={teamCode} onChange={e=>setTeamCode(e.target.value)} dir="ltr" placeholder="P01" /></div>
+          <div className="space-y-1.5"><Label>الاسم</Label><Input className="w-32" value={teamName} onChange={e=>setTeamName(e.target.value)} placeholder="فريق..." /></div>
+          <Button onClick={addTeam}><Plus className="w-4 h-4 ms-1" /> إضافة</Button>
+        </div>
+        <Table>
+          <TableHeader><TableRow><TableHead>الكود</TableHead><TableHead>الاسم</TableHead><TableHead>الإدارة</TableHead><TableHead></TableHead></TableRow></TableHeader>
+          <TableBody>
+            {teams.map(t => (
+              <TableRow key={t.id}>
+                <TableCell className="font-mono">{t.code}</TableCell>
+                <TableCell>{t.name}</TableCell>
+                <TableCell>{t.department?.name || t.department?.code}</TableCell>
+                <TableCell><Button size="icon" variant="ghost" onClick={() => delTeam(t.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+    </div>
+  );
+}
+
