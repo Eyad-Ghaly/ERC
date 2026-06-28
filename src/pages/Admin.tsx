@@ -17,10 +17,13 @@ import { Trash2, Plus, Check } from "lucide-react";
 
 interface ProfileRow {
   id: string; user_id: string; email: string; full_name: string | null;
-  team_code: string | null; department_code: string | null; approved: boolean;
+  team_id: string | null; department_id: string | null; approved: boolean;
+  team?: { code: string } | null; department?: { code: string } | null;
 }
 interface RoleRow { user_id: string; role: AppRole; }
 interface OptionRow { id: string; field_key: string; value: string; label: string; active: boolean; }
+interface TeamRow { id: string; code: string; }
+interface DeptRow { id: string; code: string; }
 
 export default function Admin() {
   return (
@@ -52,13 +55,19 @@ export default function Admin() {
 function UsersTab() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [rolesMap, setRolesMap] = useState<Record<string, AppRole[]>>({});
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [departments, setDepartments] = useState<DeptRow[]>([]);
 
   const load = async () => {
-    const [{ data: ps }, { data: rs }] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+    const [{ data: ps }, { data: rs }, { data: ts }, { data: ds }] = await Promise.all([
+      supabase.from("profiles").select("*, team:teams(code), department:departments(code)").order("created_at", { ascending: false }),
       supabase.from("user_roles").select("user_id, role"),
+      supabase.from("teams").select("id, code"),
+      supabase.from("departments").select("id, code"),
     ]);
     setProfiles((ps ?? []) as ProfileRow[]);
+    setTeams(ts ?? []);
+    setDepartments(ds ?? []);
     const m: Record<string, AppRole[]> = {};
     ((rs ?? []) as RoleRow[]).forEach((r) => { (m[r.user_id] ??= []).push(r.role); });
     setRolesMap(m);
@@ -71,8 +80,9 @@ function UsersTab() {
     load();
   };
 
-  const updateField = async (p: ProfileRow, field: "team_code" | "department_code", value: string) => {
-    const patch = field === "team_code" ? { team_code: value } : { department_code: value };
+  const updateField = async (p: ProfileRow, field: "team_id" | "department_id", value: string) => {
+    if (value === "none") value = null as any;
+    const patch = field === "team_id" ? { team_id: value } : { department_id: value };
     await supabase.from("profiles").update(patch).eq("id", p.id);
     load();
   };
@@ -88,7 +98,7 @@ function UsersTab() {
       <Table>
         <TableHeader><TableRow>
           <TableHead>البريد</TableHead><TableHead>الاسم</TableHead>
-          <TableHead>كود الفريق</TableHead><TableHead>كود الإدارة</TableHead>
+          <TableHead>الفريق</TableHead><TableHead>الإدارة</TableHead>
           <TableHead>معتمد</TableHead><TableHead>الأدوار</TableHead>
         </TableRow></TableHeader>
         <TableBody>
@@ -96,8 +106,24 @@ function UsersTab() {
             <TableRow key={p.id}>
               <TableCell className="font-mono text-xs">{p.email}</TableCell>
               <TableCell>{p.full_name ?? "—"}</TableCell>
-              <TableCell><Input className="w-28" defaultValue={p.team_code ?? ""} onBlur={(e) => updateField(p, "team_code", e.target.value)} dir="ltr" placeholder="SN" /></TableCell>
-              <TableCell><Input className="w-28" defaultValue={p.department_code ?? ""} onBlur={(e) => updateField(p, "department_code", e.target.value)} dir="ltr" placeholder="D06" /></TableCell>
+              <TableCell>
+                <Select value={p.team_id ?? "none"} onValueChange={(v) => updateField(p, "team_id", v)}>
+                  <SelectTrigger className="w-28"><SelectValue placeholder="اختر الفريق" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">لا يوجد</SelectItem>
+                    {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </TableCell>
+              <TableCell>
+                <Select value={p.department_id ?? "none"} onValueChange={(v) => updateField(p, "department_id", v)}>
+                  <SelectTrigger className="w-28"><SelectValue placeholder="اختر الإدارة" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">لا يوجد</SelectItem>
+                    {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.code}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </TableCell>
               <TableCell><Switch checked={p.approved} onCheckedChange={() => toggleApproved(p)} /></TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-1.5">

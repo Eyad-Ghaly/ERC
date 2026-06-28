@@ -8,6 +8,8 @@ export const ROLES = {
   youth_room: "غرفة الشباب والتطوع",
   branch_youth: "مسؤول الشباب بالفرع",
   stakeholder: "Dashboard - أصحاب المصلحة",
+  management: "الإدارة",
+  youth_management: "إدارة الشباب",
 } as const;
 
 export type AppRole = keyof typeof ROLES;
