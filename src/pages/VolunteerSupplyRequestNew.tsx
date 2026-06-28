@@ -37,22 +37,8 @@ export default function VolunteerSupplyRequestNew() {
 
     setBusy(true);
     try {
-      // In a real implementation, we would first find the team_id and department_id
-      // For now, we will assume we have a function or we just insert if we know the IDs
-      // Since we don't have the exact team_id from profile (profile only has string code),
-      // we would need a lookup or update profile.
-      
-      // Let's assume we do a lookup first:
-      const { data: teamData, error: teamErr } = await supabase
-        .from('teams')
-        .select('id, department_id')
-        .eq('code', profile?.team_code || '')
-        .maybeSingle();
-
-      // If no team found, maybe they don't have a team table entry yet.
-      // But let's proceed assuming we have one.
-      if (!teamData) {
-        toast.error("لم يتم العثور على الفريق الخاص بك في قاعدة البيانات الجديدة");
+      if (!profile?.team_id || !profile?.department_id) {
+        toast.error("لم يتم العثور على الفريق أو الإدارة الخاصة بك");
         setBusy(false);
         return;
       }
@@ -60,8 +46,8 @@ export default function VolunteerSupplyRequestNew() {
       const { error } = await supabase
         .from('volunteer_supply_requests')
         .insert({
-          team_id: teamData.id,
-          department_id: teamData.department_id,
+          team_id: profile.team_id,
+          department_id: profile.department_id,
           role_title: roleTitle,
           required_count: parseInt(requiredCount),
           start_date: startDate,

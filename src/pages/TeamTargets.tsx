@@ -14,7 +14,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 export default function TeamTargets() {
   const { user, profile, hasRole } = useAuth();
   
-  const [selectedTeam, setSelectedTeam] = useState<string | undefined>(profile?.team_code || undefined);
+  const [selectedTeam, setSelectedTeam] = useState<string | undefined>(profile?.team_id || undefined);
   const [targetMonth, setTargetMonth] = useState(() => {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -36,16 +36,16 @@ export default function TeamTargets() {
   useEffect(() => {
     if (isElevated) {
       supabase.from("profiles")
-        .select("team_code")
-        .not("team_code", "is", null)
+        .select("team_id")
+        .not("team_id", "is", null)
         .then(({ data }) => {
           if (data) {
-            const uniqueTeams = Array.from(new Set(data.map(d => d.team_code as string))).sort();
+            const uniqueTeams = Array.from(new Set(data.map(d => d.team_id as string))).sort();
             setTeams(uniqueTeams);
           }
         });
-    } else if (profile?.team_code) {
-      setSelectedTeam(profile.team_code);
+    } else if (profile?.team_id) {
+      setSelectedTeam(profile.team_id);
     }
   }, [isElevated, profile]);
 
@@ -55,13 +55,13 @@ export default function TeamTargets() {
     const fetchTargets = async () => {
       setLoading(true);
       
-      const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_code", selectedTeam);
+      const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_id", selectedTeam);
       setCustomKpis(kpisData ?? []);
 
       const { data, error } = await supabase
         .from("team_kpi_targets")
         .select("*")
-        .eq("team_code", selectedTeam)
+        .eq("team_id", selectedTeam)
         .eq("target_month", targetMonth)
         .maybeSingle();
 
@@ -96,7 +96,7 @@ export default function TeamTargets() {
 
     setSaving(true);
     const { error } = await supabase.from("team_kpi_targets").upsert({
-      team_code: selectedTeam,
+      team_id: selectedTeam,
       target_month: targetMonth,
       target_missions: targetMissions,
       target_unique_volunteers: targetUniqueVolunteers,
@@ -105,7 +105,7 @@ export default function TeamTargets() {
       custom_targets: customTargets,
       created_by: user?.id,
     }, {
-      onConflict: "team_code, target_month"
+      onConflict: "team_id, target_month"
     });
 
     if (error) {

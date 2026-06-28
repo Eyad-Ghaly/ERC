@@ -53,10 +53,10 @@ export default function DepartmentDashboard() {
     const { data, error } = await supabase
       .from("volunteer_teams")
       .select(`
-        id, is_approved, join_date, team_code, team_phone, team_national_id,
+        id, is_approved, join_date, team_id, team_phone, team_national_id,
         volunteers_base ( id, full_name, membership_number, branch, phone_number )
       `)
-      .eq("team_code", profile.team_code);
+      .eq("team_id", profile.team_id);
 
     if (!error && data) {
       setTeamVolunteers(data);
@@ -66,10 +66,10 @@ export default function DepartmentDashboard() {
 
   const loadTargets = async () => {
     if (!profile?.team_code) return;
-    const { data } = await supabase.from("team_kpi_targets").select("*").eq("team_code", profile.team_code);
+    const { data } = await supabase.from("team_kpi_targets").select("*").eq("team_id", profile.team_id);
     if (data) setTargets(data);
 
-    const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_code", profile.team_code);
+    const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_id", profile.team_id);
     if (kpisData) setCustomKpis(kpisData);
   };
 

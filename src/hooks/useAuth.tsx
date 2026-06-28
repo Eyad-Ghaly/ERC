@@ -8,8 +8,10 @@ interface Profile {
   user_id: string;
   email: string;
   full_name: string | null;
-  team_code: string | null;
-  department_code: string | null;
+  team_id: string | null;
+  team_code: string | null; // Virtual for UI
+  department_id: string | null;
+  department_code: string | null; // Virtual for UI
   region: string | null;
   approved: boolean;
 }
@@ -38,9 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfileAndRoles = async (uid: string) => {
     const [{ data: p }, { data: r }] = await Promise.all([
-      supabase.from("profiles").select("*").eq("user_id", uid).maybeSingle(),
+      supabase.from("profiles").select("*, team:teams(code), department:departments(code)").eq("user_id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),
     ]);
+    if (p) {
+      (p as any).team_code = (p as any).team?.code || null;
+      (p as any).department_code = (p as any).department?.code || null;
+    }
     setProfile(p as Profile | null);
     setRoles(((r ?? []) as { role: AppRole }[]).map((x) => x.role));
   };

@@ -29,20 +29,20 @@ export default function TeamBeneficiaries() {
   const [searchTerm, setSearchTerm] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const teamCode = profile?.team_code || "";
+  const teamId = profile?.team_id || "";
 
   useEffect(() => {
-    if (teamCode) {
+    if (teamId) {
       checkTeamStatus();
     }
-  }, [teamCode]);
+  }, [teamId]);
 
   const checkTeamStatus = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('team_settings')
-      .select('team_code')
-      .eq('team_code', teamCode)
+      .select('team_id')
+      .eq('team_id', teamId)
       .maybeSingle();
     
     if (!data) {
@@ -59,7 +59,7 @@ export default function TeamBeneficiaries() {
     setBusy(true);
     const hash = await sha256(password);
     const { error } = await supabase.from('team_settings').upsert({
-      team_code: teamCode,
+      team_id: teamId,
       pin_hash: hash
     });
     setBusy(false);
@@ -82,7 +82,7 @@ export default function TeamBeneficiaries() {
     const { data } = await supabase
       .from('team_settings')
       .select('pin_hash')
-      .eq('team_code', teamCode)
+      .eq('team_id', teamId)
       .maybeSingle();
     
     setBusy(false);
@@ -99,8 +99,8 @@ export default function TeamBeneficiaries() {
     setLoading(true);
     const { data, error } = await supabase
       .from('beneficiaries_individual')
-      .select('*, missions!inner(team_code)')
-      .eq('missions.team_code', teamCode)
+      .select('*, missions!inner(team_id)')
+      .eq('missions.team_id', teamId)
       .order('created_at', { ascending: false });
 
     if (error) {
