@@ -171,16 +171,42 @@ export default function YouthSupplyRequests() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <Button variant="outline" size="sm" onClick={() => {
-                    navigator.clipboard.writeText(link);
-                    toast.success("تم نسخ الرابط");
-                  }}>
-                    <LinkIcon className="w-4 h-4 ml-2" /> نسخ رابط التقديم
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => window.open(`/#/youth-supply-review/${form.id}`, '_blank')}>
-                    فرز ومراجعة المتقدمين
-                  </Button>
+                <div className="flex flex-col gap-2 pt-2">
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      readOnly 
+                      value={link} 
+                      className="flex-1 text-sm p-1 px-2 border rounded bg-muted/50 cursor-text" 
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                    />
+                    <Button variant="outline" size="sm" onClick={() => {
+                      if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(link);
+                        toast.success("تم نسخ الرابط");
+                      } else {
+                        // Fallback for non-secure contexts
+                        const textArea = document.createElement("textarea");
+                        textArea.value = link;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        try {
+                          document.execCommand('copy');
+                          toast.success("تم نسخ الرابط");
+                        } catch (err) {
+                          toast.error("فشل النسخ، يرجى نسخه يدوياً");
+                        }
+                        document.body.removeChild(textArea);
+                      }
+                    }}>
+                      <LinkIcon className="w-4 h-4 ml-2" /> نسخ
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => window.open(`/#/youth-supply-review/${form.id}`, '_blank')} className="w-full">
+                      فرز ومراجعة المتقدمين
+                    </Button>
+                  </div>
                 </div>
               </Card>
             );
