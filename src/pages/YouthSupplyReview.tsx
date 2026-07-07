@@ -8,6 +8,50 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 
+function ApplicationCard({ app, updateYouthStatus }: { app: any, updateYouthStatus: (id: string, status: string, notes: string) => void }) {
+  const data = app.applicant_data;
+  const [localNotes, setLocalNotes] = useState(app.youth_notes || "");
+  
+  return (
+    <Card className="p-4 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+      <div className="col-span-12 md:col-span-4">
+        <h3 className="font-bold text-lg">{data.full_name}</h3>
+        <p className="text-sm">رقم العضوية: {data.membership_number || "غير مسجل"} {!data.is_found_in_db && "(غير متواجد بالقاعدة)"}</p>
+        <p className="text-sm">التليفون: {data.phone}</p>
+        <div className="flex gap-2 mt-2">
+          {data.cv_path && <a href={`${supabase.storage.from('volunteer_applications').getPublicUrl(data.cv_path).data.publicUrl}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">عرض الـ CV</a>}
+          {data.photo_path && <a href={`${supabase.storage.from('volunteer_applications').getPublicUrl(data.photo_path).data.publicUrl}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">عرض الصورة</a>}
+        </div>
+      </div>
+
+      <div className="col-span-12 md:col-span-5">
+        <Input 
+          placeholder="ملاحظات إدارة الشباب..." 
+          value={localNotes} 
+          onChange={e => setLocalNotes(e.target.value)}
+          onBlur={() => { if(localNotes !== app.youth_notes) updateYouthStatus(app.id, app.youth_status, localNotes); }}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-3 flex justify-end gap-2">
+        <Button 
+          variant={app.youth_status === 'accepted' ? 'default' : 'outline'} 
+          className={app.youth_status === 'accepted' ? 'bg-green-600 text-white' : ''}
+          onClick={() => updateYouthStatus(app.id, 'accepted', localNotes)}
+        >
+          <CheckCircle className="w-4 h-4 mr-1" /> مقبول للترشيح
+        </Button>
+        <Button 
+          variant={app.youth_status === 'rejected' ? 'default' : 'outline'} 
+          className={app.youth_status === 'rejected' ? 'bg-red-600 text-white' : ''}
+          onClick={() => updateYouthStatus(app.id, 'rejected', localNotes)}
+        >
+          <XCircle className="w-4 h-4 mr-1" /> مستبعد
+        </Button>
+      </div>
+    </Card>
+  );
+}
 export default function YouthSupplyReview() {
   const { form_id } = useParams();
   const navigate = useNavigate();
@@ -89,50 +133,9 @@ export default function YouthSupplyReview() {
         </div>
 
         <div className="space-y-4">
-          {applications.map(app => {
-            const data = app.applicant_data;
-            const [localNotes, setLocalNotes] = useState(app.youth_notes || "");
-            
-            return (
-              <Card key={app.id} className="p-4 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                <div className="col-span-12 md:col-span-4">
-                  <h3 className="font-bold text-lg">{data.full_name}</h3>
-                  <p className="text-sm">رقم العضوية: {data.membership_number || "غير مسجل"} {!data.is_found_in_db && "(غير متواجد بالقاعدة)"}</p>
-                  <p className="text-sm">التليفون: {data.phone}</p>
-                  <div className="flex gap-2 mt-2">
-                    {data.cv_path && <a href={`${supabase.storage.from('volunteer_applications').getPublicUrl(data.cv_path).data.publicUrl}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">عرض الـ CV</a>}
-                    {data.photo_path && <a href={`${supabase.storage.from('volunteer_applications').getPublicUrl(data.photo_path).data.publicUrl}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">عرض الصورة</a>}
-                  </div>
-                </div>
-
-                <div className="col-span-12 md:col-span-5">
-                  <Input 
-                    placeholder="ملاحظات إدارة الشباب..." 
-                    value={localNotes} 
-                    onChange={e => setLocalNotes(e.target.value)}
-                    onBlur={() => { if(localNotes !== app.youth_notes) updateYouthStatus(app.id, app.youth_status, localNotes); }}
-                  />
-                </div>
-
-                <div className="col-span-12 md:col-span-3 flex justify-end gap-2">
-                  <Button 
-                    variant={app.youth_status === 'accepted' ? 'default' : 'outline'} 
-                    className={app.youth_status === 'accepted' ? 'bg-green-600 text-white' : ''}
-                    onClick={() => updateYouthStatus(app.id, 'accepted', localNotes)}
-                  >
-                    <CheckCircle className="w-4 h-4 mr-1" /> مقبول للترشيح
-                  </Button>
-                  <Button 
-                    variant={app.youth_status === 'rejected' ? 'default' : 'outline'} 
-                    className={app.youth_status === 'rejected' ? 'bg-red-600 text-white' : ''}
-                    onClick={() => updateYouthStatus(app.id, 'rejected', localNotes)}
-                  >
-                    <XCircle className="w-4 h-4 mr-1" /> مستبعد
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
+          {applications.map(app => (
+            <ApplicationCard key={app.id} app={app} updateYouthStatus={updateYouthStatus} />
+          ))}
           {applications.length === 0 && <p className="text-muted-foreground">لا يوجد متقدمين حتى الآن</p>}
         </div>
       </div>

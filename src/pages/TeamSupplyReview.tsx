@@ -9,6 +9,46 @@ import { toast } from "sonner";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
+function ApplicationCard({ app, updateManagementStatus }: { app: any, updateManagementStatus: (id: string, status: string, notes: string) => void }) {
+  const data = app.applicant_data;
+  const [localNotes, setLocalNotes] = useState(app.team_notes || "");
+  
+  return (
+    <Card className="p-4 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+      <div className="col-span-12 md:col-span-4">
+        <h3 className="font-bold text-lg">{data.full_name}</h3>
+        <p className="text-sm">رقم العضوية: {data.membership_number || "غير مسجل"}</p>
+        <p className="text-sm text-primary font-bold">تقييم الشباب: {app.youth_notes || "بدون ملاحظات"}</p>
+      </div>
+
+      <div className="col-span-12 md:col-span-5">
+        <Input 
+          placeholder="ملاحظات إدارة الفريق (سيراها المتقدم أو إدارة الشباب)..." 
+          value={localNotes} 
+          onChange={e => setLocalNotes(e.target.value)}
+          onBlur={() => { if(localNotes !== app.team_notes) updateManagementStatus(app.id, app.management_status, localNotes); }}
+        />
+      </div>
+
+      <div className="col-span-12 md:col-span-3 flex justify-end gap-2">
+        <Button 
+          variant={app.management_status === 'accepted' ? 'default' : 'outline'} 
+          className={app.management_status === 'accepted' ? 'bg-green-600 text-white' : ''}
+          onClick={() => updateManagementStatus(app.id, 'accepted', localNotes)}
+        >
+          <CheckCircle className="w-4 h-4 mr-1" /> قبول وضم
+        </Button>
+        <Button 
+          variant={app.management_status === 'rejected' ? 'default' : 'outline'} 
+          className={app.management_status === 'rejected' ? 'bg-red-600 text-white' : ''}
+          onClick={() => updateManagementStatus(app.id, 'rejected', localNotes)}
+        >
+          <XCircle className="w-4 h-4 mr-1" /> رفض
+        </Button>
+      </div>
+    </Card>
+  );
+}
 export default function TeamSupplyReview() {
   const { request_id } = useParams();
   const navigate = useNavigate();
@@ -134,46 +174,9 @@ export default function TeamSupplyReview() {
         </div>
 
         <div className="space-y-4">
-          {applications.map(app => {
-            const data = app.applicant_data;
-            const [localNotes, setLocalNotes] = useState(app.team_notes || "");
-            
-            return (
-              <Card key={app.id} className="p-4 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                <div className="col-span-12 md:col-span-4">
-                  <h3 className="font-bold text-lg">{data.full_name}</h3>
-                  <p className="text-sm">رقم العضوية: {data.membership_number || "غير مسجل"}</p>
-                  <p className="text-sm text-primary font-bold">تقييم الشباب: {app.youth_notes || "بدون ملاحظات"}</p>
-                </div>
-
-                <div className="col-span-12 md:col-span-5">
-                  <Input 
-                    placeholder="ملاحظات إدارة الفريق (سيراها المتقدم أو إدارة الشباب)..." 
-                    value={localNotes} 
-                    onChange={e => setLocalNotes(e.target.value)}
-                    onBlur={() => { if(localNotes !== app.team_notes) updateManagementStatus(app.id, app.management_status, localNotes); }}
-                  />
-                </div>
-
-                <div className="col-span-12 md:col-span-3 flex justify-end gap-2">
-                  <Button 
-                    variant={app.management_status === 'accepted' ? 'default' : 'outline'} 
-                    className={app.management_status === 'accepted' ? 'bg-green-600 text-white' : ''}
-                    onClick={() => updateManagementStatus(app.id, 'accepted', localNotes)}
-                  >
-                    <CheckCircle className="w-4 h-4 mr-1" /> قبول وضم
-                  </Button>
-                  <Button 
-                    variant={app.management_status === 'rejected' ? 'default' : 'outline'} 
-                    className={app.management_status === 'rejected' ? 'bg-red-600 text-white' : ''}
-                    onClick={() => updateManagementStatus(app.id, 'rejected', localNotes)}
-                  >
-                    <XCircle className="w-4 h-4 mr-1" /> رفض
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
+          {applications.map(app => (
+            <ApplicationCard key={app.id} app={app} updateManagementStatus={updateManagementStatus} />
+          ))}
           {applications.length === 0 && <p className="text-muted-foreground">لا يوجد مرشحين من إدارة الشباب حتى الآن</p>}
         </div>
       </div>
