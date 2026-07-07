@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -10,14 +10,40 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, UserCheck, Activity, Map, Database } from "lucide-react";
+import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, UserCheck, Activity, Map, Database, FileUp, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { AddVolunteerDialog } from "@/components/AddVolunteerDialog";
+import * as XLSX from "xlsx";
+
+const HEADER_MAP: Record<string, string> = {
+  "كود المشروع": "projectCode",
+  "كود الإدارة": "adminCode",
+  "محافظة التنفيذ": "governorate",
+  "تصنيف النشاط": "activityClassification",
+  "نوع النشاط": "activityType",
+  "تفاصيل النشاط": "activityDetails",
+  "اسم النوع": "typeName",
+  "التصنيف": "classification",
+  "اسم التصنيف": "classificationName",
+  "تاريخ النشاط": "activityDate",
+  "مكان التنفيذ": "executionPlace",
+  "اسم المهمة بالتفصيل": "missionName",
+  "اسم المهمة": "missionName",
+  "خط العرض": "latitude",
+  "خط الطول": "longitude",
+  "مسؤول المتابعة": "followUpResponsible",
+  "رقم تليفون مسؤول المتابعة": "followUpPhone",
+  "هل بها مستفيدين": "hasBeneficiaries",
+  "هل المهمة مفتوحة": "isOpenMission",
+};
 
 export default function DepartmentDashboard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   // Missions state
   const [missions, setMissions] = useState<any[]>([]);
@@ -32,6 +58,9 @@ export default function DepartmentDashboard() {
   // Targets state
   const [targets, setTargets] = useState<any[]>([]);
   const [customKpis, setCustomKpis] = useState<any[]>([]);
+
+  // Supply requests state
+  const [supplyRequests, setSupplyRequests] = useState<any[]>([]);
 
   const loadMissions = async () => {
     if (!user) return;
@@ -71,6 +100,13 @@ export default function DepartmentDashboard() {
 
     const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_id", profile.team_id);
     if (kpisData) setCustomKpis(kpisData);
+
+    const { data: supplyData } = await supabase
+      .from("volunteer_supply_requests")
+      .select("*")
+      .eq("team_id", profile.team_id)
+      .order("created_at", { ascending: false });
+    if (supplyData) setSupplyRequests(supplyData);
   };
 
   useEffect(() => {
@@ -86,6 +122,139 @@ export default function DepartmentDashboard() {
     const { error } = await supabase.from("missions").delete().eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("تم الحذف بنجاح"); loadMissions(); }
+  };
+
+  const approveSupplyRequest = async (id: string) => {
+    setBusy(true);
+    const { data, error } = await supabase
+      .from('volunteer_supply_requests')
+      .update({ status: 'pending_youth' })
+      .eq('id', id)
+      .select();
+      
+    if (error) {
+      toast.error(error.message);
+    } else if (!data || data.length === 0) {
+      toast.error("عفواً، لا تملك صلاحية الموافقة على هذا الطلب (مشكلة في الصلاحيات).");
+    } else {
+      toast.success("تمت الموافقة، وتم تحويل الطلب لإدارة الشباب");
+      const { data: supplyData } = await supabase
+        .from("volunteer_supply_requests")
+        .select("*")
+        .eq("team_id", profile.team_id)
+        .order("created_at", { ascending: false });
+      if (supplyData) setSupplyRequests(supplyData);
+    }
+    setBusy(false);
+  };
+
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+        if (json.length === 0) {
+          toast.error("الملف فارغ");
+          return;
+        }
+
+        if (confirm(`هل تريد رفع عدد ${json.length} مهمة دفعة واحدة؟`)) {
+          await bulkUploadMissions(json);
+        }
+      } catch (err: any) {
+        toast.error("فشل قراءة الملف: " + err.message);
+      } finally {
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const bulkUploadMissions = async (rows: any[]) => {
+    if (!user || !profile?.team_id) {
+      toast.error("لا يوجد فريق مرتبط بحسابك");
+      return;
+    }
+
+    setBusy(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const row of rows) {
+      const mapped: any = {};
+      Object.entries(row).forEach(([key, val]) => {
+        const field = HEADER_MAP[key] || key;
+        mapped[field] = val;
+      });
+
+      try {
+        const pCode = String(mapped.projectCode || "");
+        if (!pCode) throw new Error("كود المشروع مفقود");
+
+        const { data: generatedCode, error: codeErr } = await supabase.rpc("generate_mission_code", {
+          _project_code: pCode, _team_code: profile.team_code,
+        });
+        if (codeErr) throw codeErr;
+
+        let actDate = mapped.activityDate;
+        if (typeof actDate === "number") {
+          const date = XLSX.SSF.parse_date_code(actDate);
+          actDate = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
+        }
+
+        const hasBen = String(mapped.hasBeneficiaries || "").toLowerCase();
+        const isOpen = String(mapped.isOpenMission || "").toLowerCase();
+
+        const todayDate = new Date().toISOString().split('T')[0];
+        const isLate = actDate ? String(actDate) < todayDate : false;
+
+        const { error: insErr } = await supabase.from("missions").insert({
+          mission_code: generatedCode as string,
+          status: "planned",
+          created_by: user.id,
+          team_id: profile.team_id,
+          project_code: pCode,
+          governorate: mapped.governorate ? String(mapped.governorate) : null,
+          department_id: profile?.department_id || null,
+          activity_classification: mapped.activityClassification ? String(mapped.activityClassification) : null,
+          activity_type: mapped.activityType ? String(mapped.activityType) : null,
+          activity_details: mapped.activityDetails ? String(mapped.activityDetails) : null,
+          type_name: mapped.typeName ? String(mapped.typeName) : null,
+          classification: mapped.classification ? String(mapped.classification) : null,
+          classification_name: mapped.classificationName ? String(mapped.classificationName) : null,
+          activity_date: actDate ? String(actDate) : new Date().toISOString().split('T')[0],
+          execution_place: mapped.executionPlace ? String(mapped.executionPlace) : null,
+          mission_name: mapped.missionName ? String(mapped.missionName) : "مهمة مستوردة",
+          latitude: mapped.latitude ? Number(mapped.latitude) : null,
+          longitude: mapped.longitude ? Number(mapped.longitude) : null,
+          follow_up_responsible: mapped.followUpResponsible ? String(mapped.followUpResponsible) : null,
+          follow_up_phone: mapped.followUpPhone ? String(mapped.followUpPhone) : null,
+          has_beneficiaries: hasBen === "true" || hasBen === "نعم" || hasBen === "1",
+          is_open_mission: isOpen === "true" || isOpen === "نعم" || isOpen === "1",
+          is_late_submission: isLate,
+        });
+
+        if (insErr) throw insErr;
+        successCount++;
+      } catch (err) {
+        console.error("Row failed:", err, row);
+        failCount++;
+      }
+    }
+
+    setBusy(false);
+    toast.success(`تم رفع ${successCount} مهمة بنجاح. فشل ${failCount} مهمة.`);
+    if (successCount > 0) loadMissions();
   };
 
   const filteredMissions = useMemo(() => {
@@ -342,6 +511,66 @@ export default function DepartmentDashboard() {
             </Card>
           </div>
 
+          <Card className="p-4 border-dashed border-primary/40 bg-primary/5 flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3 text-primary">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <FileUp className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-bold">إدخال سريع من إكسيل</p>
+                <p className="text-xs text-muted-foreground">يمكنك رفع ملف إكسيل لتعبئة البيانات تلقائياً</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".xlsx, .xls"
+                onChange={handleExcelUpload}
+              />
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || busy}
+                className="gradient-primary shadow-lg shadow-primary/20"
+              >
+                {uploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Plus className="w-4 h-4 ms-2" />}
+                تحميل البيانات الآن
+              </Button>
+            </div>
+          </Card>
+
+          {supplyRequests.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold border-b pb-2">طلبات الإمداد الخاصة بالفريق</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {supplyRequests.map(req => (
+                  <Card key={req.id} className="p-4 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-bold text-lg">{req.role_name}</h3>
+                        <Badge variant="outline">{req.status}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">العدد المطلوب: {req.vol_count} | تاريخ البداية: {req.start_date}</p>
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      {req.status === 'pending_management' && (
+                        <Button onClick={() => approveSupplyRequest(req.id)} disabled={busy} className="bg-success text-white">
+                          موافقة الإدارة
+                        </Button>
+                      )}
+                      {req.status === 'sent_to_team' && (
+                        <Button onClick={() => navigate(`/team-supply-review/${req.id}`)} disabled={busy} className="bg-primary text-white">
+                          مراجعة وضم المرشحين
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Card className="p-4 card-elevated border-primary/20 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-primary">مهامي السابقة</h3>
@@ -388,8 +617,8 @@ export default function DepartmentDashboard() {
                 <h3 className="font-bold text-primary">المتطوعون المنضمون للفريق</h3>
                 <p className="text-sm text-muted-foreground mt-1">يظهر هنا جميع المتطوعين المرتبطين بكود الفريق ({profile?.team_code || "غير محدد"})</p>
               </div>
-              {profile?.team_code && (
-                <AddVolunteerDialog teamCode={profile.team_code} onAdded={loadVolunteers} />
+              {profile?.team_id && (
+                <AddVolunteerDialog teamId={profile.team_id} teamCode={profile.team_code || ""} onAdded={loadVolunteers} />
               )}
             </div>
 

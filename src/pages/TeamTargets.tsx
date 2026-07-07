@@ -28,20 +28,19 @@ export default function TeamTargets() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [teams, setTeams] = useState<string[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
   const [customKpis, setCustomKpis] = useState<any[]>([]);
 
   const isElevated = hasRole("admin") || hasRole("data_manager");
 
   useEffect(() => {
     if (isElevated) {
-      supabase.from("profiles")
-        .select("team_id")
-        .not("team_id", "is", null)
+      supabase.from("teams")
+        .select("id, code")
+        .order("code")
         .then(({ data }) => {
           if (data) {
-            const uniqueTeams = Array.from(new Set(data.map(d => d.team_id as string))).sort();
-            setTeams(uniqueTeams);
+            setTeams(data);
           }
         });
     } else if (profile?.team_id) {
@@ -136,7 +135,7 @@ export default function TeamTargets() {
                   </SelectTrigger>
                   <SelectContent>
                     {teams.map(t => (
-                      <SelectItem key={t} value={t} dir="ltr" className="text-right">{t}</SelectItem>
+                      <SelectItem key={t.id} value={t.id} dir="ltr" className="text-right">{t.code}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -144,7 +143,7 @@ export default function TeamTargets() {
             ) : (
               <div className="space-y-2">
                 <Label>كود الفريق (ثابت)</Label>
-                <Input value={selectedTeam || ""} disabled className="bg-muted font-mono" dir="ltr" />
+                <Input value={profile?.team_code || selectedTeam || ""} disabled className="bg-muted font-mono" dir="ltr" />
               </div>
             )}
 

@@ -17,7 +17,7 @@ interface VolunteerWithTeams {
   gender: string | null;
   education_status: string | null;
   renewal_2026: string | null;
-  volunteer_teams: { team_code: string; is_approved: boolean }[];
+  volunteer_teams: { team: { code: string }; is_approved: boolean }[];
 }
 
 export default function VolunteersDatabase({ embedded }: { embedded?: boolean }) {
@@ -38,7 +38,7 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
         .select(`
           id, full_name, membership_number, branch, phone_number, national_id,
           gender, education_status, renewal_2026,
-          volunteer_teams ( team_code, is_approved )
+          volunteer_teams ( team:teams(code), is_approved )
         `);
 
       if (!error && data) {
@@ -133,7 +133,7 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
                           {v.volunteer_teams && v.volunteer_teams.length > 0 ? (
                             v.volunteer_teams.map((vt, i) => (
                               <Badge key={i} variant={vt.is_approved ? "default" : "secondary"} className="text-xs">
-                                {vt.team_code}
+                                {vt.team?.code}
                                 {!vt.is_approved && " (قيد الاعتماد)"}
                               </Badge>
                             ))

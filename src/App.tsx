@@ -25,6 +25,11 @@ import VolunteersDatabase from "./pages/VolunteersDatabase.tsx";
 import BranchYouthDashboard from "./pages/BranchYouthDashboard.tsx";
 import TeamBeneficiaries from "./pages/TeamBeneficiaries.tsx";
 import VolunteerSupplyRequestNew from "./pages/VolunteerSupplyRequestNew.tsx";
+import YouthSupplyRequests from "@/pages/YouthSupplyRequests";
+import YouthSupplyReview from "@/pages/YouthSupplyReview";
+import PublicSupplyForm from "./pages/PublicSupplyForm.tsx";
+import TeamSupplyReview from "./pages/TeamSupplyReview.tsx";
+import ManagementSupplyRequests from "@/pages/ManagementSupplyRequests";
 
 const queryClient = new QueryClient();
 
@@ -44,10 +49,15 @@ const App = () => (
             <Route path="/team-targets" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><TeamTargets /></ProtectedRoute>} />
             <Route path="/mission-feedback" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><MissionFeedback /></ProtectedRoute>} />
             <Route path="/beneficiaries-registration" element={<ProtectedRoute roles={["department_entry"]}><BeneficiariesRegistration /></ProtectedRoute>} />
+            <Route path="/management-supply-requests" element={<ProtectedRoute roles={["management", "admin"]}><ManagementSupplyRequests /></ProtectedRoute>} />
             <Route path="/operations-room" element={<ProtectedRoute roles={["operations_room", "operations_supervisor"]}><OperationsRoom /></ProtectedRoute>} />
             <Route path="/joker" element={<ProtectedRoute roles={["joker"]}><Joker /></ProtectedRoute>} />
             <Route path="/supervisor" element={<ProtectedRoute roles={["operations_supervisor"]}><Supervisor /></ProtectedRoute>} />
             <Route path="/youth" element={<ProtectedRoute roles={["youth_room"]}><Youth /></ProtectedRoute>} />
+            <Route path="/youth-supply-requests" element={<ProtectedRoute roles={["youth_management", "admin"]}><YouthSupplyRequests /></ProtectedRoute>} />
+            <Route path="/youth-supply-review/:form_id" element={<ProtectedRoute roles={["youth_management", "admin"]}><YouthSupplyReview /></ProtectedRoute>} />
+            <Route path="/team-supply-review/:request_id" element={<ProtectedRoute roles={["department_entry", "management"]}><TeamSupplyReview /></ProtectedRoute>} />
+            <Route path="/apply/:public_link_uuid" element={<PublicSupplyForm />} />
             <Route path="/volunteers-database" element={<ProtectedRoute roles={["youth_room", "admin"]}><VolunteersDatabase /></ProtectedRoute>} />
             <Route path="/branch-youth" element={<ProtectedRoute roles={["branch_youth"]}><BranchYouthDashboard /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute roles={["stakeholder", "data_manager"]}><Dashboard /></ProtectedRoute>} />

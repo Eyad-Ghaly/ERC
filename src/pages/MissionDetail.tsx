@@ -89,7 +89,7 @@ export default function MissionDetail() {
     setBusy(true);
     const patch: Record<string, any> = {};
     Object.keys(mission).forEach((k) => {
-      if (!["id", "mission_code", "created_at", "updated_at", "created_by", "team_code"].includes(k)) {
+      if (!["id", "mission_code", "created_at", "updated_at", "created_by", "team_id"].includes(k)) {
         patch[k] = mission[k];
       }
     });
@@ -228,6 +228,37 @@ export default function MissionDetail() {
             </div>
           </div>
         </Card>
+
+        {/* Late submission alert */}
+        {mission.is_late_submission && (
+          <Card className={`p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm ${mission.is_emergency_mission ? 'bg-success/10 border-success/30' : 'bg-destructive/15 border-destructive/30'}`}>
+            <div className="flex items-center gap-3">
+              <AlertCircle className={`w-5 h-5 flex-shrink-0 ${mission.is_emergency_mission ? 'text-success' : 'text-destructive'}`} />
+              <div>
+                <h4 className={`font-bold ${mission.is_emergency_mission ? 'text-success' : 'text-destructive'}`}>
+                  {mission.is_emergency_mission ? 'مهمة طارئة (معتمدة)' : 'ملاحظة تأخير: مهمة مسجلة بتاريخ قديم'}
+                </h4>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {mission.is_emergency_mission 
+                    ? 'تم تسجيل هذه المهمة بتاريخ قديم، ولكن تم اعتمادها كمهمة طارئة بواسطة المشرف، لذا تم إسقاط ملاحظة التأخير.'
+                    : 'تم إدخال هذه المهمة بتاريخ يسبق تاريخ تسجيلها، مما يسجل ملاحظة تأخير على الفريق. يمكن للمشرف اعتمادها كمهمة طارئة لإلغاء الملاحظة.'}
+                </p>
+              </div>
+            </div>
+            {isSup || primaryRole === "admin" ? (
+              <div className="w-full md:w-auto flex items-center gap-2 bg-background/50 p-2 rounded-md border shadow-sm mt-2 md:mt-0">
+                <Checkbox 
+                  id="emergency_toggle" 
+                  checked={mission.is_emergency_mission || false}
+                  onCheckedChange={async (checked) => {
+                    await save({ is_emergency_mission: !!checked });
+                  }}
+                />
+                <Label htmlFor="emergency_toggle" className="cursor-pointer font-bold whitespace-nowrap text-sm">اعتماد كمهمة طارئة</Label>
+              </div>
+            ) : null}
+          </Card>
+        )}
 
         {/* Supervisor modification alert */}
         {mission.supervisor_modified && (

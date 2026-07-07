@@ -151,22 +151,25 @@ function UsersTab() {
 
 function DropdownsTab() {
   const [field, setField] = useState("project_code");
-  const [opts, setOpts] = useState<OptionRow[]>([]);
+  const [opts, setOpts] = useState<any[]>([]);
   const [val, setVal] = useState(""); const [lbl, setLbl] = useState("");
+  const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [teamId, setTeamId] = useState<string>("all");
 
   const load = async () => {
-    const { data } = await supabase.from("dropdown_options").select("*").eq("field_key", field).order("label");
-    setOpts((data ?? []) as OptionRow[]);
+    const { data } = await supabase.from("dropdown_options").select("*, team:teams(code)").eq("field_key", field).order("label");
+    setOpts(data ?? []);
   };
   useEffect(() => { load(); }, [field]);
+  useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
 
   const add = async () => {
     if (!val || !lbl) return;
-    const { error } = await supabase.from("dropdown_options").insert({ field_key: field, value: val, label: lbl });
+    const { error } = await supabase.from("dropdown_options").insert({ field_key: field, value: val, label: lbl, team_id: teamId === "all" ? null : teamId });
     if (error) toast.error(error.message); else { setVal(""); setLbl(""); load(); }
   };
   const del = async (id: string) => { await supabase.from("dropdown_options").delete().eq("id", id); load(); };
-  const toggle = async (o: OptionRow) => { await supabase.from("dropdown_options").update({ active: !o.active }).eq("id", o.id); load(); };
+  const toggle = async (o: any) => { await supabase.from("dropdown_options").update({ active: !o.active }).eq("id", o.id); load(); };
 
   return (
     <Card className="card-elevated p-4 space-y-4">
@@ -179,16 +182,26 @@ function DropdownsTab() {
         </div>
         <div className="space-y-1.5"><Label>القيمة (Value)</Label><Input value={val} onChange={(e) => setVal(e.target.value)} dir="ltr" /></div>
         <div className="space-y-1.5"><Label>الاسم المعروض</Label><Input value={lbl} onChange={(e) => setLbl(e.target.value)} /></div>
+        <div className="space-y-1.5"><Label>الفريق</Label>
+          <Select value={teamId} onValueChange={setTeamId}>
+            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">عام</SelectItem>
+              {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
         <Button onClick={add}><Plus className="w-4 h-4 ms-2" />إضافة</Button>
       </div>
 
       <Table>
-        <TableHeader><TableRow><TableHead>القيمة</TableHead><TableHead>الاسم</TableHead><TableHead>نشط</TableHead><TableHead></TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>القيمة</TableHead><TableHead>الاسم</TableHead><TableHead>الفريق</TableHead><TableHead>نشط</TableHead><TableHead></TableHead></TableRow></TableHeader>
         <TableBody>
           {opts.map((o) => (
             <TableRow key={o.id}>
               <TableCell><code>{o.value}</code></TableCell>
               <TableCell>{o.label}</TableCell>
+              <TableCell><Badge variant="outline">{o.team?.code || "عام"}</Badge></TableCell>
               <TableCell><Switch checked={o.active} onCheckedChange={() => toggle(o)} /></TableCell>
               <TableCell><Button size="icon" variant="ghost" onClick={() => del(o.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell>
             </TableRow>
@@ -266,7 +279,8 @@ function RestrictionsTab() {
 }
 
 function CustomFieldsTab() {
-  const [teamCode, setTeamCode] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [teams, setTeams] = useState<TeamRow[]>([]);
   const [fields, setFields] = useState<any[]>([]);
   const [loadingFields, setLoadingFields] = useState(false);
 
@@ -276,20 +290,22 @@ function CustomFieldsTab() {
   const [newOptions, setNewOptions] = useState("");
   const [newRequired, setNewRequired] = useState(false);
 
-  const loadFields = async (code: string) => {
-    if (!code.trim()) return;
+  useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
+
+  const loadFields = async (tId: string) => {
+    if (!tId) return;
     setLoadingFields(true);
     const { data } = await supabase
       .from("team_custom_fields")
       .select("*")
-      .eq("team_code", code.trim())
+      .eq("team_id", tId)
       .order("sort_order");
     setFields(data ?? []);
     setLoadingFields(false);
   };
 
   const addField = async () => {
-    if (!teamCode.trim()) return toast.error("أدخل كود الفريق أولاً");
+    if (!teamId) return toast.error("اختر الفريق أولاً");
     if (!newLabel.trim()) return toast.error("أدخل اسم الحقل");
     if (!newKey.trim()) return toast.error("أدخل مفتاح الحقل بالإنجليزية");
 
@@ -298,7 +314,7 @@ function CustomFieldsTab() {
       : [];
 
     const { error } = await supabase.from("team_custom_fields").insert({
-      team_code: teamCode.trim(),
+      team_id: teamId,
       field_key: newKey.trim().toLowerCase().replace(/\s+/g, "_"),
       field_label: newLabel.trim(),
       field_type: newType,
@@ -312,14 +328,14 @@ function CustomFieldsTab() {
     } else {
       toast.success("تم إضافة الحقل بنجاح");
       setNewLabel(""); setNewKey(""); setNewType("text"); setNewOptions(""); setNewRequired(false);
-      loadFields(teamCode);
+      loadFields(teamId);
     }
   };
 
   const deleteField = async (id: string) => {
     if (!confirm("هل أنت متأكد من حذف هذا الحقل؟")) return;
     await supabase.from("team_custom_fields").delete().eq("id", id);
-    loadFields(teamCode);
+    loadFields(teamId);
   };
 
   return (
@@ -327,23 +343,23 @@ function CustomFieldsTab() {
       <Card className="card-elevated p-4">
         <div className="flex items-end gap-3">
           <div className="space-y-1.5 flex-1 max-w-xs">
-            <Label>كود الفريق (team_code)</Label>
-            <Input
-              value={teamCode}
-              onChange={(e) => setTeamCode(e.target.value)}
-              placeholder="مثال: P02"
-              dir="ltr"
-            />
+            <Label>الفريق</Label>
+            <Select value={teamId} onValueChange={setTeamId}>
+              <SelectTrigger><SelectValue placeholder="اختر الفريق" /></SelectTrigger>
+              <SelectContent>
+                {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <Button variant="outline" onClick={() => loadFields(teamCode)}>تحميل الحقول</Button>
+          <Button variant="outline" onClick={() => loadFields(teamId)}>تحميل الحقول</Button>
         </div>
       </Card>
 
-      {teamCode.trim() && (
+      {teamId && (
         <>
           <Card className="card-elevated p-5 border-primary/30">
             <h3 className="font-bold text-primary mb-4">
-              إضافة حقل جديد لفريق <code className="bg-primary/10 px-1.5 py-0.5 rounded">{teamCode}</code>
+              إضافة حقل جديد للفريق المختار
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1.5">
@@ -432,29 +448,32 @@ function CustomFieldsTab() {
 }
 
 function TeamCustomKpisTab() {
-  const [teamCode, setTeamCode] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [teams, setTeams] = useState<TeamRow[]>([]);
   const [kpis, setKpis] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newKey, setNewKey] = useState("");
 
-  const loadKpis = async (tc: string) => {
-    if (!tc) return;
+  useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
+
+  const loadKpis = async (tId: string) => {
+    if (!tId) return;
     setLoading(true);
-    const { data } = await supabase.from("team_custom_kpis").select("*").eq("team_code", tc).order("created_at");
+    const { data } = await supabase.from("team_custom_kpis").select("*").eq("team_id", tId).order("created_at");
     setKpis(data ?? []);
     setLoading(false);
   };
 
   const addKpi = async () => {
-    if (!teamCode || !newLabel || !newKey) return toast.error("أكمل البيانات المطلوبة");
-    const { error } = await supabase.from("team_custom_kpis").insert({ team_code: teamCode, kpi_label: newLabel, kpi_key: newKey });
-    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setNewLabel(""); setNewKey(""); loadKpis(teamCode); }
+    if (!teamId || !newLabel || !newKey) return toast.error("أكمل البيانات المطلوبة");
+    const { error } = await supabase.from("team_custom_kpis").insert({ team_id: teamId, kpi_label: newLabel, kpi_key: newKey });
+    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setNewLabel(""); setNewKey(""); loadKpis(teamId); }
   };
 
   const deleteKpi = async (id: string) => {
     await supabase.from("team_custom_kpis").delete().eq("id", id);
-    loadKpis(teamCode);
+    loadKpis(teamId);
   };
 
   return (
@@ -462,16 +481,21 @@ function TeamCustomKpisTab() {
       <Card className="card-elevated p-5">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1.5 flex-1 max-w-[300px]">
-            <Label>أدخل كود الفريق</Label>
-            <Input value={teamCode} onChange={(e) => setTeamCode(e.target.value)} placeholder="مثال: P02" dir="ltr" />
+            <Label>اختر الفريق</Label>
+            <Select value={teamId} onValueChange={setTeamId}>
+              <SelectTrigger><SelectValue placeholder="اختر الفريق" /></SelectTrigger>
+              <SelectContent>
+                {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <Button variant="outline" onClick={() => loadKpis(teamCode)}>تحميل المؤشرات</Button>
+          <Button variant="outline" onClick={() => loadKpis(teamId)}>تحميل المؤشرات</Button>
         </div>
       </Card>
-      {teamCode.trim() && (
+      {teamId && (
         <>
           <Card className="card-elevated p-5 border-primary/30">
-            <h3 className="font-bold text-primary mb-4">إضافة مؤشر أداء جديد لفريق <code className="bg-primary/10 px-1.5 py-0.5 rounded">{teamCode}</code></h3>
+            <h3 className="font-bold text-primary mb-4">إضافة مؤشر أداء جديد</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>اسم المؤشر (عربي) *</Label><Input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="مثال: عدد المستهدفين بالتوعية" /></div>
               <div className="space-y-1.5"><Label>مفتاح المؤشر (إنجليزي) *</Label><Input value={newKey} onChange={e => setNewKey(e.target.value)} placeholder="awareness_target" dir="ltr" /></div>
@@ -503,29 +527,32 @@ function TeamCustomKpisTab() {
 }
 
 function FeedbackQuestionsTab() {
-  const [teamCode, setTeamCode] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [teams, setTeams] = useState<TeamRow[]>([]);
   const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newKey, setNewKey] = useState("");
 
-  const loadQuestions = async (tc: string) => {
-    if (!tc) return;
+  useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
+
+  const loadQuestions = async (tId: string) => {
+    if (!tId) return;
     setLoading(true);
-    const { data } = await supabase.from("feedback_custom_questions").select("*").eq("team_code", tc).order("created_at");
+    const { data } = await supabase.from("feedback_custom_questions").select("*").eq("team_id", tId).order("created_at");
     setQuestions(data ?? []);
     setLoading(false);
   };
 
   const addQuestion = async () => {
-    if (!teamCode || !newLabel || !newKey) return toast.error("أكمل البيانات المطلوبة");
-    const { error } = await supabase.from("feedback_custom_questions").insert({ team_code: teamCode, question_text: newLabel, question_key: newKey });
-    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setNewLabel(""); setNewKey(""); loadQuestions(teamCode); }
+    if (!teamId || !newLabel || !newKey) return toast.error("أكمل البيانات المطلوبة");
+    const { error } = await supabase.from("feedback_custom_questions").insert({ team_id: teamId, question_text: newLabel, question_key: newKey });
+    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setNewLabel(""); setNewKey(""); loadQuestions(teamId); }
   };
 
   const deleteQuestion = async (id: string) => {
     await supabase.from("feedback_custom_questions").delete().eq("id", id);
-    loadQuestions(teamCode);
+    loadQuestions(teamId);
   };
 
   return (
@@ -533,16 +560,21 @@ function FeedbackQuestionsTab() {
       <Card className="card-elevated p-5">
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1.5 flex-1 max-w-[300px]">
-            <Label>أدخل كود الفريق</Label>
-            <Input value={teamCode} onChange={(e) => setTeamCode(e.target.value)} placeholder="مثال: P02" dir="ltr" />
+            <Label>اختر الفريق</Label>
+            <Select value={teamId} onValueChange={setTeamId}>
+              <SelectTrigger><SelectValue placeholder="اختر الفريق" /></SelectTrigger>
+              <SelectContent>
+                {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <Button variant="outline" onClick={() => loadQuestions(teamCode)}>تحميل الأسئلة</Button>
+          <Button variant="outline" onClick={() => loadQuestions(teamId)}>تحميل الأسئلة</Button>
         </div>
       </Card>
-      {teamCode.trim() && (
+      {teamId && (
         <>
           <Card className="card-elevated p-5 border-primary/30">
-            <h3 className="font-bold text-primary mb-4">إضافة سؤال تقييم جديد لفريق <code className="bg-primary/10 px-1.5 py-0.5 rounded">{teamCode}</code></h3>
+            <h3 className="font-bold text-primary mb-4">إضافة سؤال تقييم جديد</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5"><Label>نص السؤال (عربي) *</Label><Input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="مثال: كيف تقيم سرعة الاستجابة؟" /></div>
               <div className="space-y-1.5"><Label>مفتاح السؤال (إنجليزي) *</Label><Input value={newKey} onChange={e => setNewKey(e.target.value)} placeholder="response_speed" dir="ltr" /></div>

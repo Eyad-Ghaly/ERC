@@ -57,7 +57,7 @@ export default function MissionFeedback() {
         .eq("created_by", user.id)
         .eq("has_beneficiaries", true)
         .order("created_at", { ascending: false }),
-      supabase.from("feedback_custom_questions").select("*").eq("team_code", profile?.team_code || "")
+      supabase.from("feedback_custom_questions").select("*").eq("team_id", profile?.team_id || "")
     ]);
 
     if (qData) setCustomQuestions(qData);

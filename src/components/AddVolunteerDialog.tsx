@@ -10,11 +10,12 @@ import { Plus, Search } from "lucide-react";
 import { VolunteerPicker, VolunteerData } from "./VolunteerPicker";
 
 interface AddVolunteerDialogProps {
-  teamCode: string;
+  teamId: string;
+  teamCode?: string;
   onAdded: () => void;
 }
 
-export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProps) {
+export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDialogProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -39,7 +40,7 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
       .from("volunteer_teams")
       .select("id")
       .eq("volunteer_id", selectedVolunteer.id)
-      .eq("team_code", teamCode)
+      .eq("team_id", teamId)
       .single();
 
     if (existing) {
@@ -49,7 +50,7 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
 
     const { error } = await supabase.from("volunteer_teams").insert({
       volunteer_id: selectedVolunteer.id,
-      team_code: teamCode,
+      team_id: teamId,
       join_date: new Date().toISOString().split('T')[0],
       is_approved: false,
       team_phone: teamPhone || null,
@@ -93,7 +94,7 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
     // 2. Insert into teams
     const { error: teamError } = await supabase.from("volunteer_teams").insert({
       volunteer_id: newVol.id,
-      team_code: teamCode,
+      team_id: teamId,
       join_date: new Date().toISOString().split('T')[0],
       is_approved: false,
       team_phone: phone || null,
@@ -118,7 +119,7 @@ export function AddVolunteerDialog({ teamCode, onAdded }: AddVolunteerDialogProp
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>إضافة متطوع إلى فريق ({teamCode})</DialogTitle>
+          <DialogTitle>إضافة متطوع إلى فريق ({teamCode || "غير محدد"})</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="existing" className="mt-4">

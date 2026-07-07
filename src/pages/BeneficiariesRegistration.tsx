@@ -92,7 +92,7 @@ export default function BeneficiariesRegistration() {
       // Fetch previous services
       const { data: prev } = await supabase
         .from('beneficiaries_individual')
-        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team_code)')
+        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team:teams(code))')
         .eq('registry_id', data.id)
         .order('created_at', { ascending: false });
       setPrevServices(prev || []);
@@ -107,7 +107,7 @@ export default function BeneficiariesRegistration() {
     setLoading(true);
     const { data: mData, error } = await supabase
       .from("missions")
-      .select("id, mission_code, mission_name, execution_place, activity_date, team_code, is_open_mission, beneficiaries_status")
+      .select("id, mission_code, mission_name, execution_place, activity_date, team_id, team:teams(code), is_open_mission, beneficiaries_status")
       .eq("has_beneficiaries", true);
     
     if (error || !mData) { setLoading(false); return; }
@@ -124,7 +124,7 @@ export default function BeneficiariesRegistration() {
         daily_report_id: null,
         mission_code: m.mission_code,
         mission_name: m.mission_name,
-        team_code: m.team_code,
+        team_id: m.team_id,
         date: m.activity_date,
         place: m.execution_place,
         display_name: `${m.mission_code} - ${m.mission_name}`,
@@ -141,7 +141,7 @@ export default function BeneficiariesRegistration() {
           daily_report_id: dr.id,
           mission_code: `${m.mission_code}-${dr.day_number}`,
           mission_name: m.mission_name,
-          team_code: m.team_code,
+          team_id: m.team_id,
           date: dr.report_date,
           place: m.execution_place,
           display_name: `${m.mission_code}-${dr.day_number} (${dr.report_date}) - ${m.mission_name}`,
@@ -184,11 +184,11 @@ export default function BeneficiariesRegistration() {
     fetchRegistered(target);
 
     // Fetch custom field definitions for this team
-    if (target?.team_code) {
+    if (target?.team_id) {
       supabase
         .from("team_custom_fields")
         .select("*")
-        .eq("team_code", target.team_code)
+        .eq("team_id", target.team_id)
         .order("sort_order")
         .then(({ data }) => {
           setCustomFieldDefs(data ?? []);
@@ -216,7 +216,7 @@ export default function BeneficiariesRegistration() {
       // Fetch previous services
       const { data: prev } = await supabase
         .from('beneficiaries_individual')
-        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team_code)')
+        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team:teams(code))')
         .eq('registry_id', data.id)
         .order('created_at', { ascending: false });
       setPrevServices(prev || []);
@@ -252,7 +252,7 @@ export default function BeneficiariesRegistration() {
     if (reg.id) {
       const { data: prev } = await supabase
         .from('beneficiaries_individual')
-        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team_code)')
+        .select('service_type, service_quantity, created_at, mission_id, missions(mission_code, mission_name, team:teams(code))')
         .eq('registry_id', reg.id)
         .order('created_at', { ascending: false });
       setPrevServices(prev || []);
@@ -283,7 +283,7 @@ export default function BeneficiariesRegistration() {
         birthdate: indivBirthdate || null,
         phone: indivPhone || null,
         first_registered_by: user?.id,
-        first_team_code: target?.team_code || null,
+        first_team_id: target?.team_id || null,
       }).select().single();
       finalRegistryId = newReg?.id || null;
     } else if (hash && registryMatch) {
@@ -302,7 +302,7 @@ export default function BeneficiariesRegistration() {
         birthdate: indivBirthdate || null,
         phone: indivPhone || null,
         first_registered_by: user?.id,
-        first_team_code: target?.team_code || null,
+        first_team_id: target?.team_id || null,
       }).select().single();
       finalRegistryId = newReg?.id || null;
     }
@@ -507,7 +507,7 @@ export default function BeneficiariesRegistration() {
                           <div className="space-y-1 max-h-36 overflow-y-auto">
                             {prevServices.map((s: any, i: number) => (
                               <div key={i} className="flex items-center gap-3 text-xs bg-background rounded-lg px-3 py-1.5">
-                                <Badge variant="outline" className="text-xs shrink-0">{s.missions?.team_code || '—'}</Badge>
+                                <Badge variant="outline" className="text-xs shrink-0">{s.missions?.team?.code || '—'}</Badge>
                                 <span className="font-medium">{s.missions?.mission_name || '—'}</span>
                                 <span className="text-muted-foreground">{s.service_type || '—'}</span>
                                 <span className="mr-auto text-muted-foreground">{new Date(s.created_at).toLocaleDateString('ar-EG')}</span>

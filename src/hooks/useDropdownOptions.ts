@@ -16,7 +16,7 @@ export interface DropdownOption {
  * Admins always see everything.
  */
 export function useDropdownOptions(fieldKey: string) {
-  const { user, hasRole } = useAuth();
+  const { user, profile, hasRole } = useAuth();
   const [options, setOptions] = useState<DropdownOption[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,12 +25,19 @@ export function useDropdownOptions(fieldKey: string) {
     (async () => {
       setLoading(true);
 
-      const { data: all } = await supabase
+      let query = supabase
         .from("dropdown_options")
         .select("*")
         .eq("field_key", fieldKey)
-        .eq("active", true)
-        .order("label");
+        .eq("active", true);
+
+      if (profile?.team_id) {
+        query = query.or(`team_id.is.null,team_id.eq.${profile.team_id}`);
+      } else {
+        query = query.is("team_id", null);
+      }
+
+      const { data: all } = await query.order("label");
 
       let filtered = (all ?? []) as DropdownOption[];
 
@@ -55,7 +62,7 @@ export function useDropdownOptions(fieldKey: string) {
       }
     })();
     return () => { active = false; };
-  }, [fieldKey, user, hasRole]);
+  }, [fieldKey, user, profile, hasRole]);
 
   return { options, loading };
 }
