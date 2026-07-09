@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Send, Save, AlertCircle, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { VolunteerPicker, VolunteerData } from "@/components/VolunteerPicker";
+import { NON_VOLUNTEER_ROLES } from "@/lib/constants";
 
 // Trigger build to sync Excel feature
 
@@ -52,6 +53,7 @@ export default function DepartmentEntry() {
   const [typeName, setTypeName] = useState("");
   const [classification, setClassification] = useState("");
   const [classificationName, setClassificationName] = useState("");
+  const [organizingEntity, setOrganizingEntity] = useState("");
 
   const [activityDate, setActivityDate] = useState("");
   const [executionPlace, setExecutionPlace] = useState("");
@@ -66,6 +68,7 @@ export default function DepartmentEntry() {
 
   const [volunteers, setVolunteers] = useState<Volunteer[]>([{ full_name: "", membership_number: "", branch: "", is_manual: false }]);
   const [teamVolunteers, setTeamVolunteers] = useState<any[]>([]);
+  const [nonVolunteers, setNonVolunteers] = useState<{ full_name: string; role: string; }[]>([]);
   const [busy, setBusy] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
@@ -105,6 +108,7 @@ export default function DepartmentEntry() {
           setTypeName(mission.type_name || "");
           setClassification(mission.classification || "");
           setClassificationName(mission.classification_name || "");
+          setOrganizingEntity(mission.organizing_entity || "");
           setActivityDate(mission.activity_date || "");
           setExecutionPlace(mission.execution_place || "");
           setMissionName(mission.mission_name || "");
@@ -117,10 +121,16 @@ export default function DepartmentEntry() {
           setIsOpenMission(mission.is_open_mission || false);
         }
 
-        const { data: vols } = await supabase.from("mission_volunteers").select("*").eq("mission_id", id);
+        const { data: vols } = await supabase.from("mission_volunteers").select("*").eq("mission_id", id).order("created_at");
         if (vols && vols.length > 0) {
-          setVolunteers(vols.map(v => ({ full_name: v.full_name || "", membership_number: v.membership_number || "", branch: v.branch || "" })));
+          setVolunteers(vols.map((v: any) => ({ full_name: v.full_name, membership_number: v.membership_number || "", branch: v.branch || "", is_manual: v.full_name.includes("(مضاف يدوياً)") })));
         }
+
+        const { data: nonVols } = await supabase.from("mission_non_volunteers").select("*").eq("mission_id", id).order("created_at");
+        if (nonVols && nonVols.length > 0) {
+          setNonVolunteers(nonVols.map((v: any) => ({ full_name: v.full_name, role: v.role || "" })));
+        }
+
         setBusy(false);
       };
       loadMission();
@@ -138,12 +148,21 @@ export default function DepartmentEntry() {
     }
   }, [activityClassification, activityType, executionPlace, isAutoMissionName, id]);
 
-  const addVolunteer = () => setVolunteers((v) => [...v, { full_name: "", membership_number: "", branch: "", is_manual: false }]);
-  const removeVolunteer = (i: number) => setVolunteers((v) => v.filter((_, idx) => idx !== i));
-  const updateVolunteer = (i: number, key: keyof Volunteer, val: any) =>
-    setVolunteers((v) => v.map((x, idx) => (idx === i ? { ...x, [key]: val } : x)));
+  const addVolunteer = () => setVolunteers([...volunteers, { full_name: "", membership_number: "", branch: "", is_manual: false }]);
+  const removeVolunteer = (index: number) => setVolunteers(volunteers.filter((_, i) => i !== index));
+  const updateVolunteer = (index: number, field: keyof Volunteer, value: any) => {
+    const updated = [...volunteers];
+    updated[index] = { ...updated[index], [field]: value };
+    setVolunteers(updated);
+  };
 
-
+  const addNonVolunteer = () => setNonVolunteers([...nonVolunteers, { full_name: "", role: "" }]);
+  const removeNonVolunteer = (index: number) => setNonVolunteers(nonVolunteers.filter((_, i) => i !== index));
+  const updateNonVolunteer = (index: number, field: keyof typeof nonVolunteers[0], value: string) => {
+    const updated = [...nonVolunteers];
+    updated[index] = { ...updated[index], [field]: value };
+    setNonVolunteers(updated);
+  };
 
   const submit = async (sendNow: boolean) => {
     if (!user) return;
@@ -172,6 +191,7 @@ export default function DepartmentEntry() {
           activity_details: activityDetails,
           type_name: typeName,
           classification, classification_name: classificationName,
+          organizing_entity: activityClassification === "تنمية معرفية ومهارية" ? organizingEntity : null,
           activity_date: activityDate,
           execution_place: executionPlace,
           mission_name: missionName,
@@ -188,6 +208,7 @@ export default function DepartmentEntry() {
 
         // Delete existing volunteers to re-insert
         await supabase.from("mission_volunteers").delete().eq("mission_id", id);
+        await supabase.from("mission_non_volunteers").delete().eq("mission_id", id);
 
       } else {
         // Create new mission
@@ -209,6 +230,7 @@ export default function DepartmentEntry() {
           activity_details: activityDetails,
           type_name: typeName,
           classification, classification_name: classificationName,
+          organizing_entity: activityClassification === "تنمية معرفية ومهارية" ? organizingEntity : null,
           activity_date: activityDate,
           execution_place: executionPlace,
           mission_name: missionName,
@@ -248,6 +270,14 @@ export default function DepartmentEntry() {
         if (volErr) throw volErr;
       }
 
+      const validNonVols = nonVolunteers.filter((v) => v.full_name.trim());
+      if (validNonVols.length > 0) {
+        const { error: nErr } = await supabase.from("mission_non_volunteers").insert(
+          validNonVols.map((v) => ({ mission_id: currentMissionId, full_name: v.full_name, role: v.role }))
+        );
+        if (nErr) throw nErr;
+      }
+
       toast.success(sendNow ? `تم إرسال المهمة بكود ${code}` : `تم حفظ المهمة بكود ${code}`);
       navigate(`/missions/${currentMissionId}`);
     } catch (e: any) {
@@ -280,6 +310,12 @@ export default function DepartmentEntry() {
             <FieldSelect fieldKey="governorate" value={governorate} onChange={setGovernorate} label="محافظة التنفيذ" />
             <FieldSelect fieldKey="activity_classification" value={activityClassification} onChange={setActivityClassification} label="تصنيف النشاط" />
             <FieldSelect fieldKey="activity_type" value={activityType} onChange={setActivityType} label="نوع النشاط" />
+            {activityClassification === "تنمية معرفية ومهارية" && (
+              <div className="space-y-1.5 md:col-span-3">
+                <Label>الجهة المنظمة</Label>
+                <Input value={organizingEntity} onChange={(e) => setOrganizingEntity(e.target.value)} />
+              </div>
+            )}
             <FieldSelect fieldKey="activity_details" value={activityDetails} onChange={setActivityDetails} label="تفاصيل النشاط" />
             <FieldSelect fieldKey="type_name" value={typeName} onChange={setTypeName} label="اسم النوع" />
             <FieldSelect fieldKey="classification" value={classification} onChange={setClassification} label="التصنيف" />
@@ -377,6 +413,34 @@ export default function DepartmentEntry() {
               </div>
             </div>
           ))}
+        </Card>
+
+        <Card className="card-elevated p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold">المشاركين الغير متطوعين</h3>
+            <Button size="sm" variant="outline" onClick={addNonVolunteer}><Plus className="w-4 h-4 ms-1" />إضافة مشارك</Button>
+          </div>
+          {nonVolunteers.map((v, i) => (
+            <div key={i} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end p-3 rounded-lg border border-border">
+              <div className="md:col-span-6 space-y-1">
+                <Label className="text-xs">الاسم</Label>
+                <Input value={v.full_name} onChange={(e) => updateNonVolunteer(i, "full_name", e.target.value)} placeholder="الاسم" />
+              </div>
+              <div className="md:col-span-5 space-y-1">
+                <Label className="text-xs">الصفة</Label>
+                <Select value={v.role} onValueChange={(val) => updateNonVolunteer(i, "role", val)}>
+                  <SelectTrigger><SelectValue placeholder="اختر الصفة" /></SelectTrigger>
+                  <SelectContent>
+                    {NON_VOLUNTEER_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-1 flex flex-col gap-1 items-center justify-end">
+                <Button size="icon" variant="ghost" onClick={() => removeNonVolunteer(i)} className="h-8 w-8"><Trash2 className="w-4 h-4 text-destructive" /></Button>
+              </div>
+            </div>
+          ))}
+          {nonVolunteers.length === 0 && <p className="text-sm text-muted-foreground">لا يوجد مشاركين</p>}
         </Card>
 
         <div className="flex gap-3 justify-end">

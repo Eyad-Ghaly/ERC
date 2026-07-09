@@ -23,6 +23,7 @@ export const STATUS_LABELS: Record<string, string> = {
   sent_to_supervisor: "تم الإرسال للمشرف",
   monitored: "مكتملة",
   open_active: "مهمة مفتوحة ونشطة",
+  canceled: "ملغاة",
 };
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -34,6 +35,7 @@ export const STATUS_COLORS: Record<string, string> = {
   sent_to_supervisor: "bg-info/15 text-info",
   monitored: "bg-success/15 text-success",
   open_active: "bg-primary/20 text-primary border border-primary/30",
+  canceled: "bg-destructive/15 text-destructive border border-destructive/30",
 };
 
 export const REGIONS: Record<string, string> = {
@@ -63,6 +65,8 @@ export const VOLUNTEER_NOTE_TYPES = {
   separated: "مفصول",
   suspended: "موقوف",
 } as const;
+
+export const NON_VOLUNTEER_ROLES = ["ممرض", "دكتور", "صيدلي", "موظف"];
 
 export const POINTS_OPTIONS = [0, 5, 10, 20];
 

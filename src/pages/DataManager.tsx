@@ -53,7 +53,7 @@ export default function DataManager() {
                     <TableCell>{m.activity_date}</TableCell>
                     <TableCell>{m.governorate ?? "—"}</TableCell>
                     <TableCell>{m.supervisor ?? "—"}</TableCell>
-                    <TableCell><StatusBadge status={m.status} /></TableCell>
+                    <TableCell><StatusBadge status={m.is_canceled ? "canceled" : m.status} /></TableCell>
                     <TableCell><Link to={`/missions/${m.id}`}><Button size="sm" variant="outline"><Eye className="w-4 h-4" /></Button></Link></TableCell>
                   </TableRow>
                 ))}
@@ -76,7 +76,7 @@ export default function DataManager() {
                     <TableCell className="max-w-xs truncate">{m.mission_name}</TableCell>
                     <TableCell>{m.activity_date}</TableCell>
                     <TableCell>{m.monitor_name ?? "—"}</TableCell>
-                    <TableCell><StatusBadge status={m.status} /></TableCell>
+                    <TableCell><StatusBadge status={m.is_canceled ? "canceled" : m.status} /></TableCell>
                     <TableCell><Link to={`/missions/${m.id}`}><Button size="sm" variant="outline"><Eye className="w-4 h-4" /></Button></Link></TableCell>
                   </TableRow>
                 ))}

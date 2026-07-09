@@ -83,7 +83,7 @@ export default function OperationsRoom() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
                       <code className="text-xs font-mono bg-primary-soft text-primary px-2 py-0.5 rounded">{m.mission_code}</code>
-                      <StatusBadge status={m.status} />
+                      <StatusBadge status={m.is_canceled ? "canceled" : m.status} />
                     </div>
                     <h3 className="font-bold truncate">{m.mission_name}</h3>
                     <p className="text-sm text-muted-foreground mt-1">

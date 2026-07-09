@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   REGIONS, MISSION_TYPES, TRANSPORT_MODES, DATA_SOURCES,
   VOLUNTEER_CHANGE_REASONS, VOLUNTEER_NOTE_TYPES, POINTS_OPTIONS, STATUS_LABELS,
+  NON_VOLUNTEER_ROLES,
 } from "@/lib/constants";
 import { StatusBadge } from "@/components/StatusBadge";
 import { toast } from "sonner";
@@ -28,6 +29,7 @@ export default function MissionDetail() {
   const [routes, setRoutes] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
+  const [nonVolunteers, setNonVolunteers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -45,15 +47,16 @@ export default function MissionDetail() {
   const load = async () => {
     if (!id) return;
     setLoading(true);
-    const [{ data: m }, { data: v }, { data: d }, { data: r }, { data: n }, { data: dr }] = await Promise.all([
+    const [{ data: m }, { data: v }, { data: d }, { data: r }, { data: n }, { data: dr }, { data: nv }] = await Promise.all([
       supabase.from("missions").select("*").eq("id", id).maybeSingle(),
       supabase.from("mission_volunteers").select("*").eq("mission_id", id).order("created_at"),
       supabase.from("mission_drivers").select("*").eq("mission_id", id),
       supabase.from("mission_routes").select("*").eq("mission_id", id).order("position"),
       supabase.from("volunteer_notes").select("*").eq("mission_id", id),
       supabase.from("mission_daily_reports").select("*").eq("mission_id", id).order("day_number"),
+      supabase.from("mission_non_volunteers").select("*").eq("mission_id", id).order("created_at"),
     ]);
-    setMission(m); setVolunteers(v ?? []); setDrivers(d ?? []); setRoutes(r ?? []); setNotes(n ?? []); setDailyReports(dr ?? []);
+    setMission(m); setVolunteers(v ?? []); setDrivers(d ?? []); setRoutes(r ?? []); setNotes(n ?? []); setDailyReports(dr ?? []); setNonVolunteers(nv ?? []);
     setLoading(false);
   };
   useEffect(() => { load(); }, [id]);
@@ -74,8 +77,8 @@ export default function MissionDetail() {
   }
 
   const isSentToSupervisor = ["sent_to_youth", "monitored"].includes(mission.status);
-  const canUserEdit = canEdit && (!isSentToSupervisor || isSup || isJoker);
-  const canEditOpsBox = (isOps || isJoker || isSup) && (!isSentToSupervisor || isSup || isJoker);
+  const canUserEdit = canEdit && (!isSentToSupervisor || isSup || isJoker) && !mission.is_canceled;
+  const canEditOpsBox = (isOps || isJoker || isSup) && (!isSentToSupervisor || isSup || isJoker) && !mission.is_canceled;
 
   const markSupervisorEdit = async () => {
     if (isSentToSupervisor && (isSup || isJoker)) {
@@ -127,6 +130,10 @@ export default function MissionDetail() {
     const { data } = await supabase.from("mission_volunteers").select("*").eq("mission_id", mission.id).order("created_at");
     setVolunteers(data ?? []);
   };
+  const reloadNonVolunteers = async () => {
+    const { data } = await supabase.from("mission_non_volunteers").select("*").eq("mission_id", mission.id).order("created_at");
+    setNonVolunteers(data ?? []);
+  };
   const reloadDrivers = async () => {
     const { data } = await supabase.from("mission_drivers").select("*").eq("mission_id", mission.id);
     setDrivers(data ?? []);
@@ -162,6 +169,22 @@ export default function MissionDetail() {
     await supabase.from("mission_volunteers").update({ removed: true }).eq("id", vid);
     await markSupervisorEdit();
     reloadVolunteers();
+  };
+
+  const addNonVol = async () => {
+    await supabase.from("mission_non_volunteers").insert({ mission_id: mission.id, full_name: "", role: "" });
+    await markSupervisorEdit();
+    reloadNonVolunteers();
+  };
+  const updateNonVol = async (nvid: string, patch: any) => {
+    await supabase.from("mission_non_volunteers").update(patch).eq("id", nvid);
+    await markSupervisorEdit();
+    reloadNonVolunteers();
+  };
+  const removeNonVol = async (nvid: string) => {
+    await supabase.from("mission_non_volunteers").delete().eq("id", nvid);
+    await markSupervisorEdit();
+    reloadNonVolunteers();
   };
 
   // Drivers
@@ -209,6 +232,19 @@ export default function MissionDetail() {
     toast.success("تم إغلاق المهمة بنجاح");
   };
 
+  const cancelMission = async () => {
+    if (!confirm("هل أنت متأكد من إلغاء هذه المهمة؟ لا يمكن التراجع عن هذا الإجراء.")) return;
+    setBusy(true);
+    const { error } = await supabase.from("missions").update({ is_canceled: true }).eq("id", mission.id);
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    await load();
+    toast.success("تم إلغاء المهمة بنجاح");
+  };
+
   return (
     <AppLayout title={`المهمة ${mission.mission_code}`}>
       <div className="space-y-6 max-w-6xl">
@@ -218,13 +254,20 @@ export default function MissionDetail() {
             <div>
               <div className="flex items-center gap-3 mb-1">
                 <code className="text-sm font-mono bg-primary-soft text-primary px-2.5 py-1 rounded font-bold">{mission.mission_code}</code>
-                <StatusBadge status={mission.status} />
+                <StatusBadge status={mission.is_canceled ? "canceled" : mission.status} />
               </div>
               <h2 className="text-xl font-bold">{mission.mission_name}</h2>
               <p className="text-sm text-muted-foreground mt-1">{mission.activity_date} • {mission.governorate ?? "—"} • {mission.execution_place ?? "—"}</p>
             </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <AlertCircle className="w-3.5 h-3.5" /> كود المهمة لا يمكن تعديله
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" /> كود المهمة لا يمكن تعديله
+              </div>
+              {isOps && !mission.is_canceled && (
+                <Button variant="destructive" size="sm" onClick={cancelMission} disabled={busy}>
+                  إلغاء المهمة
+                </Button>
+              )}
             </div>
           </div>
         </Card>
@@ -306,6 +349,7 @@ export default function MissionDetail() {
                 <Info label="كود الإدارة" value={mission.admin_code} />
                 <Info label="كود المشروع" value={mission.project_code} />
                 <Info label="تصنيف النشاط" value={mission.activity_classification} />
+                {mission.activity_classification === "تنمية معرفية ومهارية" && <Info label="الجهة المنظمة" value={mission.organizing_entity} />}
                 <Info label="نوع النشاط" value={mission.activity_type} />
                 <Info label="تفاصيل النشاط" value={mission.activity_details} />
                 <Info label="إحداثيات" value={mission.latitude ? `${mission.latitude}, ${mission.longitude}` : null} />
@@ -476,6 +520,40 @@ export default function MissionDetail() {
           ))}
         </Card>
 
+        {/* Non-Volunteers */}
+        <Card className="card-elevated p-5 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="font-bold">المشاركين الغير متطوعين</h3>
+            {canUserEdit && (
+              <Button size="sm" variant="outline" onClick={addNonVol}><Plus className="w-4 h-4 ms-1" />إضافة مشارك</Button>
+            )}
+            {isSentToSupervisor && !isSup && (
+              <span className="text-xs bg-destructive/15 text-destructive px-2 py-1 rounded font-bold">
+                مغلق للتعديل
+              </span>
+            )}
+          </div>
+          {nonVolunteers.length === 0 && <p className="text-sm text-muted-foreground">لا يوجد مشاركين</p>}
+          {nonVolunteers.map((v) => (
+            <div key={v.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-end p-3 bg-muted/30 rounded-lg border border-border">
+              <div className="md:col-span-6 space-y-1">
+                <Input disabled={!canUserEdit} value={v.full_name} onChange={(e) => updateNonVol(v.id, { full_name: e.target.value })} placeholder="الاسم" />
+              </div>
+              <div className="md:col-span-5 space-y-1">
+                <Select disabled={!canUserEdit} value={v.role || ""} onValueChange={(val) => updateNonVol(v.id, { role: val })}>
+                  <SelectTrigger><SelectValue placeholder="اختر الصفة" /></SelectTrigger>
+                  <SelectContent>
+                    {NON_VOLUNTEER_ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-1 flex flex-col gap-1 items-center justify-end">
+                {canUserEdit && <Button size="icon" variant="ghost" onClick={() => removeNonVol(v.id)} className="h-8 w-8"><Trash2 className="w-4 h-4 text-destructive" /></Button>}
+              </div>
+            </div>
+          ))}
+        </Card>
+
         {/* Youth box */}
         {!mission.is_open_mission && isYouth && (
           <Card className="card-elevated p-5 space-y-4">
@@ -492,7 +570,7 @@ export default function MissionDetail() {
         {!mission.is_open_mission && <WorkflowProgress status={mission.status} />}
 
         {/* Actions — gated by current mission status so each role sees only its valid next step */}
-        {!mission.is_open_mission && (
+        {!mission.is_open_mission && !mission.is_canceled && (
           <Card className="card-elevated p-5">
             <div className="flex flex-wrap gap-2 justify-end">
               {canUserEdit && (mission.status !== "monitored" || isSup) && (

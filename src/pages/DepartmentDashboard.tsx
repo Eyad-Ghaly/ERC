@@ -590,7 +590,7 @@ export default function DepartmentDashboard() {
                           <TableCell><code className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{m.mission_code}</code></TableCell>
                           <TableCell className="font-medium max-w-[200px] truncate" title={m.mission_name}>{m.mission_name}</TableCell>
                           <TableCell className="text-muted-foreground text-sm">{m.activity_date}</TableCell>
-                          <TableCell><StatusBadge status={m.status} /></TableCell>
+                          <TableCell><StatusBadge status={m.is_canceled ? "canceled" : m.status} /></TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/missions/${m.id}`)}><Eye className="w-4 h-4 text-info" /></Button>

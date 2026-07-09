@@ -104,7 +104,7 @@ export default function Joker({ titleOverride, embedded }: { titleOverride?: str
                     <TableCell className="max-w-xs truncate">{r.mission_name}</TableCell>
                     <TableCell>{r.governorate ?? "—"}</TableCell>
                     <TableCell>{r.activity_date}</TableCell>
-                    <TableCell><StatusBadge status={r.status} /></TableCell>
+                    <TableCell><StatusBadge status={r.is_canceled ? "canceled" : r.status} /></TableCell>
                     <TableCell><Link to={`/missions/${r.id}`}><Button size="sm" variant="outline"><Eye className="w-4 h-4" /></Button></Link></TableCell>
                   </TableRow>
                 ))}
