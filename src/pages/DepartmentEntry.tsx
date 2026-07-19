@@ -50,6 +50,8 @@ export default function DepartmentEntry() {
   const [activityClassification, setActivityClassification] = useState("");
   const [activityType, setActivityType] = useState("");
   const [activityDetails, setActivityDetails] = useState("");
+  const [indicatorId, setIndicatorId] = useState("");
+  const [indicators, setIndicators] = useState<any[]>([]);
   const [typeName, setTypeName] = useState("");
   const [classification, setClassification] = useState("");
   const [classificationName, setClassificationName] = useState("");
@@ -91,6 +93,33 @@ export default function DepartmentEntry() {
 
   useEffect(() => {
     if (profile?.team_id && !id) setTeamId(profile.team_id);
+    
+    if (profile?.department_id) {
+      const fetchIndicators = async () => {
+        const { data } = await supabase.from('department_goals')
+          .select('*, department_objectives(*, department_indicators(*))')
+          .eq('department_id', profile.department_id);
+        
+        if (data) {
+          const allIndicators = data.flatMap((g: any) => 
+            g.department_objectives?.flatMap((o: any) => o.department_indicators) || []
+          ).filter(Boolean);
+
+          const uniqueIndicators = [];
+          const seen = new Set();
+          for (const ind of allIndicators) {
+            const key = `${ind.objective_id}-${ind.title}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueIndicators.push(ind);
+            }
+          }
+          
+          setIndicators(uniqueIndicators);
+        }
+      };
+      fetchIndicators();
+    }
   }, [profile, id]);
 
   useEffect(() => {
@@ -105,6 +134,7 @@ export default function DepartmentEntry() {
           setActivityClassification(mission.activity_classification || "");
           setActivityType(mission.activity_type || "");
           setActivityDetails(mission.activity_details || "");
+          setIndicatorId(mission.indicator_id || "");
           setTypeName(mission.type_name || "");
           setClassification(mission.classification || "");
           setClassificationName(mission.classification_name || "");
@@ -188,7 +218,8 @@ export default function DepartmentEntry() {
           governorate, department_id: profile?.department_id || null,
           activity_classification: activityClassification,
           activity_type: activityType,
-          activity_details: activityDetails,
+          activity_details: indicators.find(i => i.id === indicatorId)?.title || activityDetails,
+          indicator_id: indicatorId || null,
           type_name: typeName,
           classification, classification_name: classificationName,
           organizing_entity: activityClassification === "تنمية معرفية ومهارية" ? organizingEntity : null,
@@ -227,7 +258,8 @@ export default function DepartmentEntry() {
           governorate, department_id: profile?.department_id || null,
           activity_classification: activityClassification,
           activity_type: activityType,
-          activity_details: activityDetails,
+          activity_details: indicators.find(i => i.id === indicatorId)?.title || activityDetails,
+          indicator_id: indicatorId || null,
           type_name: typeName,
           classification, classification_name: classificationName,
           organizing_entity: activityClassification === "تنمية معرفية ومهارية" ? organizingEntity : null,
@@ -316,7 +348,30 @@ export default function DepartmentEntry() {
                 <Input value={organizingEntity} onChange={(e) => setOrganizingEntity(e.target.value)} />
               </div>
             )}
-            <FieldSelect fieldKey="activity_details" value={activityDetails} onChange={setActivityDetails} label="تفاصيل النشاط" />
+            
+            <div className="space-y-1.5">
+              <Label>تفاصيل النشاط (المؤشر المرتبط)</Label>
+              <Select value={indicatorId || activityDetails} onValueChange={(val) => {
+                if (indicators.some(i => i.id === val)) {
+                  setIndicatorId(val);
+                } else {
+                  setActivityDetails(val); // fallback for legacy strings
+                }
+              }}>
+                <SelectTrigger><SelectValue placeholder="اختر تفاصيل النشاط" /></SelectTrigger>
+                <SelectContent>
+                  {indicators.map(ind => (
+                    <SelectItem key={ind.id} value={ind.id}>{ind.title}</SelectItem>
+                  ))}
+                  {indicators.length === 0 && <div className="p-2 text-sm text-muted-foreground">لا توجد مؤشرات للإدارة. تواصل مع مدير الإدارة.</div>}
+                  {/* Fallback for old missions that have text details not in the DB */}
+                  {activityDetails && !indicators.some(i => i.id === activityDetails) && !indicators.some(i => i.title === activityDetails) && (
+                    <SelectItem value={activityDetails}>{activityDetails}</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            
             <FieldSelect fieldKey="type_name" value={typeName} onChange={setTypeName} label="اسم النوع" />
             <FieldSelect fieldKey="classification" value={classification} onChange={setClassification} label="التصنيف" />
             <FieldSelect fieldKey="classification_name" value={classificationName} onChange={setClassificationName} label="اسم التصنيف" />

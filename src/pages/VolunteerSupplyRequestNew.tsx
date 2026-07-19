@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,8 @@ export default function VolunteerSupplyRequestNew() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   
-  const [departmentCode, setDepartmentCode] = useState("");
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [requestingDepartmentId, setRequestingDepartmentId] = useState("");
   const [roleTitle, setRoleTitle] = useState("");
   const [startDate, setStartDate] = useState("");
   const [requiredCount, setRequiredCount] = useState("");
@@ -28,9 +29,19 @@ export default function VolunteerSupplyRequestNew() {
   const [shiftPeriod, setShiftPeriod] = useState("");
   const [busy, setBusy] = useState(false);
 
+  
+
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      const { data } = await supabase.from('departments').select('id, name, code');
+      if (data) setDepartments(data);
+    };
+    fetchDepartments();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!departmentCode || !roleTitle || !startDate || !requiredCount || !requiredHours) {
+    if (!requestingDepartmentId || !roleTitle || !startDate || !requiredCount || !requiredHours) {
       toast.error("يرجى تعبئة الحقول الإلزامية");
       return;
     }
@@ -48,17 +59,16 @@ export default function VolunteerSupplyRequestNew() {
         .insert({
           team_id: profile.team_id,
           department_id: profile.department_id,
-          department_code: departmentCode,
-          request_date: new Date().toISOString().split('T')[0],
-          role_name: roleTitle,
-          vol_count: parseInt(requiredCount),
+          requesting_department_id: requestingDepartmentId,
+          role_title: roleTitle,
+          required_count: parseInt(requiredCount),
           start_date: startDate,
-          hours_needed: requiredHours,
-          duties: responsibilities,
+          required_hours: requiredHours,
+          responsibilities: responsibilities,
           qualifications,
           skills,
-          travel_required: requiresTravel === 'yes',
-          shift: shiftPeriod,
+          requires_travel: requiresTravel === 'yes',
+          shift_period: shiftPeriod,
           status: 'pending_management',
           created_by: user?.id,
         });
@@ -91,8 +101,19 @@ export default function VolunteerSupplyRequestNew() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>كود الإدارة الطالبة *</Label>
-                <Input value={departmentCode} onChange={(e) => setDepartmentCode(e.target.value)} placeholder="مثال: الإغاثة / الصحة" />
+                <Label>اسم الإدارة التابع لها الفريق *</Label>
+                <Select value={requestingDepartmentId} onValueChange={setRequestingDepartmentId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر الإدارة..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        {dept.name} ({dept.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>تاريخ تقديم الطلب</Label>

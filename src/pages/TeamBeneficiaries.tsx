@@ -19,6 +19,41 @@ async function sha256(text: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Simple AES-GCM encryption/decryption using a static key
+const ENCRYPTION_KEY = "12345678901234567890123456789012"; // 32 bytes
+
+async function getCryptoKey() {
+  const encoder = new TextEncoder();
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(ENCRYPTION_KEY),
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function decryptData(encryptedBase64: string): Promise<string> {
+  if (!encryptedBase64) return "";
+  try {
+    const combined = new Uint8Array(
+      atob(encryptedBase64).split('').map(c => c.charCodeAt(0))
+    );
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const key = await getCryptoKey();
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      data
+    );
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (e) {
+    return "********"; // Return masked on error
+  }
+}
+
 export default function TeamBeneficiaries() {
   const { profile } = useAuth();
   const [password, setPassword] = useState("");
@@ -99,21 +134,37 @@ export default function TeamBeneficiaries() {
     setLoading(true);
     const { data, error } = await supabase
       .from('beneficiaries_individual')
-      .select('*, missions!inner(team_id)')
+      .select(`
+        id,
+        full_name,
+        encrypted_id,
+        phone,
+        service_type,
+        created_at,
+        missions!inner(team_id)
+      `)
       .eq('missions.team_id', teamId)
       .order('created_at', { ascending: false });
 
     if (error) {
       toast.error("فشل تحميل البيانات");
+    } else if (data) {
+       const decryptedData = await Promise.all(data.map(async (r: any) => {
+          return {
+             ...r,
+             decrypted_id: r.encrypted_id ? await decryptData(r.encrypted_id) : "—"
+          };
+       }));
+       setBeneficiaries(decryptedData);
     } else {
-      setBeneficiaries(data || []);
+       setBeneficiaries([]);
     }
     setLoading(false);
   };
 
   const filteredData = beneficiaries.filter(b => 
     b.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (b.national_id && b.national_id.includes(searchTerm)) ||
+    (b.decrypted_id && b.decrypted_id.includes(searchTerm)) ||
     (b.phone && b.phone.includes(searchTerm))
   );
 
@@ -212,7 +263,7 @@ export default function TeamBeneficiaries() {
                 {filteredData.map((b) => (
                   <TableRow key={b.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="font-bold">{b.full_name}</TableCell>
-                    <TableCell dir="ltr">{b.national_id || "—"}</TableCell>
+                    <TableCell dir="ltr">{b.encrypted_id ? "••••••••••••••" : "—"}</TableCell>
                     <TableCell dir="ltr">{b.phone || "—"}</TableCell>
                     <TableCell>
                       <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-medium">

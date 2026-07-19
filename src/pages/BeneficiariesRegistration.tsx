@@ -24,6 +24,58 @@ async function sha256(text: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Simple AES-GCM encryption/decryption using a static key
+const ENCRYPTION_KEY = "12345678901234567890123456789012"; // 32 bytes
+
+async function getCryptoKey() {
+  const encoder = new TextEncoder();
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(ENCRYPTION_KEY),
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptData(text: string): Promise<string> {
+  if (!text) return "";
+  const key = await getCryptoKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoder = new TextEncoder();
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    encoder.encode(text)
+  );
+  
+  const combined = new Uint8Array(iv.length + new Uint8Array(encrypted).length);
+  combined.set(iv);
+  combined.set(new Uint8Array(encrypted), iv.length);
+  return btoa(String.fromCharCode.apply(null, Array.from(combined)));
+}
+
+async function decryptData(encryptedBase64: string): Promise<string> {
+  if (!encryptedBase64) return "";
+  try {
+    const combined = new Uint8Array(
+      atob(encryptedBase64).split('').map(c => c.charCodeAt(0))
+    );
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const key = await getCryptoKey();
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      data
+    );
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (e) {
+    return "********"; // Return masked on error
+  }
+}
+
 // مكون فرعي لاختيار القوائم المنسدلة بناءً على المفتاح
 function FieldSelect({ fieldKey, value, onChange, label }: { fieldKey: string; value: string; onChange: (v: string) => void; label: string }) {
   const { options, loading } = useDropdownOptions(fieldKey);
@@ -171,7 +223,19 @@ export default function BeneficiariesRegistration() {
     }
 
     const [{ data: ind }, { data: grp }] = await Promise.all([indivQ, groupQ]);
-    setRegisteredIndivs(ind || []);
+    
+    if (ind) {
+       const decryptedInd = await Promise.all(ind.map(async (r: any) => {
+          return {
+             ...r,
+             decrypted_id: r.encrypted_id ? await decryptData(r.encrypted_id) : "—"
+          };
+       }));
+       setRegisteredIndivs(decryptedInd);
+    } else {
+       setRegisteredIndivs([]);
+    }
+    
     setRegisteredGroups(grp || []);
   };
 
@@ -271,6 +335,7 @@ export default function BeneficiariesRegistration() {
     
     // Hash the national ID if provided
     const hash = indivNationalId.trim() ? await sha256(indivNationalId.trim()) : null;
+    const encryptedId = indivNationalId.trim() ? await encryptData(indivNationalId.trim()) : null;
     
     let finalRegistryId = registryMatch?.id || null;
     
@@ -310,7 +375,7 @@ export default function BeneficiariesRegistration() {
     const { error } = await supabase.from("beneficiaries_individual").insert({
       mission_id: target.mission_id,
       daily_report_id: target.daily_report_id,
-      national_id: indivNationalId.trim() || null,
+      encrypted_id: encryptedId,
       id_hash: hash,
       registry_id: finalRegistryId,
       full_name: indivFullName,
@@ -584,7 +649,7 @@ export default function BeneficiariesRegistration() {
                           <TableRow key={r.id}>
                             <TableCell className="font-medium">{r.full_name}</TableCell>
                             <TableCell dir="ltr">{r.phone || "—"}</TableCell>
-                            <TableCell dir="ltr">{r.national_id || "—"}</TableCell>
+                            <TableCell dir="ltr">{r.decrypted_id || "—"}</TableCell>
                             <TableCell>{r.service_type || "—"}</TableCell>
                             <TableCell>{r.service_quantity}</TableCell>
                           </TableRow>

@@ -67,11 +67,11 @@ export default function DepartmentDashboard() {
     setLoading(true);
     const { data: mData, error } = await supabase
       .from("missions")
-      .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, national_id, service_type), beneficiaries_group(count, service_type)")
+      .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, encrypted_id, service_type), beneficiaries_group(count, service_type)")
       .eq("created_by", user.id)
       .order("created_at", { ascending: false });
 
-    if (error) toast.error("حدث خطأ أثناء جلب المهام");
+    if (error) { toast.error("حدث خطأ أثناء جلب المهام: " + error.message); console.error(error); }
     else setMissions(mData || []);
     setLoading(false);
   };
@@ -281,7 +281,7 @@ export default function DepartmentDashboard() {
       });
 
       (m.beneficiaries_individual || []).forEach((b: any) => {
-        if (b.national_id) uniqueBeneficiariesSet.add(b.national_id);
+        if (b.encrypted_id) uniqueBeneficiariesSet.add(b.encrypted_id);
         else uniqueBeneficiariesSet.add(b.id);
       });
 
