@@ -94,7 +94,7 @@ function FieldSelect({ fieldKey, value, onChange, label }: { fieldKey: string; v
 }
 
 export default function BeneficiariesRegistration() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [targets, setTargets] = useState<any[]>([]);
   const [selectedTargetId, setSelectedTargetId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -157,10 +157,18 @@ export default function BeneficiariesRegistration() {
 
   const fetchTargets = async () => {
     setLoading(true);
-    const { data: mData, error } = await supabase
+    let query = supabase
       .from("missions")
       .select("id, mission_code, mission_name, execution_place, activity_date, team_id, team:teams(code), is_open_mission, beneficiaries_status")
       .eq("has_beneficiaries", true);
+
+    if (profile?.team_id) {
+      query = query.eq("team_id", profile.team_id);
+    } else {
+      query = query.eq("created_by", user.id);
+    }
+
+    const { data: mData, error } = await query;
     
     if (error || !mData) { setLoading(false); return; }
 

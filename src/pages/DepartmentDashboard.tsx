@@ -14,35 +14,11 @@ import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, 
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { AddVolunteerDialog } from "@/components/AddVolunteerDialog";
-import * as XLSX from "xlsx";
-
-const HEADER_MAP: Record<string, string> = {
-  "كود المشروع": "projectCode",
-  "كود الإدارة": "adminCode",
-  "محافظة التنفيذ": "governorate",
-  "تصنيف النشاط": "activityClassification",
-  "نوع النشاط": "activityType",
-  "تفاصيل النشاط": "activityDetails",
-  "اسم النوع": "typeName",
-  "التصنيف": "classification",
-  "اسم التصنيف": "classificationName",
-  "تاريخ النشاط": "activityDate",
-  "مكان التنفيذ": "executionPlace",
-  "اسم المهمة بالتفصيل": "missionName",
-  "اسم المهمة": "missionName",
-  "خط العرض": "latitude",
-  "خط الطول": "longitude",
-  "مسؤول المتابعة": "followUpResponsible",
-  "رقم تليفون مسؤول المتابعة": "followUpPhone",
-  "هل بها مستفيدين": "hasBeneficiaries",
-  "هل المهمة مفتوحة": "isOpenMission",
-};
+import { SmartExcelUploader } from "@/components/SmartExcelUploader";
 
 export default function DepartmentDashboard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // Missions state
@@ -65,11 +41,18 @@ export default function DepartmentDashboard() {
   const loadMissions = async () => {
     if (!user) return;
     setLoading(true);
-    const { data: mData, error } = await supabase
+    let query = supabase
       .from("missions")
       .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, encrypted_id, service_type), beneficiaries_group(count, service_type)")
-      .eq("created_by", user.id)
       .order("created_at", { ascending: false });
+
+    if (profile?.team_id) {
+      query = query.eq("team_id", profile.team_id);
+    } else {
+      query = query.eq("created_by", user.id);
+    }
+
+    const { data: mData, error } = await query;
 
     if (error) { toast.error("حدث خطأ أثناء جلب المهام: " + error.message); console.error(error); }
     else setMissions(mData || []);
@@ -148,114 +131,6 @@ export default function DepartmentDashboard() {
     setBusy(false);
   };
 
-  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet) as any[];
-
-        if (json.length === 0) {
-          toast.error("الملف فارغ");
-          return;
-        }
-
-        if (confirm(`هل تريد رفع عدد ${json.length} مهمة دفعة واحدة؟`)) {
-          await bulkUploadMissions(json);
-        }
-      } catch (err: any) {
-        toast.error("فشل قراءة الملف: " + err.message);
-      } finally {
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const bulkUploadMissions = async (rows: any[]) => {
-    if (!user || !profile?.team_id) {
-      toast.error("لا يوجد فريق مرتبط بحسابك");
-      return;
-    }
-
-    setBusy(true);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const row of rows) {
-      const mapped: any = {};
-      Object.entries(row).forEach(([key, val]) => {
-        const field = HEADER_MAP[key] || key;
-        mapped[field] = val;
-      });
-
-      try {
-        const pCode = String(mapped.projectCode || "");
-        if (!pCode) throw new Error("كود المشروع مفقود");
-
-        const { data: generatedCode, error: codeErr } = await supabase.rpc("generate_mission_code", {
-          _project_code: pCode, _team_code: profile.team_code,
-        });
-        if (codeErr) throw codeErr;
-
-        let actDate = mapped.activityDate;
-        if (typeof actDate === "number") {
-          const date = XLSX.SSF.parse_date_code(actDate);
-          actDate = `${date.y}-${String(date.m).padStart(2, '0')}-${String(date.d).padStart(2, '0')}`;
-        }
-
-        const hasBen = String(mapped.hasBeneficiaries || "").toLowerCase();
-        const isOpen = String(mapped.isOpenMission || "").toLowerCase();
-
-        const todayDate = new Date().toISOString().split('T')[0];
-        const isLate = actDate ? String(actDate) < todayDate : false;
-
-        const { error: insErr } = await supabase.from("missions").insert({
-          mission_code: generatedCode as string,
-          status: "planned",
-          created_by: user.id,
-          team_id: profile.team_id,
-          project_code: pCode,
-          governorate: mapped.governorate ? String(mapped.governorate) : null,
-          department_id: profile?.department_id || null,
-          activity_classification: mapped.activityClassification ? String(mapped.activityClassification) : null,
-          activity_type: mapped.activityType ? String(mapped.activityType) : null,
-          activity_details: mapped.activityDetails ? String(mapped.activityDetails) : null,
-          type_name: mapped.typeName ? String(mapped.typeName) : null,
-          classification: mapped.classification ? String(mapped.classification) : null,
-          classification_name: mapped.classificationName ? String(mapped.classificationName) : null,
-          activity_date: actDate ? String(actDate) : new Date().toISOString().split('T')[0],
-          execution_place: mapped.executionPlace ? String(mapped.executionPlace) : null,
-          mission_name: mapped.missionName ? String(mapped.missionName) : "مهمة مستوردة",
-          latitude: mapped.latitude ? Number(mapped.latitude) : null,
-          longitude: mapped.longitude ? Number(mapped.longitude) : null,
-          follow_up_responsible: mapped.followUpResponsible ? String(mapped.followUpResponsible) : null,
-          follow_up_phone: mapped.followUpPhone ? String(mapped.followUpPhone) : null,
-          has_beneficiaries: hasBen === "true" || hasBen === "نعم" || hasBen === "1",
-          is_open_mission: isOpen === "true" || isOpen === "نعم" || isOpen === "1",
-          is_late_submission: isLate,
-        });
-
-        if (insErr) throw insErr;
-        successCount++;
-      } catch (err) {
-        console.error("Row failed:", err, row);
-        failCount++;
-      }
-    }
-
-    setBusy(false);
-    toast.success(`تم رفع ${successCount} مهمة بنجاح. فشل ${failCount} مهمة.`);
-    if (successCount > 0) loadMissions();
-  };
 
   const filteredMissions = useMemo(() => {
     return missions.filter(m => {
@@ -522,21 +397,18 @@ export default function DepartmentDashboard() {
               </div>
             </div>
             <div className="flex gap-2">
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept=".xlsx, .xls"
-                onChange={handleExcelUpload}
+              <SmartExcelUploader 
+                onSuccess={loadMissions} 
+                trigger={
+                  <Button
+                    disabled={busy}
+                    className="gradient-primary shadow-lg shadow-primary/20"
+                  >
+                    <Plus className="w-4 h-4 ms-2" />
+                    تحميل البيانات الآن (رفع ذكي)
+                  </Button>
+                }
               />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading || busy}
-                className="gradient-primary shadow-lg shadow-primary/20"
-              >
-                {uploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Plus className="w-4 h-4 ms-2" />}
-                تحميل البيانات الآن
-              </Button>
             </div>
           </Card>
 
