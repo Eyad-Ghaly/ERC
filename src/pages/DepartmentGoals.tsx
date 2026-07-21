@@ -17,6 +17,7 @@ export default function DepartmentGoals() {
   const { profile, hasRole } = useAuth();
   const [goals, setGoals] = useState<any[]>([]);
   const [progressView, setProgressView] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // States for new items
@@ -24,7 +25,7 @@ export default function DepartmentGoals() {
   const [newObj, setNewObj] = useState({ goal_id: "", code: "", title: "" });
   const [newInd, setNewInd] = useState({ 
     objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", 
-    target_value: 0, start_date: "", end_date: "", source_of_fund: "" 
+    target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" 
   });
   
   const [editInd, setEditInd] = useState<any>(null);
@@ -35,12 +36,13 @@ export default function DepartmentGoals() {
     if (!profile?.department_id) return;
     setLoading(true);
 
-    const [goalsRes, progressRes] = await Promise.all([
+    const [goalsRes, progressRes, teamsRes] = await Promise.all([
       supabase.from('department_goals')
         .select('*, department_objectives(*, department_indicators(*))')
         .eq('department_id', profile.department_id)
         .order('created_at', { ascending: true }),
-      supabase.from('indicator_progress_view').select('*')
+      supabase.from('indicator_progress_view').select('*'),
+      supabase.from('teams').select('*').eq('department_id', profile.department_id)
     ]);
 
     if (goalsRes.data) {
@@ -56,6 +58,10 @@ export default function DepartmentGoals() {
     
     if (progressRes.data) {
       setProgressView(progressRes.data);
+    }
+    
+    if (teamsRes.data) {
+      setTeams(teamsRes.data);
     }
     
     setLoading(false);
@@ -110,15 +116,38 @@ export default function DepartmentGoals() {
 
   const addIndicator = async () => {
     if (!newInd.objective_id || !newInd.title || !newInd.target_value) return toast.error("أكمل بيانات المؤشر");
-    const { error } = await supabase.from('department_indicators').insert({
-      ...newInd,
-      code: nextIndCode
-    });
+    if (newInd.target_type === 'service_type' && !newInd.team_id) return toast.error("يجب تحديد الفريق لحساب بنوع الخدمة");
+
+    const insertData: any = {
+      objective_id: newInd.objective_id,
+      code: nextIndCode,
+      title: newInd.title,
+      unit: newInd.unit,
+      target_type: newInd.target_type,
+      target_value: newInd.target_value,
+      start_date: newInd.start_date || null,
+      end_date: newInd.end_date || null,
+      source_of_fund: newInd.source_of_fund || null,
+      team_id: newInd.target_type === 'service_type' ? newInd.team_id : null
+    };
+
+    const { error } = await supabase.from('department_indicators').insert(insertData);
     if (error) {
       toast.error(error.message);
       return;
     }
-    setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, start_date: "", end_date: "", source_of_fund: "" });
+
+    if (newInd.target_type === 'service_type' && newInd.team_id) {
+      await supabase.from('dropdown_options').insert({
+        field_key: 'service_type',
+        value: newInd.title,
+        label: newInd.title,
+        team_id: newInd.team_id,
+        active: true
+      });
+    }
+
+    setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" });
     loadData();
     toast.success("تم الإضافة");
   };
@@ -248,9 +277,23 @@ export default function DepartmentGoals() {
                                       <SelectContent>
                                         <SelectItem value="beneficiaries">حساب بعدد المستفيدين</SelectItem>
                                         <SelectItem value="missions">حساب بعدد الأنشطة/المهمات</SelectItem>
+                                        <SelectItem value="service_type">حساب بنوع الخدمة</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </div>
+
+                                  {newInd.target_type === 'service_type' && (
+                                    <div className="space-y-2">
+                                      <Label>تخصيص للفريق *</Label>
+                                      <Select value={newInd.team_id} onValueChange={v => setNewInd({...newInd, team_id: v})}>
+                                        <SelectTrigger><SelectValue placeholder="اختر الفريق..." /></SelectTrigger>
+                                        <SelectContent>
+                                          {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  )}
+
                                   <div className="space-y-2"><Label>وحدة القياس</Label><Input value={newInd.unit} onChange={e => setNewInd({...newInd, unit: e.target.value})} placeholder="فرد، جلسة، حملة..." /></div>
                                   
                                   <div className="space-y-2"><Label>العدد المستهدف (Target)</Label><Input type="number" min="1" value={newInd.target_value} onChange={e => setNewInd({...newInd, target_value: parseInt(e.target.value) || 0})} /></div>
