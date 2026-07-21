@@ -54,7 +54,8 @@ export default function MissionFeedback() {
     let missionsQuery = supabase.from("missions")
       .select(`*, mission_feedback(id, service_rating, communication_rating, importance_rating, notes, is_dismissed, created_at)`)
       .eq("has_beneficiaries", true)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(10000);
 
     if (profile?.team_id) {
       missionsQuery = missionsQuery.eq("team_id", profile.team_id);

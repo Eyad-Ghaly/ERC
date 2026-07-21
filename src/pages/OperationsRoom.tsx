@@ -35,9 +35,10 @@ export default function OperationsRoom() {
       const today = format(new Date(), "yyyy-MM-dd");
       let q = supabase
         .from("missions")
-        .select("id, mission_code, mission_name, governorate, execution_place, activity_date, status, region, is_open_mission")
+        .select("id, mission_code, mission_name, governorate, execution_place, activity_date, status, region, is_open_mission, is_canceled")
         .or(`activity_date.eq.${today},and(is_open_mission.eq.true,status.eq.open_active)`)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(10000);
       if (region !== "all") q = q.eq("region", region as any);
       const { data } = await q;
       setMissions((data ?? []) as Mission[]);

@@ -41,21 +41,41 @@ export default function DepartmentDashboard() {
   const loadMissions = async () => {
     if (!user) return;
     setLoading(true);
-    let query = supabase
-      .from("missions")
-      .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, encrypted_id, service_type), beneficiaries_group(count, service_type)")
-      .order("created_at", { ascending: false });
+    let allMissions: any[] = [];
+    let hasMore = true;
+    let page = 0;
+    const pageSize = 1000;
 
-    if (profile?.team_id) {
-      query = query.eq("team_id", profile.team_id);
-    } else {
-      query = query.eq("created_by", user.id);
+    while (hasMore) {
+      let query = supabase
+        .from("missions")
+        .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, encrypted_id, service_type), beneficiaries_group(count, service_type)")
+        .order("created_at", { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (profile?.team_id) {
+        query = query.eq("team_id", profile.team_id);
+      } else {
+        query = query.eq("created_by", user.id);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        toast.error("حدث خطأ أثناء جلب المهام: " + error.message);
+        console.error(error);
+        break;
+      }
+      
+      if (data && data.length > 0) {
+        allMissions = [...allMissions, ...data];
+        if (data.length < pageSize) hasMore = false;
+        else page++;
+      } else {
+        hasMore = false;
+      }
     }
 
-    const { data: mData, error } = await query;
-
-    if (error) { toast.error("حدث خطأ أثناء جلب المهام: " + error.message); console.error(error); }
-    else setMissions(mData || []);
+    setMissions(allMissions);
     setLoading(false);
   };
 

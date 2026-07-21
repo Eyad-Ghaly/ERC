@@ -32,8 +32,9 @@ export default function Joker({ titleOverride, embedded }: { titleOverride?: str
     (async () => {
       setLoading(true);
       let q = supabase.from("missions")
-        .select("id, mission_code, mission_name, governorate, activity_date, status, region")
-        .order("activity_date", { ascending: false });
+        .select("id, mission_code, mission_name, governorate, activity_date, status, region, is_canceled")
+        .order("activity_date", { ascending: false })
+        .limit(10000);
       if (isYouthOnly) {
         q = q.in("status", ["reviewed", "sent_to_youth", "sent_to_supervisor", "monitored", "open_active"]);
       }

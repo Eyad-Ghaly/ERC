@@ -20,8 +20,8 @@ export default function DataManager() {
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("missions")
-        .select("id, mission_code, mission_name, status, activity_date, governorate, supervisor, monitor_name")
-        .order("activity_date", { ascending: false }).limit(500);
+        .select("id, mission_code, mission_name, status, is_canceled, activity_date, governorate, supervisor, monitor_name")
+        .order("activity_date", { ascending: false }).limit(10000);
       setMissions((data ?? []) as Mission[]);
     })();
   }, []);

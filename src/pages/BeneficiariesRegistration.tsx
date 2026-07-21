@@ -160,7 +160,8 @@ export default function BeneficiariesRegistration() {
     let query = supabase
       .from("missions")
       .select("id, mission_code, mission_name, execution_place, activity_date, team_id, team:teams(code), is_open_mission, beneficiaries_status")
-      .eq("has_beneficiaries", true);
+      .eq("has_beneficiaries", true)
+      .limit(10000);
 
     if (profile?.team_id) {
       query = query.eq("team_id", profile.team_id);
