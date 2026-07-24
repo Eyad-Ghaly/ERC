@@ -137,16 +137,6 @@ export default function DepartmentGoals() {
       return;
     }
 
-    if (newInd.target_type === 'service_type' && newInd.team_id) {
-      await supabase.from('dropdown_options').insert({
-        field_key: 'service_type',
-        value: newInd.title,
-        label: newInd.title,
-        team_id: newInd.team_id,
-        active: true
-      });
-    }
-
     setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" });
     loadData();
     toast.success("تم الإضافة");

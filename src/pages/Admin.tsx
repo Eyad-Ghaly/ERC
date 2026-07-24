@@ -291,6 +291,10 @@ function CustomFieldsTab() {
   const [newRequired, setNewRequired] = useState(false);
 
   useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
+  
+  useEffect(() => {
+    if (teamId) loadFields(teamId);
+  }, [teamId]);
 
   const loadFields = async (tId: string) => {
     if (!tId) return;
@@ -457,6 +461,10 @@ function TeamCustomKpisTab() {
 
   useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
 
+  useEffect(() => {
+    if (teamId) loadKpis(teamId);
+  }, [teamId]);
+
   const loadKpis = async (tId: string) => {
     if (!tId) return;
     setLoading(true);
@@ -535,6 +543,10 @@ function FeedbackQuestionsTab() {
   const [newKey, setNewKey] = useState("");
 
   useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
+
+  useEffect(() => {
+    if (teamId) loadQuestions(teamId);
+  }, [teamId]);
 
   const loadQuestions = async (tId: string) => {
     if (!tId) return;

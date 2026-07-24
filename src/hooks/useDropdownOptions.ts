@@ -56,6 +56,29 @@ export function useDropdownOptions(fieldKey: string) {
         }
       }
 
+      if (fieldKey === 'service_type') {
+        let indQuery = supabase
+          .from("department_indicators")
+          .select("id, title")
+          .eq("target_type", "service_type");
+
+        if (profile?.team_id) {
+          indQuery = indQuery.eq("team_id", profile.team_id);
+        }
+
+        const { data: indicators } = await indQuery;
+        if (indicators) {
+          const indOptions = indicators.map(ind => ({
+            id: ind.id,
+            field_key: 'service_type',
+            value: ind.title,
+            label: ind.title,
+            active: true
+          }));
+          filtered = [...filtered, ...indOptions];
+        }
+      }
+
       if (active) {
         setOptions(filtered);
         setLoading(false);

@@ -49,7 +49,7 @@ export default function DepartmentDashboard() {
     while (hasMore) {
       let query = supabase
         .from("missions")
-        .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, encrypted_id, service_type), beneficiaries_group(count, service_type)")
+        .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, encrypted_id, registry_id, id_hash, service_type, service_quantity), beneficiaries_group(count, service_type, is_repeated)")
         .order("created_at", { ascending: false })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -176,12 +176,15 @@ export default function DepartmentDashboard() {
       });
 
       (m.beneficiaries_individual || []).forEach((b: any) => {
-        if (b.encrypted_id) uniqueBeneficiariesSet.add(b.encrypted_id);
+        if (b.registry_id) uniqueBeneficiariesSet.add(b.registry_id);
+        else if (b.id_hash) uniqueBeneficiariesSet.add(b.id_hash);
         else uniqueBeneficiariesSet.add(b.id);
       });
 
       (m.beneficiaries_group || []).forEach((g: any) => { 
-        groupBens += (g.count || 0); 
+        if (!g.is_repeated) {
+          groupBens += (g.count || 0); 
+        }
       });
     });
 
@@ -261,7 +264,7 @@ export default function DepartmentDashboard() {
     filteredMissions.forEach(m => {
       (m.beneficiaries_individual || []).forEach((b: any) => {
          const service = b.service_type || "غير محدد";
-         counts[service] = (counts[service] || 0) + 1;
+         counts[service] = (counts[service] || 0) + (b.service_quantity || 1);
       });
       (m.beneficiaries_group || []).forEach((g: any) => {
          const service = g.service_type || "غير محدد";

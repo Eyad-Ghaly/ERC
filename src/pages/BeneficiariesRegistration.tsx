@@ -14,6 +14,7 @@ import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { SmartBeneficiariesUploader } from "@/components/SmartBeneficiariesUploader";
 
 // Utility: SHA-256 hash of a string (browser native)
 async function sha256(text: string): Promise<string> {
@@ -119,6 +120,7 @@ export default function BeneficiariesRegistration() {
   const [indivPhone, setIndivPhone] = useState("");
   const [indivBirthdate, setIndivBirthdate] = useState("");
   const [indivNationality, setIndivNationality] = useState("");
+  const [indivGender, setIndivGender] = useState("");
   const [indivServiceType, setIndivServiceType] = useState("");
   const [indivServiceQuantity, setIndivServiceQuantity] = useState("1");
 
@@ -139,6 +141,7 @@ export default function BeneficiariesRegistration() {
       setRegistryMatch(data);
       setIndivFullName(data.full_name || indivFullName);
       setIndivNationality(data.nationality || indivNationality);
+      setIndivGender(data.gender || indivGender);
       setIndivBirthdate(data.birthdate || indivBirthdate);
       setIndivPhone(data.phone || indivPhone);
       // Fetch previous services
@@ -284,6 +287,7 @@ export default function BeneficiariesRegistration() {
       setRegistryMatch(data);
       setIndivFullName(data.full_name || indivFullName);
       setIndivNationality(data.nationality || indivNationality);
+      setIndivGender(data.gender || indivGender);
       setIndivBirthdate(data.birthdate || indivBirthdate);
       setIndivPhone(data.phone || indivPhone);
       // Fetch previous services
@@ -318,6 +322,7 @@ export default function BeneficiariesRegistration() {
   const applyRegistrySuggestion = async (reg: any) => {
     setIndivFullName(reg.full_name);
     setIndivNationality(reg.nationality || "");
+    setIndivGender(reg.gender || "");
     setIndivBirthdate(reg.birthdate || "");
     setIndivPhone(reg.phone || "");
     setNameSuggestions([]);
@@ -354,6 +359,7 @@ export default function BeneficiariesRegistration() {
         id_hash: hash,
         full_name: indivFullName,
         nationality: indivNationality || null,
+        gender: indivGender || null,
         birthdate: indivBirthdate || null,
         phone: indivPhone || null,
         first_registered_by: user?.id,
@@ -365,6 +371,7 @@ export default function BeneficiariesRegistration() {
       await supabase.from('beneficiaries_registry').update({
         full_name: indivFullName,
         nationality: indivNationality || null,
+        gender: indivGender || null,
         birthdate: indivBirthdate || null,
         phone: indivPhone || null,
       }).eq('id', registryMatch.id);
@@ -373,6 +380,7 @@ export default function BeneficiariesRegistration() {
       const { data: newReg } = await supabase.from('beneficiaries_registry').insert({
         full_name: indivFullName,
         nationality: indivNationality || null,
+        gender: indivGender || null,
         birthdate: indivBirthdate || null,
         phone: indivPhone || null,
         first_registered_by: user?.id,
@@ -391,6 +399,7 @@ export default function BeneficiariesRegistration() {
       phone: indivPhone || null,
       birthdate: indivBirthdate || null,
       nationality: indivNationality || null,
+      gender: indivGender || null,
       service_type: indivServiceType || null,
       service_quantity: parseInt(indivServiceQuantity) || 1,
       custom_metadata: Object.keys(customValues).length > 0 ? customValues : null,
@@ -402,7 +411,7 @@ export default function BeneficiariesRegistration() {
     } else {
       toast.success("تم إضافة المستفيد بنجاح");
       setIndivNationalId(""); setIndivFullName(""); setIndivPhone("");
-      setIndivBirthdate(""); setIndivNationality(""); setIndivServiceType(""); setIndivServiceQuantity("1");
+      setIndivBirthdate(""); setIndivNationality(""); setIndivGender(""); setIndivServiceType(""); setIndivServiceQuantity("1");
       setCustomValues({}); setRegistryMatch(null); setPrevServices([]); setNameSuggestions([]);
       fetchRegistered(target);
     }
@@ -467,9 +476,12 @@ export default function BeneficiariesRegistration() {
         <Card className="p-6 border-primary/20 shadow-sm">
           <div className="flex items-center justify-between mb-4">
              <Label className="text-base font-semibold text-primary">اختر المهمة لإدخال مستفيديها:</Label>
-             <div className="flex bg-muted/50 p-1 rounded-md">
-                <Button size="sm" variant={statusFilter === 'pending' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('pending'); setSelectedTargetId(""); }} className="rounded-sm"><ListTodo className="w-4 h-4 ms-2"/> قيد الانتظار</Button>
-                <Button size="sm" variant={statusFilter === 'completed' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('completed'); setSelectedTargetId(""); }} className="rounded-sm"><CheckSquare className="w-4 h-4 ms-2"/> مكتملة</Button>
+             <div className="flex items-center gap-4">
+                 <SmartBeneficiariesUploader onSuccess={() => { fetchTargets(); if (selectedTargetId) fetchRegistered(targets.find(t => t.id === selectedTargetId)); }} />
+                 <div className="flex bg-muted/50 p-1 rounded-md">
+                    <Button size="sm" variant={statusFilter === 'pending' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('pending'); setSelectedTargetId(""); }} className="rounded-sm"><ListTodo className="w-4 h-4 ms-2"/> قيد الانتظار</Button>
+                    <Button size="sm" variant={statusFilter === 'completed' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('completed'); setSelectedTargetId(""); }} className="rounded-sm"><CheckSquare className="w-4 h-4 ms-2"/> مكتملة</Button>
+                 </div>
              </div>
           </div>
           
@@ -564,6 +576,16 @@ export default function BeneficiariesRegistration() {
                     </div>
                     <div className="space-y-1.5"><Label>تاريخ الميلاد</Label><Input type="date" value={indivBirthdate} onChange={(e) => setIndivBirthdate(e.target.value)} /></div>
                     <div className="space-y-1.5"><Label>الجنسية</Label><Input value={indivNationality} onChange={(e) => setIndivNationality(e.target.value)} /></div>
+                    <div className="space-y-1.5">
+                      <Label>النوع</Label>
+                      <Select value={indivGender} onValueChange={setIndivGender}>
+                        <SelectTrigger><SelectValue placeholder="اختر النوع" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ذكر">ذكر</SelectItem>
+                          <SelectItem value="أنثى">أنثى</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <FieldSelect fieldKey="service_type" value={indivServiceType} onChange={setIndivServiceType} label="نوع الخدمة" />
                     <div className="space-y-1.5"><Label>عدد الخدمة</Label><Input type="number" min="1" value={indivServiceQuantity} onChange={(e) => setIndivServiceQuantity(e.target.value)} /></div>
 
