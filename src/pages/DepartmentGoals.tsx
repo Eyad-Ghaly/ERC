@@ -28,6 +28,9 @@ export default function DepartmentGoals() {
     target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" 
   });
   
+  // States for editing items
+  const [editGoal, setEditGoal] = useState<{ id: string; code: string; title: string } | null>(null);
+  const [editObj, setEditObj] = useState<{ id: string; code: string; title: string } | null>(null);
   const [editInd, setEditInd] = useState<any>(null);
   
   const isDeptAdmin = hasRole('department_admin') || hasRole('admin') || true;
@@ -142,14 +145,49 @@ export default function DepartmentGoals() {
     toast.success("تم الإضافة");
   };
 
-  const updateIndicatorNotes = async () => {
-    const { error } = await supabase.from('department_indicators').update({
-      notes: editInd.notes
-    }).eq('id', editInd.id);
+  const updateGoal = async () => {
+    if (!editGoal || !editGoal.title.trim()) return toast.error("أدخل اسم الهدف العام");
+    const { error } = await supabase.from('department_goals').update({
+      title: editGoal.title.trim()
+    }).eq('id', editGoal.id);
+    if (error) { toast.error(error.message); return; }
+    setEditGoal(null);
+    loadData();
+    toast.success("تم تعديل الهدف العام بنجاح");
+  };
+
+  const updateObjective = async () => {
+    if (!editObj || !editObj.title.trim()) return toast.error("أدخل اسم الهدف الفرعي");
+    const { error } = await supabase.from('department_objectives').update({
+      title: editObj.title.trim()
+    }).eq('id', editObj.id);
+    if (error) { toast.error(error.message); return; }
+    setEditObj(null);
+    loadData();
+    toast.success("تم تعديل الهدف الفرعي بنجاح");
+  };
+
+  const updateIndicator = async () => {
+    if (!editInd || !editInd.title || !editInd.target_value) return toast.error("أكمل بيانات المؤشر");
+    if (editInd.target_type === 'service_type' && !editInd.team_id) return toast.error("يجب تحديد الفريق لحساب بنوع الخدمة");
+
+    const updateData: any = {
+      title: editInd.title,
+      unit: editInd.unit || "فرد",
+      target_type: editInd.target_type,
+      target_value: editInd.target_value,
+      start_date: editInd.start_date || null,
+      end_date: editInd.end_date || null,
+      source_of_fund: editInd.source_of_fund || null,
+      team_id: editInd.target_type === 'service_type' ? editInd.team_id : null,
+      notes: editInd.notes || null,
+    };
+
+    const { error } = await supabase.from('department_indicators').update(updateData).eq('id', editInd.id);
     if (error) { toast.error(error.message); return; }
     setEditInd(null);
     loadData();
-    toast.success("تم التحديث");
+    toast.success("تم تعديل المؤشر بنجاح");
   };
 
   const deleteItem = async (table: string, id: string) => {
@@ -197,6 +235,84 @@ export default function DepartmentGoals() {
           )}
         </div>
 
+        {/* Dialog for Editing Goal */}
+        <Dialog open={!!editGoal} onOpenChange={(open) => !open && setEditGoal(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>تعديل الهدف العام (Goal)</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2"><Label>الكود</Label><Input value={editGoal?.code || ''} disabled dir="ltr" className="bg-muted font-bold" /></div>
+              <div className="space-y-2"><Label>اسم الهدف العام</Label><Input value={editGoal?.title || ''} onChange={e => setEditGoal(prev => prev ? { ...prev, title: e.target.value } : null)} /></div>
+              <Button onClick={updateGoal} className="w-full">حفظ التعديلات</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog for Editing Objective */}
+        <Dialog open={!!editObj} onOpenChange={(open) => !open && setEditObj(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>تعديل الهدف الفرعي (Objective)</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2"><Label>الكود</Label><Input value={editObj?.code || ''} disabled dir="ltr" className="bg-muted font-bold" /></div>
+              <div className="space-y-2"><Label>اسم الهدف الفرعي</Label><Input value={editObj?.title || ''} onChange={e => setEditObj(prev => prev ? { ...prev, title: e.target.value } : null)} /></div>
+              <Button onClick={updateObjective} className="w-full">حفظ التعديلات</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog for Editing Indicator */}
+        <Dialog open={!!editInd} onOpenChange={(open) => !open && setEditInd(null)}>
+          <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>تعديل مؤشر النتيجة (النشاط)</DialogTitle></DialogHeader>
+            <div className="grid grid-cols-2 gap-4 pt-4">
+              <div className="space-y-2"><Label>الكود</Label><Input value={editInd?.code || ''} disabled dir="ltr" className="bg-muted font-bold" /></div>
+              <div className="space-y-2"><Label>تفاصيل النشاط / المؤشر</Label><Input value={editInd?.title || ''} onChange={e => setEditInd({ ...editInd, title: e.target.value })} /></div>
+              
+              <div className="space-y-2">
+                <Label>نوع الحساب (Target Type)</Label>
+                <Select value={editInd?.target_type || 'beneficiaries'} onValueChange={v => setEditInd({ ...editInd, target_type: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="beneficiaries">حساب بعدد المستفيدين</SelectItem>
+                    <SelectItem value="missions">حساب بعدد الأنشطة/المهمات</SelectItem>
+                    <SelectItem value="service_type">حساب بنوع الخدمة</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {editInd?.target_type === 'service_type' && (
+                <div className="space-y-2">
+                  <Label>تخصيص للفريق *</Label>
+                  <Select value={editInd?.team_id || ''} onValueChange={v => setEditInd({ ...editInd, team_id: v })}>
+                    <SelectTrigger><SelectValue placeholder="اختر الفريق..." /></SelectTrigger>
+                    <SelectContent>
+                      {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-2"><Label>وحدة القياس</Label><Input value={editInd?.unit || ''} onChange={e => setEditInd({ ...editInd, unit: e.target.value })} /></div>
+              <div className="space-y-2"><Label>العدد المستهدف (Target)</Label><Input type="number" min="1" value={editInd?.target_value || 0} onChange={e => setEditInd({ ...editInd, target_value: parseInt(e.target.value) || 0 })} /></div>
+              <div className="space-y-2"><Label>جهة التمويل</Label><Input value={editInd?.source_of_fund || ''} onChange={e => setEditInd({ ...editInd, source_of_fund: e.target.value })} /></div>
+              
+              <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="date" value={editInd?.start_date || ''} onChange={e => setEditInd({ ...editInd, start_date: e.target.value })} /></div>
+              <div className="space-y-2"><Label>تاريخ النهاية</Label><Input type="date" value={editInd?.end_date || ''} onChange={e => setEditInd({ ...editInd, end_date: e.target.value })} /></div>
+
+              <div className="space-y-2 col-span-2">
+                <Label>ملاحظات المؤشر</Label>
+                <Textarea 
+                  value={editInd?.notes || ''} 
+                  onChange={e => setEditInd({ ...editInd, notes: e.target.value })} 
+                  placeholder="أضف ملاحظات للمؤشر..."
+                  className="min-h-[100px] resize-none"
+                />
+              </div>
+
+              <Button onClick={updateIndicator} className="col-span-2 mt-2">حفظ التعديلات</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {goals.length === 0 ? (
           <Card className="p-8 text-center text-muted-foreground flex flex-col items-center gap-2">
             <AlertCircle className="w-10 h-10 text-muted-foreground/50 mx-auto" />
@@ -228,6 +344,9 @@ export default function DepartmentGoals() {
                           </div>
                         </DialogContent>
                       </Dialog>
+                      <Button size="icon" variant="secondary" className="h-8 w-8 text-primary" title="تعديل الهدف العام" onClick={() => setEditGoal({ id: goal.id, code: goal.code, title: goal.title })}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
                       <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => deleteItem('department_goals', goal.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -296,8 +415,11 @@ export default function DepartmentGoals() {
                                 </div>
                               </DialogContent>
                             </Dialog>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteItem('department_objectives', obj.id)}>
-                              <Trash2 className="w-3 h-3" />
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-primary hover:bg-primary/10" title="تعديل الهدف الفرعي" onClick={() => setEditObj({ id: obj.id, code: obj.code, title: obj.title })}>
+                              <Edit className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => deleteItem('department_objectives', obj.id)}>
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                         )}
@@ -335,7 +457,7 @@ export default function DepartmentGoals() {
                               if (isCompleted) {
                                 statusLabel = "مكتمل";
                                 statusColor = "bg-success text-success-foreground";
-                              } else if (ind.start_date && today < ind.start_date) {
+                               } else if (ind.start_date && today < ind.start_date) {
                                 statusLabel = "لم يبدأ بعد";
                                 statusColor = "bg-muted text-muted-foreground";
                               } else if (isLate) {
@@ -369,26 +491,10 @@ export default function DepartmentGoals() {
                                   {isDeptAdmin && (
                                     <td className="p-3 text-center">
                                       <div className="flex justify-center gap-1">
-                                        <Dialog open={!!editInd && editInd.id === ind.id} onOpenChange={(open) => !open && setEditInd(null)}>
-                                          <DialogTrigger asChild>
-                                            <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:bg-primary/10" onClick={() => setEditInd({...ind})}>
-                                              <Edit className="w-3 h-3" />
-                                            </Button>
-                                          </DialogTrigger>
-                                          <DialogContent className="text-right">
-                                            <DialogHeader><DialogTitle>إضافة/تعديل ملاحظات</DialogTitle></DialogHeader>
-                                            <div className="space-y-4 pt-4">
-                                              <Textarea 
-                                                value={editInd?.notes || ''} 
-                                                onChange={e => setEditInd({...editInd, notes: e.target.value})} 
-                                                placeholder="أضف ملاحظات للمؤشر..."
-                                                className="min-h-[150px] resize-none"
-                                              />
-                                              <Button onClick={updateIndicatorNotes} className="w-full">حفظ الملاحظات</Button>
-                                            </div>
-                                          </DialogContent>
-                                        </Dialog>
-                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:bg-destructive/10" onClick={() => deleteItem('department_indicators', ind.id)}>
+                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-primary hover:bg-primary/10" title="تعديل المؤشر" onClick={() => setEditInd({ ...ind })}>
+                                          <Edit className="w-3 h-3" />
+                                        </Button>
+                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:bg-destructive/10" title="حذف المؤشر" onClick={() => deleteItem('department_indicators', ind.id)}>
                                           <Trash2 className="w-3 h-3" />
                                         </Button>
                                       </div>

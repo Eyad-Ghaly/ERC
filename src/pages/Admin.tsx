@@ -12,8 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { ROLES, DROPDOWN_FIELD_LABELS, type AppRole } from "@/lib/constants";
-import { toast } from "sonner";
-import { Trash2, Plus, Check } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Trash2, Plus, Check, Pencil, Loader2 } from "lucide-react";
 
 interface ProfileRow {
   id: string; user_id: string; email: string; full_name: string | null;
@@ -166,10 +166,22 @@ function DropdownsTab() {
   const add = async () => {
     if (!val || !lbl) return;
     const { error } = await supabase.from("dropdown_options").insert({ field_key: field, value: val, label: lbl, team_id: teamId === "all" ? null : teamId });
-    if (error) toast.error(error.message); else { setVal(""); setLbl(""); load(); }
+    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setVal(""); setLbl(""); load(); }
   };
-  const del = async (id: string) => { await supabase.from("dropdown_options").delete().eq("id", id); load(); };
-  const toggle = async (o: any) => { await supabase.from("dropdown_options").update({ active: !o.active }).eq("id", o.id); load(); };
+
+  const del = async (id: string) => {
+    setOpts(prev => prev.filter(o => o.id !== id));
+    const { error } = await supabase.from("dropdown_options").delete().eq("id", id);
+    if (error) { toast.error(error.message); load(); }
+    else { toast.success("تم الحذف"); load(); }
+  };
+
+  const toggle = async (o: any) => {
+    setOpts(prev => prev.map(item => item.id === o.id ? { ...item, active: !o.active } : item));
+    const { error } = await supabase.from("dropdown_options").update({ active: !o.active }).eq("id", o.id);
+    if (error) { toast.error(error.message); load(); }
+    else { toast.success("تم التحديث"); load(); }
+  };
 
   return (
     <Card className="card-elevated p-4 space-y-4">
@@ -308,38 +320,135 @@ function CustomFieldsTab() {
     setLoadingFields(false);
   };
 
+  const [isAddingField, setIsAddingField] = useState(false);
+
   const addField = async () => {
     if (!teamId) return toast.error("اختر الفريق أولاً");
     if (!newLabel.trim()) return toast.error("أدخل اسم الحقل");
     if (!newKey.trim()) return toast.error("أدخل مفتاح الحقل بالإنجليزية");
 
-    const optionsArr = newType === "select"
-      ? newOptions.split(",").map((o: string) => o.trim()).filter(Boolean)
-      : [];
+    setIsAddingField(true);
+    try {
+      const selectedTeam = teams.find(t => t.id === teamId);
+      const sanitizedKey = newKey.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      const optionsArr = newType === "select"
+        ? newOptions.split(/[,،\n]+/).map((o: string) => o.trim()).filter(Boolean)
+        : [];
 
-    const { error } = await supabase.from("team_custom_fields").insert({
-      team_id: teamId,
-      field_key: newKey.trim().toLowerCase().replace(/\s+/g, "_"),
-      field_label: newLabel.trim(),
-      field_type: newType,
-      field_options: optionsArr,
-      is_required: newRequired,
-      sort_order: fields.length,
-    });
+      const payload: any = {
+        team_id: teamId,
+        team_code: selectedTeam?.code || "",
+        field_key: sanitizedKey,
+        field_label: newLabel.trim(),
+        field_type: newType,
+        field_options: optionsArr,
+        is_required: newRequired,
+        sort_order: fields.length,
+      };
 
-    if (error) {
-      toast.error(error.message);
-    } else {
+      const { error } = await supabase.from("team_custom_fields").insert(payload);
+
+      if (error) {
+        if (error.message?.includes("team_code")) {
+          delete payload.team_code;
+          const { error: err2 } = await supabase.from("team_custom_fields").insert(payload);
+          if (err2) throw err2;
+        } else {
+          throw error;
+        }
+      }
+
       toast.success("تم إضافة الحقل بنجاح");
       setNewLabel(""); setNewKey(""); setNewType("text"); setNewOptions(""); setNewRequired(false);
       loadFields(teamId);
+    } catch (err: any) {
+      console.error("addField error:", err);
+      toast.error(err.message || "حدث خطأ أثناء إضافة الحقل");
+    } finally {
+      setIsAddingField(false);
     }
   };
 
   const deleteField = async (id: string) => {
     if (!confirm("هل أنت متأكد من حذف هذا الحقل؟")) return;
-    await supabase.from("team_custom_fields").delete().eq("id", id);
-    loadFields(teamId);
+    setFields(prev => prev.filter(f => f.id !== id));
+    try {
+      const { error } = await supabase.from("team_custom_fields").delete().eq("id", id);
+      if (error) throw error;
+      toast.success("تم حذف الحقل");
+      loadFields(teamId);
+    } catch (err: any) {
+      toast.error(err.message || "فشل الحذف");
+      loadFields(teamId);
+    }
+  };
+
+  const [editingField, setEditingField] = useState<any | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editKey, setEditKey] = useState("");
+  const [editType, setEditType] = useState("text");
+  const [editOptions, setEditOptions] = useState("");
+  const [editRequired, setEditRequired] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const openEditModal = (f: any) => {
+    setEditingField(f);
+    setEditLabel(f.field_label || "");
+    setEditKey(f.field_key || "");
+    setEditType(f.field_type || "text");
+    
+    const parsedOpts = (f.field_options || []).flatMap((o: string) =>
+      typeof o === 'string' ? o.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [o]
+    );
+    setEditOptions(parsedOpts.join("، "));
+    setEditRequired(!!f.is_required);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingField) return;
+    if (!editLabel.trim()) return toast.error("أدخل اسم الحقل");
+    if (!editKey.trim()) return toast.error("أدخل مفتاح الحقل بالإنجليزية");
+
+    setIsSavingEdit(true);
+    try {
+      const sanitizedKey = editKey.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      const optionsArr = editType === "select"
+        ? editOptions.split(/[,،\n]+/).map((o: string) => o.trim()).filter(Boolean)
+        : [];
+
+      // Optimistic update so user sees change immediately
+      setFields(prev => prev.map(f => f.id === editingField.id ? {
+        ...f,
+        field_label: editLabel.trim(),
+        field_key: sanitizedKey,
+        field_type: editType,
+        field_options: optionsArr,
+        is_required: editRequired,
+      } : f));
+
+      const { error } = await supabase
+        .from("team_custom_fields")
+        .update({
+          field_label: editLabel.trim(),
+          field_key: sanitizedKey,
+          field_type: editType,
+          field_options: optionsArr,
+          is_required: editRequired,
+        })
+        .eq("id", editingField.id);
+
+      if (error) throw error;
+
+      toast.success("تم تعديل الحقل بنجاح");
+      setEditingField(null);
+      loadFields(teamId);
+    } catch (err: any) {
+      console.error("handleSaveEdit error:", err);
+      toast.error(err.message || "حدث خطأ أثناء تعديل الحقل");
+      loadFields(teamId);
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   return (
@@ -397,8 +506,16 @@ function CustomFieldsTab() {
                 <label htmlFor="new_required" className="text-sm cursor-pointer">حقل إجباري</label>
               </div>
             </div>
-            <Button className="mt-4" onClick={addField}>
-              <Plus className="w-4 h-4 ms-2" /> إضافة الحقل
+            <Button className="mt-4" onClick={addField} disabled={isAddingField}>
+              {isAddingField ? (
+                <>
+                  <Loader2 className="w-4 h-4 ms-2 animate-spin" /> جاري الإضافة...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 ms-2" /> إضافة الحقل
+                </>
+              )}
             </Button>
           </Card>
 
@@ -426,8 +543,15 @@ function CustomFieldsTab() {
                       <TableCell className="font-bold">{f.field_label}</TableCell>
                       <TableCell><code className="text-xs bg-muted px-1.5 py-0.5 rounded" dir="ltr">{f.field_key}</code></TableCell>
                       <TableCell><Badge variant="outline">{f.field_type}</Badge></TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">
-                        {f.field_type === "select" ? (f.field_options || []).join("، ") : "—"}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {f.field_type === "select" ? (() => {
+                          const opts = (f.field_options || []).flatMap((o: string) => typeof o === 'string' ? o.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [o]);
+                          return (
+                            <div className="max-w-[200px] truncate" title={opts.join("، ")}>
+                              {opts.join("، ")}
+                            </div>
+                          );
+                        })() : "—"}
                       </TableCell>
                       <TableCell>
                         {f.is_required
@@ -435,9 +559,14 @@ function CustomFieldsTab() {
                           : <span className="text-muted-foreground text-xs">اختياري</span>}
                       </TableCell>
                       <TableCell>
-                        <Button size="icon" variant="ghost" onClick={() => deleteField(f.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button size="icon" variant="ghost" onClick={() => openEditModal(f)} title="تعديل الحقل">
+                            <Pencil className="w-4 h-4 text-primary" />
+                          </Button>
+                          <Button size="icon" variant="ghost" onClick={() => deleteField(f.id)} title="حذف الحقل">
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -447,6 +576,53 @@ function CustomFieldsTab() {
           </Card>
         </>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingField} onOpenChange={(open) => { if (!open) setEditingField(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>تعديل الحقل المخصص</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>اسم الحقل (عربي) *</Label>
+              <Input value={editLabel} onChange={e => setEditLabel(e.target.value)} placeholder="مثال: التخصص" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>مفتاح الحقل (إنجليزي) *</Label>
+              <Input value={editKey} onChange={e => setEditKey(e.target.value)} placeholder="specialty" dir="ltr" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>نوع الحقل</Label>
+              <Select value={editType} onValueChange={setEditType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">نص حر (Text)</SelectItem>
+                  <SelectItem value="number">رقم (Number)</SelectItem>
+                  <SelectItem value="select">قائمة منسدلة (Select)</SelectItem>
+                  <SelectItem value="date">تاريخ (Date)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editType === "select" && (
+              <div className="space-y-1.5">
+                <Label>خيارات القائمة (افصلها بفاصلة ",")</Label>
+                <Input value={editOptions} onChange={e => setEditOptions(e.target.value)} placeholder="باطنة، عظام، أطفال" />
+              </div>
+            )}
+            <div className="flex items-center gap-3 pt-2">
+              <Checkbox id="edit_required" checked={editRequired} onCheckedChange={(v: any) => setEditRequired(!!v)} />
+              <label htmlFor="edit_required" className="text-sm cursor-pointer">حقل إجباري</label>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button variant="outline" onClick={() => setEditingField(null)}>إلغاء</Button>
+            <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
+              {isSavingEdit ? "جاري الحفظ..." : "حفظ التعديلات"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

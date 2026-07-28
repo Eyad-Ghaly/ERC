@@ -10,11 +10,46 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, UserCheck, Activity, Map, Database, FileUp, Loader2, Plus } from "lucide-react";
+import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, UserCheck, Activity, Map, Database, FileUp, Loader2, Plus, X, Filter, HeartHandshake, Globe, Search } from "lucide-react";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { AddVolunteerDialog } from "@/components/AddVolunteerDialog";
 import { SmartExcelUploader } from "@/components/SmartExcelUploader";
+
+// Simple AES-GCM decryption using static key
+const ENCRYPTION_KEY = "12345678901234567890123456789012"; // 32 bytes
+
+async function getCryptoKey() {
+  const encoder = new TextEncoder();
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(ENCRYPTION_KEY),
+    { name: "AES-GCM" },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function decryptData(encryptedBase64: string): Promise<string> {
+  if (!encryptedBase64) return "";
+  try {
+    const combined = new Uint8Array(
+      atob(encryptedBase64).split('').map(c => c.charCodeAt(0))
+    );
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const key = await getCryptoKey();
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      data
+    );
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (e) {
+    return "********";
+  }
+}
 
 export default function DepartmentDashboard() {
   const { user, profile } = useAuth();
@@ -26,6 +61,18 @@ export default function DepartmentDashboard() {
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  // Interactive Chart Filters
+  const [selectedGovernorate, setSelectedGovernorate] = useState<string>("");
+  const [selectedClassification, setSelectedClassification] = useState<string>("");
+  const [selectedActivityType, setSelectedActivityType] = useState<string>("");
+  const [selectedActivityDetail, setSelectedActivityDetail] = useState<string>("");
+  const [selectedResponseType, setSelectedResponseType] = useState<string>("");
+  const [selectedService, setSelectedService] = useState<string>("");
+
+  // Beneficiaries Search & Decryption state
+  const [benSearchQuery, setBenSearchQuery] = useState("");
+  const [decryptedBeneficiaries, setDecryptedBeneficiaries] = useState<any[]>([]);
 
   // Volunteers state
   const [teamVolunteers, setTeamVolunteers] = useState<any[]>([]);
@@ -49,7 +96,7 @@ export default function DepartmentDashboard() {
     while (hasMore) {
       let query = supabase
         .from("missions")
-        .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(id, encrypted_id, registry_id, id_hash, service_type, service_quantity), beneficiaries_group(count, service_type, is_repeated)")
+        .select("*, mission_volunteers(id, membership_number, full_name), beneficiaries_individual(*), beneficiaries_group(*)")
         .order("created_at", { ascending: false })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
@@ -151,22 +198,61 @@ export default function DepartmentDashboard() {
     setBusy(false);
   };
 
-
-  const filteredMissions = useMemo(() => {
+  // 1. Base Active Missions (Filtered by Date and non-canceled status)
+  const activeMissionsAll = useMemo(() => {
     return missions.filter(m => {
+      if (m.is_canceled || m.status === "canceled") return false;
       if (startDate && m.activity_date < startDate) return false;
       if (endDate && m.activity_date > endDate) return false;
       return true;
     });
   }, [missions, startDate, endDate]);
 
+  // 2. Active Missions Filtered by Chart Interactivity (for KPIs and History Table)
+  const activeMissionsFiltered = useMemo(() => {
+    return activeMissionsAll.filter(m => {
+      if (selectedGovernorate && (m.governorate || "غير محدد") !== selectedGovernorate) return false;
+      if (selectedClassification && (m.activity_classification || "غير مصنف") !== selectedClassification) return false;
+      if (selectedActivityType && (m.activity_type || "عام") !== selectedActivityType) return false;
+      if (selectedResponseType && (m.type_name || m.mission_nature || "عام") !== selectedResponseType) return false;
+      if (selectedActivityDetail && (m.activity_details || "غير محدد") !== selectedActivityDetail) return false;
+      if (selectedService) {
+        const hasInd = (m.beneficiaries_individual || []).some((b: any) => (b.service_type || "غير محدد") === selectedService);
+        const hasGrp = (m.beneficiaries_group || []).some((g: any) => (g.service_type || "غير محدد") === selectedService);
+        if (!hasInd && !hasGrp) return false;
+      }
+      return true;
+    });
+  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService]);
+
+  // 3. For History Table
+  const filteredMissions = useMemo(() => {
+    return missions.filter(m => {
+      if (startDate && m.activity_date < startDate) return false;
+      if (endDate && m.activity_date > endDate) return false;
+      if (selectedGovernorate && (m.governorate || "غير محدد") !== selectedGovernorate) return false;
+      if (selectedClassification && (m.activity_classification || "غير مصنف") !== selectedClassification) return false;
+      if (selectedActivityType && (m.activity_type || "عام") !== selectedActivityType) return false;
+      if (selectedResponseType && (m.type_name || m.mission_nature || "عام") !== selectedResponseType) return false;
+      if (selectedActivityDetail && (m.activity_details || "غير محدد") !== selectedActivityDetail) return false;
+      if (selectedService) {
+        const hasInd = (m.beneficiaries_individual || []).some((b: any) => (b.service_type || "غير محدد") === selectedService);
+        const hasGrp = (m.beneficiaries_group || []).some((g: any) => (g.service_type || "غير محدد") === selectedService);
+        if (!hasInd && !hasGrp) return false;
+      }
+      return true;
+    });
+  }, [missions, startDate, endDate, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService]);
+
   const kpis = useMemo(() => {
     let vols = 0;
     let groupBens = 0;
+    let indivServices = 0;
+    let groupServices = 0;
     const uniqueVolunteersSet = new Set();
     const uniqueBeneficiariesSet = new Set();
 
-    filteredMissions.forEach(m => {
+    activeMissionsFiltered.forEach(m => {
       vols += (m.mission_volunteers || []).length;
       
       (m.mission_volunteers || []).forEach((v: any) => {
@@ -176,12 +262,22 @@ export default function DepartmentDashboard() {
       });
 
       (m.beneficiaries_individual || []).forEach((b: any) => {
-        if (b.registry_id) uniqueBeneficiariesSet.add(b.registry_id);
-        else if (b.id_hash) uniqueBeneficiariesSet.add(b.id_hash);
-        else uniqueBeneficiariesSet.add(b.id);
+        if (selectedService && (b.service_type || "غير محدد") !== selectedService) return;
+        indivServices += (b.service_quantity || 1);
+        if (b.id_hash) {
+          uniqueBeneficiariesSet.add(`hash::${b.id_hash}`);
+        } else if (b.full_name && b.full_name.trim()) {
+          uniqueBeneficiariesSet.add(`name::${b.full_name.trim().toLowerCase()}`);
+        } else if (b.registry_id) {
+          uniqueBeneficiariesSet.add(`reg::${b.registry_id}`);
+        } else {
+          uniqueBeneficiariesSet.add(`id::${b.id}`);
+        }
       });
 
       (m.beneficiaries_group || []).forEach((g: any) => { 
+        if (selectedService && (g.service_type || "غير محدد") !== selectedService) return;
+        groupServices += (g.count || 0);
         if (!g.is_repeated) {
           groupBens += (g.count || 0); 
         }
@@ -189,17 +285,100 @@ export default function DepartmentDashboard() {
     });
 
     return {
-      totalMissions: filteredMissions.length,
-      totalVolunteers: vols, // Participations
+      totalMissions: activeMissionsFiltered.length,
+      totalVolunteers: vols,
       uniqueVolunteers: uniqueVolunteersSet.size,
-      totalBeneficiaries: uniqueBeneficiariesSet.size + groupBens
+      totalBeneficiaries: uniqueBeneficiariesSet.size + groupBens,
+      totalServices: indivServices + groupServices
     };
-  }, [filteredMissions]);
+  }, [activeMissionsFiltered, selectedService]);
+
+  // Beneficiaries Decryption effect for search table
+  useEffect(() => {
+    const list: any[] = [];
+    activeMissionsFiltered.forEach(m => {
+      (m.beneficiaries_individual || []).forEach((b: any) => {
+        list.push({
+          ...b,
+          mission_code: m.mission_code,
+          mission_name: m.mission_name,
+          date: m.activity_date
+        });
+      });
+    });
+
+    let isMounted = true;
+    Promise.all(
+      list.map(async (item) => ({
+        ...item,
+        decrypted_id: item.encrypted_id
+          ? await decryptData(item.encrypted_id)
+          : item.id_hash
+          ? "مسجل بالهاش"
+          : "غير مدخل",
+      }))
+    ).then((res) => {
+      if (isMounted) setDecryptedBeneficiaries(res);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeMissionsFiltered]);
+
+  const searchedBeneficiaries = useMemo(() => {
+    if (!benSearchQuery.trim()) return decryptedBeneficiaries;
+    const q = benSearchQuery.trim().toLowerCase();
+    return decryptedBeneficiaries.filter((b) => {
+      return (
+        (b.full_name && b.full_name.toLowerCase().includes(q)) ||
+        (b.decrypted_id && b.decrypted_id.includes(q)) ||
+        (b.phone && b.phone.includes(q)) ||
+        (b.mission_code && b.mission_code.toLowerCase().includes(q)) ||
+        (b.service_type && b.service_type.toLowerCase().includes(q))
+      );
+    });
+  }, [decryptedBeneficiaries, benSearchQuery]);
+
+  // Gender Breakdown
+  const genderData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    activeMissionsFiltered.forEach(m => {
+      (m.beneficiaries_individual || []).forEach((b: any) => {
+        let g = b.gender || "غير محدد";
+        if (g.trim().includes("ذكر") || g.toLowerCase() === "male") g = "ذكر";
+        else if (g.trim().includes("أنثى") || g.toLowerCase() === "female") g = "أنثى";
+        counts[g] = (counts[g] || 0) + (b.service_quantity || 1);
+      });
+      (m.beneficiaries_group || []).forEach((g: any) => {
+        let gen = g.gender || "غير محدد";
+        if (gen.trim().includes("ذكر") || gen.toLowerCase() === "male") gen = "ذكر";
+        else if (gen.trim().includes("أنثى") || gen.toLowerCase() === "female") gen = "أنثى";
+        counts[gen] = (counts[gen] || 0) + (g.count || 0);
+      });
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }, [activeMissionsFiltered]);
+
+  // Nationality Breakdown
+  const nationalityData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    activeMissionsFiltered.forEach(m => {
+      (m.beneficiaries_individual || []).forEach((b: any) => {
+        const nat = b.nationality || "غير محدد";
+        counts[nat] = (counts[nat] || 0) + (b.service_quantity || 1);
+      });
+      (m.beneficiaries_group || []).forEach((g: any) => {
+        const nat = g.nationality || "غير محدد";
+        counts[nat] = (counts[nat] || 0) + (g.count || 0);
+      });
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [activeMissionsFiltered]);
 
   const aggregatedTargets = useMemo(() => {
     if (!targets.length) return null;
     
-    // Determine the month range based on filters, or default to current month
     let startMonth = "";
     let endMonth = "";
     
@@ -241,27 +420,98 @@ export default function DepartmentDashboard() {
     };
   }, [targets, startDate, endDate]);
 
-  const chartData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    filteredMissions.forEach(m => {
-      const cls = m.activity_classification || "غير مصنف";
-      counts[cls] = (counts[cls] || 0) + 1;
+  // Hierarchical Treemap Data: Classification -> Activity Type
+  const treemapTreeData = useMemo(() => {
+    const base = activeMissionsAll.filter(m => {
+      if (selectedGovernorate && (m.governorate || "غير محدد") !== selectedGovernorate) return false;
+      if (selectedResponseType && (m.type_name || m.mission_nature || "عام") !== selectedResponseType) return false;
+      if (selectedActivityDetail && (m.activity_details || "غير محدد") !== selectedActivityDetail) return false;
+      return true;
     });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [filteredMissions]);
+
+    const map: Record<string, { total: number; types: Record<string, number> }> = {};
+    base.forEach(m => {
+      const cls = m.activity_classification || "غير مصنف";
+      const actType = m.activity_type || "عام";
+      if (!map[cls]) map[cls] = { total: 0, types: {} };
+      map[cls].total += 1;
+      map[cls].types[actType] = (map[cls].types[actType] || 0) + 1;
+    });
+
+    return Object.entries(map).map(([clsName, info]) => ({
+      classification: clsName,
+      total: info.total,
+      types: Object.entries(info.types).map(([typeName, count]) => ({
+        type: typeName,
+        count
+      })).sort((a, b) => b.count - a.count)
+    })).sort((a, b) => b.total - a.total);
+  }, [activeMissionsAll, selectedGovernorate, selectedResponseType, selectedActivityDetail]);
 
   const governoratesData = useMemo(() => {
+    const base = activeMissionsAll.filter(m => {
+      if (selectedClassification && (m.activity_classification || "غير مصنف") !== selectedClassification) return false;
+      if (selectedActivityType && (m.activity_type || "عام") !== selectedActivityType) return false;
+      if (selectedResponseType && (m.type_name || m.mission_nature || "عام") !== selectedResponseType) return false;
+      if (selectedActivityDetail && (m.activity_details || "غير محدد") !== selectedActivityDetail) return false;
+      return true;
+    });
+
     const counts: Record<string, number> = {};
-    filteredMissions.forEach(m => {
+    base.forEach(m => {
       const gov = m.governorate || "غير محدد";
       counts[gov] = (counts[gov] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [filteredMissions]);
+  }, [activeMissionsAll, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail]);
+
+  // Response Type Data (نوع الاستجابة)
+  const responseTypeData = useMemo(() => {
+    const base = activeMissionsAll.filter(m => {
+      if (selectedGovernorate && (m.governorate || "غير محدد") !== selectedGovernorate) return false;
+      if (selectedClassification && (m.activity_classification || "غير مصنف") !== selectedClassification) return false;
+      if (selectedActivityType && (m.activity_type || "عام") !== selectedActivityType) return false;
+      if (selectedActivityDetail && (m.activity_details || "غير محدد") !== selectedActivityDetail) return false;
+      return true;
+    });
+
+    const counts: Record<string, number> = {};
+    base.forEach(m => {
+      const resp = m.type_name || m.mission_nature || "عام";
+      counts[resp] = (counts[resp] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedActivityDetail]);
+
+  // Activity Details Data (تفاصيل النشاط)
+  const activityDetailsData = useMemo(() => {
+    const base = activeMissionsAll.filter(m => {
+      if (selectedGovernorate && (m.governorate || "غير محدد") !== selectedGovernorate) return false;
+      if (selectedClassification && (m.activity_classification || "غير مصنف") !== selectedClassification) return false;
+      if (selectedActivityType && (m.activity_type || "عام") !== selectedActivityType) return false;
+      if (selectedResponseType && (m.type_name || m.mission_nature || "عام") !== selectedResponseType) return false;
+      return true;
+    });
+
+    const counts: Record<string, number> = {};
+    base.forEach(m => {
+      const detail = m.activity_details || "غير محدد";
+      counts[detail] = (counts[detail] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
+  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType]);
 
   const servicesData = useMemo(() => {
+    const base = activeMissionsAll.filter(m => {
+      if (selectedGovernorate && (m.governorate || "غير محدد") !== selectedGovernorate) return false;
+      if (selectedClassification && (m.activity_classification || "غير مصنف") !== selectedClassification) return false;
+      if (selectedActivityType && (m.activity_type || "عام") !== selectedActivityType) return false;
+      if (selectedResponseType && (m.type_name || m.mission_nature || "عام") !== selectedResponseType) return false;
+      return true;
+    });
+
     const counts: Record<string, number> = {};
-    filteredMissions.forEach(m => {
+    base.forEach(m => {
       (m.beneficiaries_individual || []).forEach((b: any) => {
          const service = b.service_type || "غير محدد";
          counts[service] = (counts[service] || 0) + (b.service_quantity || 1);
@@ -272,7 +522,7 @@ export default function DepartmentDashboard() {
       });
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [filteredMissions]);
+  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType]);
 
   const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e', '#84cc16'];
 
@@ -309,10 +559,85 @@ export default function DepartmentDashboard() {
           <Card className="p-4 border-primary/20 bg-card/50 flex flex-wrap items-end gap-4">
             <div className="space-y-1.5 flex-1 min-w-[200px]"><label className="text-sm font-bold text-muted-foreground">من تاريخ</label><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-background" /></div>
             <div className="space-y-1.5 flex-1 min-w-[200px]"><label className="text-sm font-bold text-muted-foreground">إلى تاريخ</label><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-background" /></div>
-            <Button variant="outline" onClick={() => { setStartDate(""); setEndDate(""); }} className="mb-0.5">مسح الفلتر</Button>
+            <Button 
+              variant="outline" 
+              onClick={() => { 
+                setStartDate(""); 
+                setEndDate(""); 
+                setSelectedGovernorate("");
+                setSelectedClassification("");
+                setSelectedActivityType("");
+                setSelectedResponseType("");
+                setSelectedActivityDetail("");
+                setSelectedService("");
+              }} 
+              className="mb-0.5"
+            >
+              مسح الفلتر
+            </Button>
           </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {(selectedGovernorate || selectedClassification || selectedActivityType || selectedResponseType || selectedActivityDetail || selectedService) && (
+            <div className="flex flex-wrap items-center gap-2 bg-primary/10 p-3.5 rounded-xl border border-primary/30 animate-in fade-in duration-200">
+              <span className="text-sm font-bold text-primary flex items-center gap-1.5">
+                <Filter className="w-4 h-4" />
+                تصفية تفاعلية من الرسم البياني:
+              </span>
+              {selectedGovernorate && (
+                <Badge variant="default" className="gap-1.5 bg-primary text-primary-foreground py-1 px-3 text-xs font-bold">
+                  المحافظة: {selectedGovernorate}
+                  <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedGovernorate("")} />
+                </Badge>
+              )}
+              {selectedClassification && (
+                <Badge variant="default" className="gap-1.5 bg-primary text-primary-foreground py-1 px-3 text-xs font-bold">
+                  التصنيف: {selectedClassification}
+                  <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedClassification("")} />
+                </Badge>
+              )}
+              {selectedActivityType && (
+                <Badge variant="default" className="gap-1.5 bg-primary text-primary-foreground py-1 px-3 text-xs font-bold">
+                  نوع النشاط: {selectedActivityType}
+                  <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedActivityType("")} />
+                </Badge>
+              )}
+              {selectedResponseType && (
+                <Badge variant="default" className="gap-1.5 bg-primary text-primary-foreground py-1 px-3 text-xs font-bold">
+                  نوع الاستجابة: {selectedResponseType}
+                  <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedResponseType("")} />
+                </Badge>
+              )}
+              {selectedActivityDetail && (
+                <Badge variant="default" className="gap-1.5 bg-primary text-primary-foreground py-1 px-3 text-xs font-bold">
+                  تفاصيل النشاط: {selectedActivityDetail}
+                  <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedActivityDetail("")} />
+                </Badge>
+              )}
+              {selectedService && (
+                <Badge variant="default" className="gap-1.5 bg-primary text-primary-foreground py-1 px-3 text-xs font-bold">
+                  الخدمة: {selectedService}
+                  <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedService("")} />
+                </Badge>
+              )}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-xs h-7 text-muted-foreground hover:text-destructive ms-auto font-bold"
+                onClick={() => {
+                  setSelectedGovernorate("");
+                  setSelectedClassification("");
+                  setSelectedActivityType("");
+                  setSelectedResponseType("");
+                  setSelectedActivityDetail("");
+                  setSelectedService("");
+                }}
+              >
+                إلغاء تصفية الرسم البياني
+              </Button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <Card className="p-5 card-elevated flex items-start gap-4 bg-gradient-to-br from-primary/10 to-transparent border-primary/20">
               <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0 mt-1"><Target className="w-6 h-6 text-primary" /></div>
               <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">المهام المسجلة</p>{renderKpiValue(kpis.totalMissions, aggregatedTargets?.missions, "bg-primary")}</div>
@@ -328,6 +653,10 @@ export default function DepartmentDashboard() {
             <Card className="p-5 card-elevated flex items-start gap-4 bg-gradient-to-br from-success/10 to-transparent border-success/20">
               <div className="w-12 h-12 rounded-xl bg-success/20 flex items-center justify-center shrink-0 mt-1"><BarChartIcon className="w-6 h-6 text-success" /></div>
               <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">المستفيدون (فعليون)</p>{renderKpiValue(kpis.totalBeneficiaries, aggregatedTargets?.bens, "bg-success")}</div>
+            </Card>
+            <Card className="p-5 card-elevated flex items-start gap-4 bg-gradient-to-br from-amber-500/10 to-transparent border-amber-500/20">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 mt-1"><HeartHandshake className="w-6 h-6 text-amber-500" /></div>
+              <div className="flex-1 w-full"><p className="text-xs text-muted-foreground font-bold">إجمالي عدد الخدمات</p>{renderKpiValue(kpis.totalServices, undefined, "bg-amber-500")}</div>
             </Card>
           </div>
 
@@ -348,14 +677,152 @@ export default function DepartmentDashboard() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 1. Treemap (الشكل الشجري): التصنيف ونوع النشاط */}
             <Card className="p-6 card-elevated border-primary/20">
-              <h3 className="font-bold mb-4 text-primary">تصنيف النشاط</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-primary">الهيكل الشجري: تصنيف ونوع النشاط</h3>
+                  <span className="text-xs text-muted-foreground font-normal">(اضغط للفلترة)</span>
+                </div>
+                <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">شجري</Badge>
+              </div>
+              <div className="min-h-[250px] w-full space-y-3">
+                {treemapTreeData.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-3">
+                    {treemapTreeData.map((item, idx) => {
+                      const isClsSelected = selectedClassification === item.classification;
+                      const mainColor = COLORS[idx % COLORS.length];
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`p-3.5 rounded-xl border transition-all ${isClsSelected ? 'bg-amber-500/10 border-amber-500 shadow-md' : 'bg-muted/30 border-border/60 hover:bg-muted/50'}`}
+                        >
+                          <div 
+                            className="flex items-center justify-between cursor-pointer mb-2"
+                            onClick={() => setSelectedClassification(prev => prev === item.classification ? "" : item.classification)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full" style={{ backgroundColor: isClsSelected ? '#f59e0b' : mainColor }} />
+                              <span className={`font-bold text-sm ${isClsSelected ? 'text-amber-500' : ''}`}>{item.classification}</span>
+                            </div>
+                            <Badge variant="secondary" className="font-mono text-xs">{item.total} مهمة</Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 ps-5 border-r-2 border-primary/20 ms-1.5 pt-1">
+                            {item.types.map((t, tIdx) => {
+                              const isTypeSelected = selectedActivityType === t.type && isClsSelected;
+                              return (
+                                <button
+                                  key={tIdx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedClassification(item.classification);
+                                    setSelectedActivityType(prev => prev === t.type ? "" : t.type);
+                                  }}
+                                  className={`text-xs px-2.5 py-1 rounded-md flex items-center gap-1.5 transition-all ${isTypeSelected ? 'bg-amber-500 text-white font-bold shadow-sm' : 'bg-background border hover:border-primary/50 text-foreground'}`}
+                                >
+                                  <span>{t.type}</span>
+                                  <span className="opacity-70 text-[10px] font-mono">({t.count})</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : <div className="h-[200px] flex items-center justify-center text-muted-foreground">لا توجد بيانات</div>}
+              </div>
+            </Card>
+
+            {/* 2. توزيع المهام على المحافظات */}
+            <Card className="p-6 card-elevated border-primary/20">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-primary">توزيع المهام على المحافظات</h3>
+                  <span className="text-xs text-muted-foreground font-normal">(اضغط على المحافظة للفلترة)</span>
+                </div>
+                <Map className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div className="h-[280px] w-full">
+                {governoratesData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={governoratesData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={false} />
+                      <XAxis type="number" stroke="#888" />
+                      <YAxis 
+                        dataKey="name" 
+                        type="category" 
+                        width={90} 
+                        stroke="#888" 
+                        tick={{ fill: '#888', fontSize: 12, cursor: 'pointer' }}
+                        onClick={(tick) => {
+                          if (tick && tick.value) {
+                            setSelectedGovernorate(prev => prev === tick.value ? "" : tick.value);
+                          }
+                        }}
+                      />
+                      <Tooltip cursor={{ fill: '#ffffff10' }} contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
+                      <Bar 
+                        dataKey="value" 
+                        name="عدد المهام" 
+                        radius={[0, 4, 4, 0]} 
+                        barSize={20}
+                        onClick={(entry) => {
+                          if (entry && entry.name) {
+                            setSelectedGovernorate(prev => prev === entry.name ? "" : entry.name);
+                          }
+                        }}
+                      >
+                        {governoratesData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={selectedGovernorate === entry.name ? '#f59e0b' : '#3b82f6'} 
+                            className="cursor-pointer transition-all hover:opacity-80"
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-full flex items-center justify-center text-muted-foreground">لا توجد بيانات</div>}
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 3. نوع الاستجابة */}
+            <Card className="p-6 card-elevated border-primary/20">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-primary">نوع الاستجابة</h3>
+                <span className="text-xs text-muted-foreground font-normal">(اضغط على القطاع للفلترة)</span>
+              </div>
               <div className="h-[250px] w-full">
-                {chartData.length > 0 ? (
+                {responseTypeData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                        {chartData.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      <Pie 
+                        data={responseTypeData} 
+                        cx="50%" 
+                        cy="50%" 
+                        innerRadius={55} 
+                        outerRadius={75} 
+                        paddingAngle={5} 
+                        dataKey="value"
+                        onClick={(entry) => {
+                          if (entry && entry.name) {
+                            setSelectedResponseType(prev => prev === entry.name ? "" : entry.name);
+                          }
+                        }}
+                      >
+                        {responseTypeData.map((e, i) => (
+                          <Cell 
+                            key={i} 
+                            fill={selectedResponseType === e.name ? '#f59e0b' : COLORS[(i + 3) % COLORS.length]} 
+                            stroke={selectedResponseType === e.name ? '#fff' : 'none'}
+                            strokeWidth={selectedResponseType === e.name ? 3 : 0}
+                            className="cursor-pointer transition-all hover:opacity-80"
+                          />
+                        ))}
                       </Pie>
                       <Tooltip contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
                       <Legend />
@@ -365,20 +832,39 @@ export default function DepartmentDashboard() {
               </div>
             </Card>
 
+            {/* 4. تفاصيل النشاط بشكل منفصل */}
             <Card className="p-6 card-elevated border-primary/20">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-primary">توزيع المهام على المحافظات</h3>
-                <Map className="w-5 h-5 text-muted-foreground" />
+                <h3 className="font-bold text-primary">تفاصيل النشاط (الأعلى تكراراً)</h3>
+                <span className="text-xs text-muted-foreground font-normal">(اضغط على العمود للفلترة)</span>
               </div>
               <div className="h-[250px] w-full">
-                {governoratesData.length > 0 ? (
+                {activityDetailsData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={governoratesData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={false} />
-                      <XAxis type="number" stroke="#888" />
-                      <YAxis dataKey="name" type="category" width={80} stroke="#888" tick={{ fill: '#888', fontSize: 12 }} />
+                    <BarChart data={activityDetailsData} margin={{ top: 5, right: 30, left: 20, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                      <XAxis dataKey="name" stroke="#888" angle={-35} textAnchor="end" height={45} tick={{ fill: '#888', fontSize: 11 }} />
+                      <YAxis stroke="#888" />
                       <Tooltip cursor={{ fill: '#ffffff10' }} contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
-                      <Bar dataKey="value" name="عدد المهام" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
+                      <Bar 
+                        dataKey="value" 
+                        name="عدد المهام" 
+                        radius={[4, 4, 0, 0]} 
+                        maxBarSize={45}
+                        onClick={(entry) => {
+                          if (entry && entry.name) {
+                            setSelectedActivityDetail(prev => prev === entry.name ? "" : entry.name);
+                          }
+                        }}
+                      >
+                        {activityDetailsData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={selectedActivityDetail === entry.name ? '#f59e0b' : COLORS[(index + 1) % COLORS.length]} 
+                            className="cursor-pointer transition-all hover:opacity-80"
+                          />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : <div className="h-full flex items-center justify-center text-muted-foreground">لا توجد بيانات</div>}
@@ -387,8 +873,12 @@ export default function DepartmentDashboard() {
           </div>
           
           <div className="grid grid-cols-1 gap-6">
+            {/* 5. إحصائيات الخدمات */}
             <Card className="p-6 card-elevated border-primary/20">
-              <h3 className="font-bold mb-4 text-primary">إحصائيات الخدمات</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-primary">إحصائيات الخدمات</h3>
+                <span className="text-xs text-muted-foreground font-normal">(اضغط على العمود للفلترة)</span>
+              </div>
               <div className="h-[300px] w-full">
                 {servicesData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -397,9 +887,23 @@ export default function DepartmentDashboard() {
                       <XAxis dataKey="name" stroke="#888" angle={-45} textAnchor="end" height={60} tick={{ fill: '#888', fontSize: 12 }} />
                       <YAxis stroke="#888" />
                       <Tooltip cursor={{ fill: '#ffffff10' }} contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
-                      <Bar dataKey="value" name="عدد الخدمات المستفاد منها" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={50}>
+                      <Bar 
+                        dataKey="value" 
+                        name="عدد الخدمات المستفاد منها" 
+                        radius={[4, 4, 0, 0]} 
+                        maxBarSize={50}
+                        onClick={(entry) => {
+                          if (entry && entry.name) {
+                            setSelectedService(prev => prev === entry.name ? "" : entry.name);
+                          }
+                        }}
+                      >
                         {servicesData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={selectedService === entry.name ? '#f59e0b' : COLORS[index % COLORS.length]} 
+                            className="cursor-pointer transition-all hover:opacity-80"
+                          />
                         ))}
                       </Bar>
                     </BarChart>

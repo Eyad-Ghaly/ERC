@@ -20,21 +20,25 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       const [{ data: missions }, { data: vols }] = await Promise.all([
-        supabase.from("missions").select("status, region"),
-        supabase.from("mission_volunteers").select("hours, points"),
+        supabase.from("missions").select("status, region, is_canceled"),
+        supabase.from("mission_volunteers").select("hours, points, missions(is_canceled, status)"),
       ]);
       const m = missions ?? [];
-      const v = vols ?? [];
+      const activeMissions = m.filter((x: any) => !x.is_canceled && x.status !== "canceled");
+      const v = (vols ?? []).filter((x: any) => !x.missions?.is_canceled && x.missions?.status !== "canceled");
 
       const byStatusMap: Record<string, number> = {};
       const byRegionMap: Record<string, number> = {};
       m.forEach((x: any) => {
-        byStatusMap[x.status] = (byStatusMap[x.status] ?? 0) + 1;
-        if (x.region) byRegionMap[x.region] = (byRegionMap[x.region] ?? 0) + 1;
+        const s = x.is_canceled ? "canceled" : x.status;
+        byStatusMap[s] = (byStatusMap[s] ?? 0) + 1;
+        if (x.region && !x.is_canceled && x.status !== "canceled") {
+          byRegionMap[x.region] = (byRegionMap[x.region] ?? 0) + 1;
+        }
       });
 
       setStats({
-        totalMissions: m.length,
+        totalMissions: activeMissions.length,
         totalVolunteers: v.length,
         totalHours: v.reduce((s: number, x: any) => s + Number(x.hours ?? 0), 0),
         totalPoints: v.reduce((s: number, x: any) => s + Number(x.points ?? 0), 0),

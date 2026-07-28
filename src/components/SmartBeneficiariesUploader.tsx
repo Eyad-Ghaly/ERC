@@ -88,6 +88,8 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
   // validation state
   const [valueMapping, setValueMapping] = useState<Record<string, Record<string, string>>>({});
   const [invalidValues, setInvalidValues] = useState<{ fieldKey: string; excelValue: string }[]>([]);
+  const [invalidMissionCodes, setInvalidMissionCodes] = useState<{ rowIndex: number; missionCode: string }[]>([]);
+  const [isValidating, setIsValidating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadErrors, setUploadErrors] = useState<{ rowIndex: number; error: string }[]>([]);
@@ -95,7 +97,8 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
   useEffect(() => {
     if (!open) {
       setStep(0); setUploadType("individual"); setExcelData([]); setExcelHeaders([]); setColumnMapping({});
-      setValueMapping({}); setInvalidValues([]); setUploadErrors([]);
+      setValueMapping({}); setInvalidValues([]); setInvalidMissionCodes([]); setUploadErrors([]);
+      setIsValidating(false);
     } else {
       // Load custom fields
       supabase.from("team_custom_fields").select("*, team:teams(code)").then(({ data }) => {
@@ -165,14 +168,66 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
     reader.readAsArrayBuffer(file);
   };
 
-  const validateData = () => {
+  const validateData = async () => {
+    const mappedMissionHeader = columnMapping["missionCode"];
+    if (!mappedMissionHeader || !mappedMissionHeader.trim()) {
+      toast.error("يرجى ربط وتحديد عمود 'كود المهمة' أولاً.");
+      return;
+    }
+
+    setIsValidating(true);
     const newInvalidValues: { fieldKey: string; excelValue: string }[] = [];
     const uniqueInvalidMap = new Set<string>();
     const activeFields = getActiveFields();
 
+    // 1. Collect all mission codes
+    const excelMissionCodes = new Set<string>();
+    const rowMissionCodeMap: { rowIndex: number; rawCode: string; baseCode: string }[] = [];
 
     excelData.forEach((row, rowIndex) => {
+      let val = String(row[mappedMissionHeader] || "").trim();
+      if (valueMapping["missionCode"]?.[val]) {
+        val = valueMapping["missionCode"][val];
+      }
+      const baseCode = val ? val.split('-')[0].trim() : "";
+      rowMissionCodeMap.push({ rowIndex: rowIndex + 2, rawCode: val, baseCode });
+      if (baseCode) {
+        excelMissionCodes.add(baseCode);
+      }
+    });
+
+    // 2. Query Supabase for existing missions
+    const existingMissionCodesSet = new Set<string>();
+    if (excelMissionCodes.size > 0) {
+      const codeList = Array.from(excelMissionCodes);
+      const chunkSize = 500;
+      for (let i = 0; i < codeList.length; i += chunkSize) {
+        const chunk = codeList.slice(i, i + chunkSize);
+        const { data: foundMissions } = await supabase
+          .from("missions")
+          .select("mission_code")
+          .in("mission_code", chunk);
+        
+        (foundMissions || []).forEach(m => existingMissionCodesSet.add(m.mission_code));
+      }
+    }
+
+    // 3. Identify rows with invalid/missing mission codes
+    const badMissionRows: { rowIndex: number; missionCode: string }[] = [];
+    rowMissionCodeMap.forEach(item => {
+      if (!item.rawCode) {
+        badMissionRows.push({ rowIndex: item.rowIndex, missionCode: "(فارغ)" });
+      } else if (!existingMissionCodesSet.has(item.baseCode)) {
+        badMissionRows.push({ rowIndex: item.rowIndex, missionCode: item.rawCode });
+      }
+    });
+
+    setInvalidMissionCodes(badMissionRows);
+
+    // 4. Other field value validations
+    excelData.forEach((row) => {
       activeFields.forEach(sf => {
+        if (sf.key === "missionCode") return;
         const mappedHeader = columnMapping[sf.key];
         if (!mappedHeader) return;
         
@@ -208,7 +263,8 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
         }
 
         if (sf.isCustom && sf.originalField?.field_type === 'select' && val) {
-            const options = sf.originalField.field_options || [];
+            const rawOpts = sf.originalField.field_options || [];
+            const options = rawOpts.flatMap((opt: string) => typeof opt === "string" ? opt.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [opt]);
             if (!options.includes(val)) {
                 const key = `${sf.key}::${val}`;
                 if (!uniqueInvalidMap.has(key)) {
@@ -221,10 +277,25 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
     });
 
     setInvalidValues(newInvalidValues);
-    if (newInvalidValues.length === 0) {
+    setIsValidating(false);
+
+    if (newInvalidValues.length === 0 && badMissionRows.length === 0) {
       setStep(4);
     } else {
       setStep(3);
+    }
+  };
+
+  const handleRemoveBadMissionRows = () => {
+    const badIndices = new Set(invalidMissionCodes.map(b => b.rowIndex - 2));
+    const cleanData = excelData.filter((_, idx) => !badIndices.has(idx));
+    setExcelData(cleanData);
+    setInvalidMissionCodes([]);
+    toast.success(`تم استبعاد ${invalidMissionCodes.length} صفوف بأكواد مهمات غير مسجلة`);
+    if (cleanData.length === 0) {
+      setStep(1);
+    } else if (invalidValues.length === 0) {
+      setStep(4);
     }
   };
 
@@ -237,12 +308,16 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
 
   const executeUpload = async () => {
     if (!user) return;
+    if (invalidMissionCodes.length > 0) {
+      toast.error("لا يمكن الحفظ: يوجد صفوف تحتوي على أكواد مهمات غير مسجلة بالنظام.");
+      return;
+    }
     setIsUploading(true);
     setUploadProgress({ current: 0, total: excelData.length });
     const errors: { rowIndex: number; error: string }[] = [];
 
     // Cache missions
-    const missionCache: Record<string, { id: string; team_id: string; daily_report_id: string | null }> = {};
+    const missionCache: Record<string, { mission_id: string; team_id: string; daily_report_id: string | null }> = {};
 
     for (let i = 0; i < excelData.length; i++) {
       setUploadProgress({ current: i + 1, total: excelData.length });
@@ -299,7 +374,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
             const ageCategory = getValue("ageCategory");
             const serviceType = getValue("serviceType");
 
-            const { data: newGroup, error: groupErr } = await supabase.from('beneficiaries_group').insert({
+            const { error: groupErr } = await supabase.from('beneficiaries_group').insert({
                mission_id: targetMission.mission_id,
                daily_report_id: targetMission.daily_report_id,
                count: count,
@@ -308,7 +383,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                age_category: ageCategory || null,
                service_type: serviceType || null,
                is_repeated: isGroupRepeated
-            }).select();
+            });
             
             if (groupErr) errors.push({ rowIndex: i + 2, error: groupErr.message });
 
@@ -411,9 +486,8 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
       setOpen(false);
     } else {
       toast.warning(`تم الرفع مع وجود ${errors.length} أخطاء.`);
-      onSuccess(); // Refresh the background list with the ones that succeeded
+      onSuccess();
       
-      // Keep only failed rows in memory to prevent duplicates if user clicks confirm again
       const failedIndices = new Set(errors.map(e => e.rowIndex - 2));
       const remainingData = excelData.filter((_, idx) => failedIndices.has(idx));
       setExcelData(remainingData);
@@ -521,7 +595,10 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
 
             <div className="flex justify-end gap-3 mt-6">
               <Button variant="outline" onClick={() => setStep(1)}>السابق</Button>
-              <Button onClick={validateData}>التالي: تحقق من البيانات</Button>
+              <Button onClick={validateData} disabled={isValidating}>
+                {isValidating && <Loader2 className="w-4 h-4 ml-2 animate-spin" />}
+                التالي: تحقق من البيانات
+              </Button>
             </div>
           </div>
         )}
@@ -529,61 +606,123 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
         {step === 3 && (
           <div className="space-y-6">
              <h3 className="font-semibold text-lg flex items-center gap-2 text-destructive"><AlertCircle className="w-5 h-5" /> تصحيح البيانات غير المطابقة</h3>
-             <p className="text-sm text-muted-foreground mb-4">هناك قيم في الإكسل لا تتطابق مع الخيارات المتاحة في النظام (مثل النوع أو القوائم المنسدلة). يرجى مطابقتها هنا مرة واحدة.</p>
+             <p className="text-sm text-muted-foreground mb-4">هناك قيم أو أكواد مهمات في الإكسل لا تتطابق مع البيانات المسجلة بالمنظومة.</p>
 
-             <div className="grid gap-4">
-               {invalidValues.map((inv, idx) => {
-                 const fieldDef = activeFields.find(f => f.key === inv.fieldKey);
-                 const currentMapped = valueMapping[inv.fieldKey]?.[inv.excelValue] || "";
-                 return (
-                   <div key={idx} className="p-4 border border-destructive/30 bg-destructive/5 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                     <div>
-                       <div className="text-sm text-muted-foreground mb-1">في عمود: {fieldDef?.label}</div>
-                       <div className="font-bold text-lg text-destructive bg-background px-3 py-1 rounded border inline-block">{inv.excelValue || "(فارغ)"}</div>
+             {invalidMissionCodes.length > 0 && (
+               <Card className="p-4 border-destructive bg-destructive/10 space-y-3">
+                 <div className="flex items-center gap-2 font-bold text-destructive text-base">
+                   <AlertCircle className="w-5 h-5 shrink-0" />
+                   <span>أكواد مهمات غير مسجلة بالمنظومة ({invalidMissionCodes.length} صف)</span>
+                 </div>
+                 <p className="text-sm text-destructive/90">
+                   الصفوف التالية تحتوي على أكواد مهمات غير موجودة في قاعدة البيانات. <strong>لن يتم السماح برفع البيانات حتى يتم تسجيل هذه المهام بالمنظومة أولاً أو استبعاد هذه الصفوف من الرفع:</strong>
+                 </p>
+                 <div className="max-h-40 overflow-y-auto bg-background p-3 rounded-lg border border-destructive/30 text-xs font-mono">
+                   {invalidMissionCodes.map((item, idx) => (
+                     <div key={idx} className="text-destructive py-0.5">
+                       • صف {item.rowIndex}: كود المهمة "{item.missionCode}" غير موجود بالمنظومة
                      </div>
-                     <div>
-                       <div className="text-sm text-muted-foreground mb-1">تغيير إلى:</div>
-                       <Select value={currentMapped} onValueChange={(v) => handleApplyValueMapping(inv.fieldKey, inv.excelValue, v)}>
-                         <SelectTrigger><SelectValue placeholder="اختر القيمة الصحيحة" /></SelectTrigger>
-                         <SelectContent>
-                           {inv.fieldKey === "gender" && (
-                              <>
-                                <SelectItem value="ذكر">ذكر</SelectItem>
-                                <SelectItem value="أنثى">أنثى</SelectItem>
-                                {uploadType === "group" && <SelectItem value="مختلط">مختلط</SelectItem>}
-                              </>
-                           )}
-                           {inv.fieldKey === "ageCategory" && (
-                              <>
-                                <SelectItem value="رضيع">رضيع</SelectItem>
-                                <SelectItem value="طفل">طفل</SelectItem>
-                                <SelectItem value="بالغ">بالغ</SelectItem>
-                                <SelectItem value="كبار سن">كبار سن</SelectItem>
-                              </>
-                           )}
-                           {fieldDef?.isCustom && fieldDef.originalField?.field_options?.map((opt: string) => (
-                               <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                           ))}
-                         </SelectContent>
-                       </Select>
+                   ))}
+                 </div>
+                 <div className="flex justify-end pt-1">
+                   <Button 
+                     variant="destructive" 
+                     size="sm"
+                     onClick={handleRemoveBadMissionRows}
+                   >
+                     حذف الصفوف غير المطابقة ({invalidMissionCodes.length} صف)
+                   </Button>
+                 </div>
+               </Card>
+             )}
+
+             {invalidValues.length > 0 && (
+               <div className="grid gap-4">
+                 {invalidValues.map((inv, idx) => {
+                   const fieldDef = activeFields.find(f => f.key === inv.fieldKey);
+                   const currentMapped = valueMapping[inv.fieldKey]?.[inv.excelValue] || "";
+                   return (
+                     <div key={idx} className="p-4 border border-destructive/30 bg-destructive/5 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                       <div>
+                         <div className="text-sm text-muted-foreground mb-1">في عمود: {fieldDef?.label}</div>
+                         <div className="font-bold text-lg text-destructive bg-background px-3 py-1 rounded border inline-block max-w-full break-all">{inv.excelValue || "(فارغ)"}</div>
+                       </div>
+                       <div>
+                         <div className="text-sm text-muted-foreground mb-1">تغيير إلى:</div>
+                         <Select value={currentMapped} onValueChange={(v) => handleApplyValueMapping(inv.fieldKey, inv.excelValue, v)}>
+                           <SelectTrigger><SelectValue placeholder="اختر القيمة الصحيحة" /></SelectTrigger>
+                           <SelectContent>
+                             {inv.fieldKey === "gender" && (
+                                <>
+                                  <SelectItem value="ذكر">ذكر</SelectItem>
+                                  <SelectItem value="أنثى">أنثى</SelectItem>
+                                  {uploadType === "group" && <SelectItem value="مختلط">مختلط</SelectItem>}
+                                </>
+                             )}
+                             {inv.fieldKey === "ageCategory" && (
+                                <>
+                                  <SelectItem value="رضيع">رضيع</SelectItem>
+                                  <SelectItem value="طفل">طفل</SelectItem>
+                                  <SelectItem value="بالغ">بالغ</SelectItem>
+                                  <SelectItem value="كبار سن">كبار سن</SelectItem>
+                                </>
+                             )}
+                              {fieldDef?.isCustom && (
+                                (fieldDef.originalField?.field_options || []).flatMap((opt: string) => typeof opt === "string" ? opt.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [opt]).map((opt: string, idx2: number) => (
+                                  <SelectItem key={`${opt}-${idx2}`} value={opt}>{opt}</SelectItem>
+                                ))
+                              )}
+                           </SelectContent>
+                         </Select>
+                       </div>
                      </div>
-                   </div>
-                 );
-               })}
-             </div>
+                   );
+                 })}
+               </div>
+             )}
 
              <div className="flex justify-end gap-3 mt-6">
                <Button variant="outline" onClick={() => setStep(2)}>السابق</Button>
-               <Button onClick={validateData}>إعادة التحقق</Button>
+               <Button onClick={validateData} disabled={isValidating}>
+                 {isValidating && <Loader2 className="w-4 h-4 ml-2 animate-spin" />}
+                 إعادة التحقق
+               </Button>
              </div>
           </div>
         )}
 
         {step === 4 && (
           <div className="space-y-6 text-center py-8">
-            <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
-            <h3 className="font-semibold text-2xl">تم التحقق من البيانات بنجاح!</h3>
-            <p className="text-muted-foreground">سيتم إدراج {excelData.length} {uploadType === 'individual' ? 'مستفيد' : 'مجموعة'}.</p>
+            {invalidMissionCodes.length > 0 ? (
+              <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+            ) : (
+              <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
+            )}
+
+            <h3 className="font-semibold text-2xl">
+              {invalidMissionCodes.length > 0 ? "يوجد أخطاء تمنع الرفع!" : "تم التحقق من البيانات بنجاح!"}
+            </h3>
+
+            <p className="text-muted-foreground">
+              سيتم إدراج {excelData.length} {uploadType === 'individual' ? 'مستفيد' : 'مجموعة'}.
+            </p>
+
+            {invalidMissionCodes.length > 0 && (
+              <div className="mt-4 text-right max-w-lg mx-auto bg-destructive/15 text-destructive border border-destructive/30 p-4 rounded-xl text-sm space-y-2">
+                <div className="font-bold flex items-center gap-2 text-base">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  عفواً، لا يمكن الحفظ!
+                </div>
+                <p className="text-xs">
+                  يوجد {invalidMissionCodes.length} صفوف بها أكواد مهمات غير مسجلة بالنظام. لا يمكن رفع البيانات إلا بعد إدراج المهام بالمنظومة أولاً أو استبعاد هذه الصفوف.
+                </p>
+                <div className="pt-2 flex justify-end">
+                  <Button variant="destructive" size="sm" onClick={handleRemoveBadMissionRows}>
+                    حذف {invalidMissionCodes.length} صفوف غير مطابقة واستكمال الحفظ
+                  </Button>
+                </div>
+              </div>
+            )}
             
             {uploadErrors.length > 0 && (
               <div className="mt-6 text-right max-w-lg mx-auto bg-destructive/10 text-destructive p-4 rounded-lg text-sm max-h-40 overflow-y-auto">
@@ -598,7 +737,11 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
 
             <div className="flex justify-center gap-3 mt-8">
               <Button variant="outline" onClick={() => setStep(2)} disabled={isUploading}>رجوع للتعديل</Button>
-              <Button onClick={executeUpload} disabled={isUploading} className="min-w-[150px]">
+              <Button 
+                onClick={executeUpload} 
+                disabled={isUploading || invalidMissionCodes.length > 0} 
+                className="min-w-[150px]"
+              >
                 {isUploading ? (
                   <>
                     <Loader2 className="w-4 h-4 ml-2 animate-spin" />
