@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, UserCheck, Activity, Map, Database, FileUp, Loader2, Plus, X, Filter, HeartHandshake, Globe, Search } from "lucide-react";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AddVolunteerDialog } from "@/components/AddVolunteerDialog";
 import { SmartExcelUploader } from "@/components/SmartExcelUploader";
 
@@ -52,9 +53,15 @@ async function decryptData(encryptedBase64: string): Promise<string> {
 }
 
 export default function DepartmentDashboard() {
-  const { user, profile } = useAuth();
+  const { user, profile, roles, hasRole } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
+
+  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin");
+
+  // Department teams state
+  const [departmentTeams, setDepartmentTeams] = useState<any[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
 
   // Missions state
   const [missions, setMissions] = useState<any[]>([]);
@@ -85,7 +92,17 @@ export default function DepartmentDashboard() {
   // Supply requests state
   const [supplyRequests, setSupplyRequests] = useState<any[]>([]);
 
-  const loadMissions = async () => {
+  const activeTeam = useMemo(() => {
+    if (selectedTeamId && selectedTeamId !== "all") {
+      return departmentTeams.find(t => t.id === selectedTeamId) || null;
+    }
+    return null;
+  }, [selectedTeamId, departmentTeams]);
+
+  const activeTeamId = activeTeam?.id || (selectedTeamId !== "all" ? selectedTeamId : profile?.team_id);
+  const activeTeamCode = activeTeam?.code || profile?.team_code;
+
+  const loadMissions = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
     if (!user) return;
     setLoading(true);
     let allMissions: any[] = [];
@@ -100,7 +117,12 @@ export default function DepartmentDashboard() {
         .order("created_at", { ascending: false })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
-      if (profile?.team_id) {
+      if (targetTeamId && targetTeamId !== "all") {
+        query = query.eq("team_id", targetTeamId);
+      } else if (targetTeamId === "all" && currentDeptTeams.length > 0) {
+        const teamIds = currentDeptTeams.map((t: any) => t.id);
+        query = query.in("team_id", teamIds);
+      } else if (profile?.team_id) {
         query = query.eq("team_id", profile.team_id);
       } else {
         query = query.eq("created_by", user.id);
@@ -126,16 +148,29 @@ export default function DepartmentDashboard() {
     setLoading(false);
   };
 
-  const loadVolunteers = async () => {
-    if (!profile?.team_code) return;
+  const loadVolunteers = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
     setLoadingVols(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("volunteer_teams")
       .select(`
         id, is_approved, join_date, team_id, team_phone, team_national_id,
         volunteers_base ( id, full_name, membership_number, branch, phone_number )
-      `)
-      .eq("team_id", profile.team_id);
+      `);
+
+    if (targetTeamId && targetTeamId !== "all") {
+      query = query.eq("team_id", targetTeamId);
+    } else if (targetTeamId === "all" && currentDeptTeams.length > 0) {
+      const teamIds = currentDeptTeams.map((t: any) => t.id);
+      query = query.in("team_id", teamIds);
+    } else if (profile?.team_id) {
+      query = query.eq("team_id", profile.team_id);
+    } else {
+      setTeamVolunteers([]);
+      setLoadingVols(false);
+      return;
+    }
+
+    const { data, error } = await query;
 
     if (!error && data) {
       setTeamVolunteers(data);
@@ -143,29 +178,69 @@ export default function DepartmentDashboard() {
     setLoadingVols(false);
   };
 
-  const loadTargets = async () => {
-    if (!profile?.team_code) return;
-    const { data } = await supabase.from("team_kpi_targets").select("*").eq("team_id", profile.team_id);
-    if (data) setTargets(data);
+  const loadTargets = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
+    let kpiQuery = supabase.from("team_kpi_targets").select("*");
+    let customKpisQuery = supabase.from("team_custom_kpis").select("*");
+    let supplyQuery = supabase.from("volunteer_supply_requests").select("*").order("created_at", { ascending: false });
 
-    const { data: kpisData } = await supabase.from("team_custom_kpis").select("*").eq("team_id", profile.team_id);
-    if (kpisData) setCustomKpis(kpisData);
+    if (targetTeamId && targetTeamId !== "all") {
+      kpiQuery = kpiQuery.eq("team_id", targetTeamId);
+      customKpisQuery = customKpisQuery.eq("team_id", targetTeamId);
+      supplyQuery = supplyQuery.eq("team_id", targetTeamId);
+    } else if (targetTeamId === "all" && currentDeptTeams.length > 0) {
+      const teamIds = currentDeptTeams.map((t: any) => t.id);
+      kpiQuery = kpiQuery.in("team_id", teamIds);
+      customKpisQuery = customKpisQuery.in("team_id", teamIds);
+      supplyQuery = supplyQuery.in("team_id", teamIds);
+    } else if (profile?.team_id) {
+      kpiQuery = kpiQuery.eq("team_id", profile.team_id);
+      customKpisQuery = customKpisQuery.eq("team_id", profile.team_id);
+      supplyQuery = supplyQuery.eq("team_id", profile.team_id);
+    } else {
+      setTargets([]);
+      setCustomKpis([]);
+      setSupplyRequests([]);
+      return;
+    }
 
-    const { data: supplyData } = await supabase
-      .from("volunteer_supply_requests")
-      .select("*")
-      .eq("team_id", profile.team_id)
-      .order("created_at", { ascending: false });
-    if (supplyData) setSupplyRequests(supplyData);
+    const [{ data: kData }, { data: cData }, { data: sData }] = await Promise.all([
+      kpiQuery, customKpisQuery, supplyQuery
+    ]);
+
+    if (kData) setTargets(kData);
+    if (cData) setCustomKpis(cData);
+    if (sData) setSupplyRequests(sData);
   };
 
   useEffect(() => {
-    loadMissions();
-    if (profile?.team_code) {
-      loadVolunteers();
-      loadTargets();
-    }
-  }, [user, profile]);
+    if (!user) return;
+    const initData = async () => {
+      let deptTeams: any[] = [];
+      const isMgmt = roles.includes("management") || roles.includes("department_admin") || roles.includes("admin");
+      if (isMgmt) {
+        let query = supabase.from("teams").select("*, department:departments(code, name)").order("code");
+        if (!roles.includes("admin") && profile?.department_id) {
+          query = query.eq("department_id", profile.department_id);
+        }
+        const { data } = await query;
+        if (data) {
+          deptTeams = data;
+          setDepartmentTeams(data);
+        }
+      }
+      loadMissions(selectedTeamId, deptTeams);
+      loadVolunteers(selectedTeamId, deptTeams);
+      loadTargets(selectedTeamId, deptTeams);
+    };
+    initData();
+  }, [user, profile, roles]);
+
+  const handleTeamChange = (teamId: string) => {
+    setSelectedTeamId(teamId);
+    loadMissions(teamId, departmentTeams);
+    loadVolunteers(teamId, departmentTeams);
+    loadTargets(teamId, departmentTeams);
+  };
 
   const handleDeleteMission = async (id: string) => {
     if (!confirm("هل أنت متأكد من حذف هذه المهمة نهائياً؟")) return;
@@ -543,15 +618,48 @@ export default function DepartmentDashboard() {
   };
 
   return (
-    <AppLayout title="لوحة معلومات فريقي">
+    <AppLayout title={isManagementOrAdmin ? "لوحة معلومات الفرق والإدارة" : "لوحة معلومات فريقي"}>
+      {isManagementOrAdmin && (
+        <Card className="p-4 card-elevated border-primary/30 gradient-soft flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-bold">
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-base text-foreground">تحديد الفريق المستهدف للإدارة</h2>
+              <p className="text-xs text-muted-foreground">
+                {profile?.department_code ? `كود الإدارة: ${profile.department_code}` : "استعراض وتعديل فرق الإدارة"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 min-w-[260px]">
+            <Select value={selectedTeamId} onValueChange={handleTeamChange}>
+              <SelectTrigger className="w-full font-bold bg-background shadow-sm">
+                <SelectValue placeholder="اختر الفريق" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="font-bold">✨ جميع الفرق التابعة للإدارة ({departmentTeams.length})</SelectItem>
+                {departmentTeams.map((t: any) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    فريق {t.code} {t.name ? `- ${t.name}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </Card>
+      )}
+
       <Tabs defaultValue="missions" className="w-full space-y-6">
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="missions" className="px-6"><ListTodo className="w-4 h-4 ml-2" /> مهام الفريق</TabsTrigger>
             <TabsTrigger value="volunteers" className="px-6"><UserCheck className="w-4 h-4 ml-2" /> متطوعو الفريق</TabsTrigger>
           </TabsList>
-          {profile?.team_code && (
-            <Badge variant="outline" className="hidden md:inline-flex">كود الفريق: {profile.team_code}</Badge>
+          {(activeTeamCode || profile?.team_code) && (
+            <Badge variant="outline" className="hidden md:inline-flex">
+              {selectedTeamId === "all" ? `عدد الفرق: ${departmentTeams.length}` : `كود الفريق المحدد: ${activeTeamCode}`}
+            </Badge>
           )}
         </div>
 
@@ -1013,11 +1121,15 @@ export default function DepartmentDashboard() {
           <Card className="p-5 border-primary/20 overflow-hidden flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="font-bold text-primary">المتطوعون المنضمون للفريق</h3>
-                <p className="text-sm text-muted-foreground mt-1">يظهر هنا جميع المتطوعين المرتبطين بكود الفريق ({profile?.team_code || "غير محدد"})</p>
+                <h3 className="font-bold text-primary">المتطوعون المنضمون للفرق</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {selectedTeamId === "all"
+                    ? `عرض جميع المتطوعين في كافة فرق الإدارة (${departmentTeams.length} فريق)`
+                    : `يظهر هنا المتطوعون المرتبطون بكود الفريق (${activeTeamCode || "غير محدد"})`}
+                </p>
               </div>
-              {profile?.team_id && (
-                <AddVolunteerDialog teamId={profile.team_id} teamCode={profile.team_code || ""} onAdded={loadVolunteers} />
+              {activeTeamId && (
+                <AddVolunteerDialog teamId={activeTeamId} teamCode={activeTeamCode || ""} onAdded={() => loadVolunteers(selectedTeamId)} />
               )}
             </div>
 

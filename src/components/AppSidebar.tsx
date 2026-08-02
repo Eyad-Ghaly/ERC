@@ -17,7 +17,7 @@ interface NavItem {
 
 const items: NavItem[] = [
   { title: "الرئيسية", url: "/", icon: Home, roles: ["*"] },
-  { title: "لوحة معلومات فريقي", url: "/department-dashboard", icon: BarChart3, roles: ["department_entry", "admin"] },
+  { title: "لوحة معلومات فريقي والإدارة", url: "/department-dashboard", icon: BarChart3, roles: ["department_entry", "management", "department_admin", "admin"] },
   { title: "مستهدفات فريقي", url: "/team-targets", icon: Target, roles: ["department_entry", "data_manager", "admin"] },
   { title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, roles: ["department_entry", "department_admin", "admin"] },
   { title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, roles: ["department_entry", "data_manager", "admin"] },

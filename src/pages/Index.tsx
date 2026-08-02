@@ -12,6 +12,7 @@ const TILES = [
   { role: "operations_supervisor", title: "مشرف العمليات", url: "/supervisor", icon: ShieldCheck, desc: "اعتماد المهام" },
   { role: "youth_room", title: "غرفة الشباب", url: "/youth", icon: Users2, desc: "رصد المتطوعين والساعات" },
   { role: "youth_management", title: "إدارة طلبات الإمداد (الشباب)", url: "/youth-supply-requests", icon: Users2, desc: "مراجعة وتحويل طلبات الإمداد بالمتطوعين" },
+  { role: "management", title: "لوحة معلومات فرق الإدارة", url: "/department-dashboard", icon: BarChart3, desc: "متابعة وتعديل مهام ومتطوعين فرق الإدارة" },
   { role: "management", title: "موافقات الإدارة لطلبات الإمداد", url: "/management-supply-requests", icon: FilePlus, desc: "مراجعة وتحويل الطلبات الواردة من الفرق" },
   { role: "branch_youth", title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, desc: "تسجيل المتطوعين في القاعدة" },
   { role: "stakeholder", title: "Dashboard", url: "/dashboard", icon: BarChart3, desc: "مؤشرات الأداء" },
