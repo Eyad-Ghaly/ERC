@@ -40,7 +40,7 @@ interface SmartExcelUploaderProps {
 export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderProps) {
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 4.5 | 5>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [excelData, setExcelData] = useState<any[]>([]);
@@ -53,6 +53,11 @@ export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderPro
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadErrors, setUploadErrors] = useState<{ rowIndex: number; error: string }[]>([]);
+
+  // Duplicate handling state
+  const [duplicateMissions, setDuplicateMissions] = useState<string[]>([]);
+  const [duplicateAction, setDuplicateAction] = useState<"skip" | "update" | null>(null);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
 
   // Load dropdown options for validation
   const govOpts = useDropdownOptions("governorate");
@@ -85,6 +90,9 @@ export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderPro
       setValueMapping({});
       setInvalidValues([]);
       setUploadErrors([]);
+      setDuplicateMissions([]);
+      setDuplicateAction(null);
+      setIsCheckingDuplicates(false);
     }
   }, [open]);
 
@@ -196,6 +204,44 @@ export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderPro
       return;
     }
 
+    if (duplicateAction === null) {
+      setIsCheckingDuplicates(true);
+      try {
+        const mappedCodes = new Set<string>();
+        const codeHeader = columnMapping["missionCode"];
+        
+        if (codeHeader) {
+          excelData.forEach(row => {
+            const code = String(row[codeHeader] || "").trim();
+            if (code) mappedCodes.add(code);
+          });
+        }
+
+        if (mappedCodes.size > 0) {
+          const codesArray = Array.from(mappedCodes);
+          // Query in batches if large
+          const { data, error } = await supabase
+            .from("missions")
+            .select("mission_code")
+            .in("mission_code", codesArray);
+            
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            setDuplicateMissions(data.map(m => m.mission_code));
+            setStep(4.5);
+            setIsCheckingDuplicates(false);
+            return;
+          }
+        }
+      } catch (err: any) {
+        toast.error("فشل التحقق من التكرار: " + err.message);
+        setIsCheckingDuplicates(false);
+        return;
+      }
+      setIsCheckingDuplicates(false);
+    }
+
     setIsUploading(true);
     setUploadProgress({ current: 0, total: excelData.length });
     let successCount = 0;
@@ -274,10 +320,15 @@ export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderPro
           is_late_submission: isLate,
         };
 
-        const { data: existing } = await supabase.from("missions").select("id").eq("mission_code", finalMissionCode).maybeSingle();
+        const isDuplicate = duplicateMissions.includes(finalMissionCode);
+        
+        if (isDuplicate && duplicateAction === "skip") {
+          setUploadProgress(prev => ({ ...prev, current: i + 1 }));
+          continue;
+        }
 
-        if (existing) {
-          const { error: updErr } = await supabase.from("missions").update(payload).eq("id", existing.id);
+        if (isDuplicate) {
+          const { error: updErr } = await supabase.from("missions").update(payload).eq("mission_code", finalMissionCode);
           if (updErr) throw updErr;
         } else {
           const { error: insErr } = await supabase.from("missions").insert({
@@ -328,6 +379,7 @@ export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderPro
             {step === 2 && "تطابق الأعمدة"}
             {step === 3 && "معالجة البيانات المفقودة أو الخاطئة"}
             {step === 4 && "تأكيد الرفع"}
+            {step === 4.5 && "معالجة التكرار"}
             {step === 5 && "تقرير الأخطاء"}
           </DialogTitle>
         </DialogHeader>
@@ -461,10 +513,70 @@ export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderPro
               
               <div className="bg-muted p-4 rounded-lg text-sm w-full max-w-md text-right">
                 <ul className="space-y-2">
-                  <li className="flex justify-between border-b pb-2"><span>عدد الصفوف:</span> <strong>{excelData.length}</strong></li>
+                  <li className="flex justify-between border-b pb-2">
+                    <span>عدد الصفوف:</span> 
+                    <strong>
+                      {duplicateAction === "skip" 
+                        ? `${excelData.filter(row => !duplicateMissions.includes(String(row[columnMapping["missionCode"]] || "").trim())).length} (بعد استبعاد المكرر)` 
+                        : excelData.length}
+                    </strong>
+                  </li>
                   <li className="flex justify-between border-b pb-2"><span>الأعمدة المرتبطة:</span> <strong>{Object.values(columnMapping).filter(Boolean).length} / {SYSTEM_FIELDS.length}</strong></li>
                   <li className="flex justify-between"><span>تعديلات إملائية:</span> <strong>{Object.values(valueMapping).flatMap(v => Object.values(v)).length}</strong></li>
                 </ul>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4.5: Duplicates Resolution */}
+          {step === 4.5 && (
+            <div className="flex flex-col items-center justify-center h-full space-y-8 text-center animate-in fade-in duration-300">
+              <div className="w-24 h-24 bg-warning/20 text-warning rounded-full flex items-center justify-center border-4 border-warning/30">
+                <AlertCircle className="w-12 h-12" />
+              </div>
+              
+              <div className="max-w-md">
+                <h3 className="text-2xl font-bold mb-3 text-foreground">تنبيه: مهام متكررة</h3>
+                <p className="text-muted-foreground text-lg mb-2">
+                  تم العثور على <span className="font-bold text-warning text-xl mx-1">{duplicateMissions.length}</span> مهمة في الملف تم تسجيلها مسبقاً بنفس كود المهمة.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  كيف تريد التعامل مع هذه المهام المكررة؟
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-xl">
+                <Button 
+                  variant="outline" 
+                  size="lg" 
+                  className="h-24 flex flex-col items-center justify-center border-2 border-primary/20 hover:border-primary/50 hover:bg-primary/5"
+                  onClick={() => {
+                    setDuplicateAction("skip");
+                    setStep(4); // Go back to step 4, then user clicks upload again and it will proceed
+                  }}
+                >
+                  <span className="font-bold text-base mb-1">تخطي المكرر</span>
+                  <span className="text-xs text-muted-foreground font-normal">إدخال المهام الجديدة فقط، وتجاهل المكرر تماماً</span>
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  size="lg" 
+                  className="h-24 flex flex-col items-center justify-center border-2 border-info/20 hover:border-info/50 hover:bg-info/5"
+                  onClick={() => {
+                    setDuplicateAction("update");
+                    setStep(4);
+                  }}
+                >
+                  <span className="font-bold text-info text-base mb-1">تحديث المكرر</span>
+                  <span className="text-xs text-muted-foreground font-normal">تعديل المهام القديمة لتطابق بيانات الإكسيل المرفوع</span>
+                </Button>
+              </div>
+              
+              <div className="mt-8">
+                <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => setStep(4)}>
+                  إلغاء والعودة
+                </Button>
               </div>
             </div>
           )}
@@ -524,9 +636,9 @@ export function SmartExcelUploader({ onSuccess, trigger }: SmartExcelUploaderPro
 
           {step === 4 && (
             <div className="flex flex-col gap-2 items-center">
-              <Button onClick={executeUpload} disabled={isUploading} className="bg-success text-white hover:bg-success/90 w-full">
-                {isUploading ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Save className="w-4 h-4 ms-2" />}
-                {isUploading ? `جاري الرفع... (${uploadProgress.current} من ${uploadProgress.total})` : "اعتماد ورفع البيانات"}
+              <Button onClick={executeUpload} disabled={isUploading || isCheckingDuplicates} className="bg-success text-white hover:bg-success/90 w-full">
+                {isUploading || isCheckingDuplicates ? <Loader2 className="w-4 h-4 ms-2 animate-spin" /> : <Save className="w-4 h-4 ms-2" />}
+                {isCheckingDuplicates ? "جاري الفحص..." : isUploading ? `جاري الرفع... (${uploadProgress.current} من ${uploadProgress.total})` : "اعتماد ورفع البيانات"}
               </Button>
               {isUploading && (
                 <div className="w-full bg-muted rounded-full h-2.5 mt-2 overflow-hidden">

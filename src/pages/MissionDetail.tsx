@@ -56,6 +56,25 @@ export default function MissionDetail() {
       supabase.from("mission_daily_reports").select("*").eq("mission_id", id).order("day_number"),
       supabase.from("mission_non_volunteers").select("*").eq("mission_id", id).order("created_at"),
     ]);
+
+    if (m && !m.is_open_mission && dr && dr.length > 0) {
+      Object.assign(m, {
+        supervisor: dr[0].supervisor,
+        joker_name: dr[0].joker_name,
+        youth_reviewer: dr[0].youth_reviewer,
+        monitor_name: dr[0].monitor_name,
+        youth_notes: dr[0].youth_notes,
+        filler_volunteer: dr[0].filler_volunteer,
+        reviewer_volunteer: dr[0].reviewer_volunteer,
+        reviewing_supervisor: dr[0].reviewing_supervisor,
+        completing_volunteer: dr[0].completing_volunteer,
+        data_sources: dr[0].data_sources,
+        supervisor_modified: dr[0].supervisor_modified,
+        supervisor_edit_note: dr[0].supervisor_edit_note,
+        team_reflection_note: dr[0].team_reflection_note
+      });
+    }
+
     setMission(m); setVolunteers(v ?? []); setDrivers(d ?? []); setRoutes(r ?? []); setNotes(n ?? []); setDailyReports(dr ?? []); setNonVolunteers(nv ?? []);
     setLoading(false);
   };
@@ -90,18 +109,39 @@ export default function MissionDetail() {
 
   const save = async (extraPatch: any = {}) => {
     setBusy(true);
-    const patch: Record<string, any> = {};
+    const patchMissions: Record<string, any> = {};
+    const patchOps: Record<string, any> = {};
+    
+    const opsKeys = ["supervisor", "joker_name", "youth_reviewer", "monitor_name", "youth_notes", "filler_volunteer", "reviewer_volunteer", "reviewing_supervisor", "completing_volunteer", "data_sources", "supervisor_modified", "supervisor_edit_note", "team_reflection_note"];
+
+    if (isSentToSupervisor && isSup) {
+      extraPatch.supervisor_modified = true;
+    }
+
     Object.keys(mission).forEach((k) => {
       if (!["id", "mission_code", "created_at", "updated_at", "created_by", "team_id"].includes(k)) {
-        patch[k] = mission[k];
+        if (opsKeys.includes(k)) patchOps[k] = mission[k];
+        else patchMissions[k] = mission[k];
       }
     });
-    if (isSentToSupervisor && isSup) {
-      patch.supervisor_modified = true;
-      patch.supervisor_modified_at = new Date().toISOString();
+
+    Object.keys(extraPatch).forEach((k) => {
+      if (opsKeys.includes(k)) patchOps[k] = extraPatch[k];
+      else patchMissions[k] = extraPatch[k];
+    });
+
+    const { error } = await supabase.from("missions").update(patchMissions as any).eq("id", mission.id);
+    
+    if (Object.keys(patchOps).length > 0 && !mission.is_open_mission) {
+      if (dailyReports.length > 0) {
+        await supabase.from("mission_daily_reports").update(patchOps as any).eq("id", dailyReports[0].id);
+      } else {
+        await supabase.from("mission_daily_reports").insert({
+          mission_id: mission.id, day_number: 1, report_date: mission.activity_date || new Date().toISOString().split('T')[0], status: 'pending_ops', ...patchOps
+        });
+      }
     }
-    Object.assign(patch, extraPatch);
-    const { error } = await supabase.from("missions").update(patch as any).eq("id", mission.id);
+
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -701,10 +741,8 @@ function DailyReportBox({ report, mission, load, hasRole }: any) {
     if (status === 'pending_joker') {
       patch.ops_notes = notes.ops;
       patch.ops_closed_at = new Date().toISOString();
-      // Auto-snapshot the mission's current execution fields into this report
-      patch.execution_data = {
-        region: mission?.region,
-        mission_type: mission?.mission_type,
+      // Auto-snapshot the mission's current execution fields into this report's proper columns
+      Object.assign(patch, {
         supervisor: mission?.supervisor,
         filler_volunteer: mission?.filler_volunteer,
         reviewer_volunteer: mission?.reviewer_volunteer,
@@ -712,7 +750,7 @@ function DailyReportBox({ report, mission, load, hasRole }: any) {
         completing_volunteer: mission?.completing_volunteer,
         joker_name: mission?.joker_name,
         data_sources: mission?.data_sources,
-      };
+      });
     }
     if (status === 'pending_youth') {
       patch.joker_notes = notes.joker;
@@ -726,13 +764,13 @@ function DailyReportBox({ report, mission, load, hasRole }: any) {
   };
 
   const execLabels: Record<string, string> = {
-    region: "الإقليم", mission_type: "نوع المهمة", supervisor: "المشرف",
+    supervisor: "المشرف",
     filler_volunteer: "القائم بالتعبئة", reviewer_volunteer: "القائم بالمراجعة",
     reviewing_supervisor: "المشرف المراجع", completing_volunteer: "المتطوع المستكمل",
     joker_name: "الجوكر", data_sources: "مصدر البيانات",
   };
-  const execData: Record<string, any> = report.execution_data || {};
-  const hasExecData = Object.values(execData).some(v => v);
+  const execData: Record<string, any> = report || {};
+  const hasExecData = !!execData.supervisor || !!execData.joker_name;
 
   return (
     <Card className="border border-primary/20 shadow-sm bg-card/50 overflow-hidden">

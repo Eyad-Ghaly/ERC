@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { Search, MapPin, Hash, User, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { SmartVolunteersUploader } from "@/components/SmartVolunteersUploader";
 
 interface VolunteerWithTeams {
   id: string;
@@ -89,6 +90,12 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
               onChange={e => setNameFilter(e.target.value)}
               className="pr-9"
             />
+          </div>
+          <div className="flex items-center">
+            <SmartVolunteersUploader onSuccess={() => {
+              // Trigger reload
+              window.location.reload();
+            }} />
           </div>
         </Card>
 

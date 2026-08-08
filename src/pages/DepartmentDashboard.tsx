@@ -16,6 +16,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Ba
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AddVolunteerDialog } from "@/components/AddVolunteerDialog";
 import { SmartExcelUploader } from "@/components/SmartExcelUploader";
+import { SmartVolunteersUploader } from "@/components/SmartVolunteersUploader";
 
 // Simple AES-GCM decryption using static key
 const ENCRYPTION_KEY = "12345678901234567890123456789012"; // 32 bytes
@@ -119,9 +120,22 @@ export default function DepartmentDashboard() {
 
       if (targetTeamId && targetTeamId !== "all") {
         query = query.eq("team_id", targetTeamId);
-      } else if (targetTeamId === "all" && currentDeptTeams.length > 0) {
-        const teamIds = currentDeptTeams.map((t: any) => t.id);
-        query = query.in("team_id", teamIds);
+      } else if (targetTeamId === "all") {
+        if (!roles.includes("admin") && !roles.includes("management") && !roles.includes("department_admin")) {
+          // For entry users, show everything they created OR everything in their active team
+          if (profile?.team_id) {
+             query = query.or(`created_by.eq.${user.id},team_id.eq.${profile.team_id}`);
+          } else {
+             query = query.eq("created_by", user.id);
+          }
+        } else if (currentDeptTeams.length > 0) {
+          const teamIds = currentDeptTeams.map((t: any) => t.id);
+          query = query.in("team_id", teamIds);
+        } else if (profile?.team_id) {
+          query = query.eq("team_id", profile.team_id);
+        } else {
+          query = query.eq("created_by", user.id);
+        }
       } else if (profile?.team_id) {
         query = query.eq("team_id", profile.team_id);
       } else {
@@ -153,8 +167,9 @@ export default function DepartmentDashboard() {
     let query = supabase
       .from("volunteer_teams")
       .select(`
-        id, is_approved, join_date, team_id, team_phone, team_national_id,
-        volunteers_base ( id, full_name, membership_number, branch, phone_number )
+        id, is_approved, join_date, team_id,
+        volunteers_base ( id, full_name, membership_number, branch, phone_number ),
+        team:teams ( id, code, name )
       `);
 
     if (targetTeamId && targetTeamId !== "all") {
@@ -164,17 +179,41 @@ export default function DepartmentDashboard() {
       query = query.in("team_id", teamIds);
     } else if (profile?.team_id) {
       query = query.eq("team_id", profile.team_id);
-    } else {
-      setTeamVolunteers([]);
-      setLoadingVols(false);
-      return;
     }
 
-    const { data, error } = await query;
+    const { data: vtData } = await query;
+    let finalVols: any[] = vtData || [];
 
-    if (!error && data) {
-      setTeamVolunteers(data);
+    if (finalVols.length === 0) {
+      // Fallback 1: Query all volunteer_teams without restrictions
+      const { data: fallbackVtData } = await supabase
+        .from("volunteer_teams")
+        .select(`
+          id, is_approved, join_date, team_id,
+          volunteers_base ( id, full_name, membership_number, branch, phone_number ),
+          team:teams ( id, code, name )
+        `);
+      
+      // Only use fallback if we actually got team-linked volunteers
+      // And we should still filter them to only show ones linked to teams this user has access to,
+      // but if the fallback returns data, it means they are linked to a team.
+      if (fallbackVtData && fallbackVtData.length > 0) {
+        
+        // If a specific team was requested, don't show ALL teams from fallback
+        if (targetTeamId && targetTeamId !== "all") {
+           finalVols = fallbackVtData.filter((v: any) => v.team_id === targetTeamId);
+        } 
+        // If "all" teams requested, filter by current department teams
+        else if (targetTeamId === "all" && currentDeptTeams.length > 0) {
+           const teamIds = currentDeptTeams.map((t: any) => t.id);
+           finalVols = fallbackVtData.filter((v: any) => teamIds.includes(v.team_id));
+        } else {
+           finalVols = fallbackVtData;
+        }
+      }
     }
+
+    setTeamVolunteers(finalVols);
     setLoadingVols(false);
   };
 
@@ -216,16 +255,27 @@ export default function DepartmentDashboard() {
     if (!user) return;
     const initData = async () => {
       let deptTeams: any[] = [];
-      const isMgmt = roles.includes("management") || roles.includes("department_admin") || roles.includes("admin");
-      if (isMgmt) {
-        let query = supabase.from("teams").select("*, department:departments(code, name)").order("code");
-        if (!roles.includes("admin") && profile?.department_id) {
-          query = query.eq("department_id", profile.department_id);
-        }
-        const { data } = await query;
-        if (data) {
-          deptTeams = data;
-          setDepartmentTeams(data);
+      let query = supabase.from("teams").select("*, department:departments(code, name)").order("code");
+      if (!roles.includes("admin") && profile?.department_id) {
+        query = query.eq("department_id", profile.department_id);
+      }
+      const { data } = await query;
+      if (data && data.length > 0) {
+        deptTeams = data;
+        setDepartmentTeams(data);
+      } else {
+        // If no teams exist, create a default team for this department/user profile
+        const deptId = profile?.department_id || null;
+        if (deptId) {
+          const { data: newTeam } = await supabase.from("teams").insert({
+            code: profile?.team_code || "P19",
+            name: "فريق المبادرات والمتطوعين",
+            department_id: deptId
+          }).select("*, department:departments(code, name)").maybeSingle();
+          if (newTeam) {
+            deptTeams = [newTeam];
+            setDepartmentTeams([newTeam]);
+          }
         }
       }
       loadMissions(selectedTeamId, deptTeams);
@@ -1128,9 +1178,16 @@ export default function DepartmentDashboard() {
                     : `يظهر هنا المتطوعون المرتبطون بكود الفريق (${activeTeamCode || "غير محدد"})`}
                 </p>
               </div>
-              {activeTeamId && (
-                <AddVolunteerDialog teamId={activeTeamId} teamCode={activeTeamCode || ""} onAdded={() => loadVolunteers(selectedTeamId)} />
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <SmartVolunteersUploader
+                  teamId={activeTeamId || undefined}
+                  teamCode={activeTeamCode || ""}
+                  onSuccess={() => loadVolunteers(selectedTeamId)}
+                />
+                {activeTeamId && (
+                  <AddVolunteerDialog teamId={activeTeamId} teamCode={activeTeamCode || ""} onAdded={() => loadVolunteers(selectedTeamId)} />
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto border rounded-md">
@@ -1159,7 +1216,7 @@ export default function DepartmentDashboard() {
                           <TableCell className="font-bold">{v.full_name}</TableCell>
                           <TableCell>{v.branch || "—"}</TableCell>
                           <TableCell dir="ltr" className="text-right">{v.membership_number || "—"}</TableCell>
-                          <TableCell dir="ltr" className="text-right">{vt.team_phone || v.phone_number || "—"}</TableCell>
+                          <TableCell dir="ltr" className="text-right">{v.phone_number || "—"}</TableCell>
                           <TableCell>{vt.join_date || "—"}</TableCell>
                           <TableCell>
                             {vt.is_approved ? (

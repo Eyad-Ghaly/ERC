@@ -52,9 +52,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
       volunteer_id: selectedVolunteer.id,
       team_id: teamId,
       join_date: new Date().toISOString().split('T')[0],
-      is_approved: false,
-      team_phone: teamPhone || null,
-      team_national_id: teamNationalId || null
+      is_approved: false
     });
 
     setBusy(false);
@@ -96,9 +94,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
       volunteer_id: newVol.id,
       team_id: teamId,
       join_date: new Date().toISOString().split('T')[0],
-      is_approved: false,
-      team_phone: phone || null,
-      team_national_id: nationalId || null
+      is_approved: false
     });
 
     setBusy(false);
