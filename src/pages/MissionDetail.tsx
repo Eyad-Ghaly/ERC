@@ -392,7 +392,6 @@ export default function MissionDetail() {
                 {mission.activity_classification === "تنمية معرفية ومهارية" && <Info label="الجهة المنظمة" value={mission.organizing_entity} />}
                 <Info label="نوع النشاط" value={mission.activity_type} />
                 <Info label="تفاصيل النشاط" value={mission.activity_details} />
-                <Info label="إحداثيات" value={mission.latitude ? `${mission.latitude}, ${mission.longitude}` : null} />
               </>
             )}
           </div>
