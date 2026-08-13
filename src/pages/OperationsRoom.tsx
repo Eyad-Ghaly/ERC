@@ -26,17 +26,17 @@ interface Mission {
 export default function OperationsRoom() {
   const [region, setRegion] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [date, setDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const today = format(new Date(), "yyyy-MM-dd");
       let q = supabase
         .from("missions")
         .select("id, mission_code, mission_name, governorate, execution_place, activity_date, status, region, is_open_mission, is_canceled")
-        .or(`activity_date.eq.${today},and(is_open_mission.eq.true,status.eq.open_active)`)
+        .or(`activity_date.eq.${date},and(is_open_mission.eq.true,status.eq.open_active)`)
         .order("created_at", { ascending: false })
         .limit(10000);
       if (region !== "all") q = q.eq("region", region as any);
@@ -44,7 +44,7 @@ export default function OperationsRoom() {
       setMissions((data ?? []) as Mission[]);
       setLoading(false);
     })();
-  }, [region]);
+  }, [region, date]);
 
   const filtered = missions.filter((m) =>
     !search || m.mission_code.toLowerCase().includes(search.toLowerCase()) || m.mission_name.toLowerCase().includes(search.toLowerCase())
@@ -55,7 +55,13 @@ export default function OperationsRoom() {
       <div className="space-y-6">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Calendar className="w-4 h-4" />
-          مهام اليوم: <strong className="text-foreground">{format(new Date(), "yyyy-MM-dd")}</strong>
+          تاريخ المهام: 
+          <Input 
+            type="date" 
+            value={date} 
+            onChange={(e) => setDate(e.target.value)} 
+            className="w-auto h-8"
+          />
         </div>
 
         <Tabs value={region} onValueChange={setRegion}>
