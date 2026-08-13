@@ -21,6 +21,7 @@ interface Mission {
   status: string;
   region: string | null;
   is_open_mission: boolean | null;
+  is_canceled?: boolean | null;
 }
 
 export default function OperationsRoom() {
