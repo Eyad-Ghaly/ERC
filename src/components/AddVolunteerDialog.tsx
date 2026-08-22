@@ -40,7 +40,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
       .from("volunteer_teams")
       .select("id")
       .eq("volunteer_id", selectedVolunteer.id)
-      .eq("team_id", teamId)
+      .eq("team_code", teamId)
       .single();
 
     if (existing) {
@@ -50,7 +50,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
 
     const { error } = await supabase.from("volunteer_teams").insert({
       volunteer_id: selectedVolunteer.id,
-      team_id: teamId,
+      team_code: teamId,
       join_date: new Date().toISOString().split('T')[0],
       is_approved: false
     });
@@ -92,7 +92,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
     // 2. Insert into teams
     const { error: teamError } = await supabase.from("volunteer_teams").insert({
       volunteer_id: newVol.id,
-      team_id: teamId,
+      team_code: teamId,
       join_date: new Date().toISOString().split('T')[0],
       is_approved: false
     });

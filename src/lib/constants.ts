@@ -2,6 +2,7 @@ export const ROLES = {
   admin: "مدير النظام",
   data_manager: "مسؤول إدارة وتحليل البيانات",
   department_entry: "مسؤول الفريق (إدخال)",
+  department_admin: "مدير الإدارة",
   operations_room: "غرفة العمليات",
   operations_supervisor: "مشرف غرفة العمليات",
   joker: "الجوكر",
