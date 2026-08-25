@@ -188,9 +188,18 @@ export default function DepartmentEntry() {
   const addVolunteer = () => setVolunteers([...volunteers, { full_name: "", membership_number: "", branch: "", is_manual: false }]);
   const removeVolunteer = (index: number) => setVolunteers(volunteers.filter((_, i) => i !== index));
   const updateVolunteer = (index: number, field: keyof Volunteer, value: any) => {
-    const updated = [...volunteers];
-    updated[index] = { ...updated[index], [field]: value };
-    setVolunteers(updated);
+    setVolunteers(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+  const updateVolunteerFull = (index: number, patch: Partial<Volunteer>) => {
+    setVolunteers(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], ...patch };
+      return updated;
+    });
   };
 
   const addNonVolunteer = () => setNonVolunteers([...nonVolunteers, { full_name: "", role: "" }]);
@@ -443,9 +452,11 @@ export default function DepartmentEntry() {
                     onValueChange={(val) => {
                       const tv = teamVolunteers.find(x => x.full_name === val);
                       if (tv) {
-                        updateVolunteer(i, "full_name", tv.full_name);
-                        updateVolunteer(i, "membership_number", tv.membership_number || "");
-                        updateVolunteer(i, "branch", tv.branch || "");
+                        updateVolunteerFull(i, {
+                          full_name: tv.full_name,
+                          membership_number: tv.membership_number || "",
+                          branch: tv.branch || "",
+                        });
                       }
                     }}
                   >
@@ -453,7 +464,7 @@ export default function DepartmentEntry() {
                     <SelectContent>
                       {teamVolunteers.map(tv => (
                         <SelectItem key={tv.id} value={tv.full_name}>
-                          {tv.full_name} {tv.membership_number ? `(${tv.membership_number})` : ''}
+                          {tv.full_name}
                         </SelectItem>
                       ))}
                       {teamVolunteers.length === 0 && <div className="p-2 text-sm text-muted-foreground">لا يوجد متطوعين في فريقك</div>}
