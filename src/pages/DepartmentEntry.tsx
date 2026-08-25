@@ -77,19 +77,26 @@ export default function DepartmentEntry() {
   const isLateSubmission = activityDate ? activityDate < today : false;
 
   useEffect(() => {
-    if (teamCode) {
+    const tid = profile?.team_id;
+    if (tid) {
       const fetchTeamVolunteers = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("volunteer_teams")
-          .select(`volunteers_base(id, full_name, membership_number, branch)`)
-          .eq("team_code", teamCode);
+          .select(`id, volunteer_id, volunteers_base(id, full_name, membership_number, branch)`)
+          .eq("team_id", tid);
         if (data) {
-          setTeamVolunteers(data.map((d: any) => d.volunteers_base).filter(Boolean));
+          // Include volunteers whether or not they exist in volunteers_base
+          const mapped = data.map((d: any) => {
+            if (d.volunteers_base) return d.volunteers_base;
+            // Fallback: volunteer exists in volunteer_teams but not yet in volunteers_base
+            return null;
+          }).filter(Boolean);
+          setTeamVolunteers(mapped);
         }
       };
       fetchTeamVolunteers();
     }
-  }, [teamCode]);
+  }, [profile?.team_id]);
 
   useEffect(() => {
     if (profile?.team_id && !id) setTeamId(profile.team_id);
