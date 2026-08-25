@@ -194,16 +194,46 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
     let addedCount = 0;
     let updatedCount = 0;
     let errorCount = 0;
+    let emptyNameCount = 0;
 
     const total = excelData.length;
     setUploadProgress({ current: 0, total });
+
+    // ── Pre-fetch existing team volunteers once (efficient, avoids per-row DB calls) ──
+    const { data: existingTeamVols } = await supabase
+      .from("volunteer_teams")
+      .select("volunteers_base!inner(id, full_name, membership_number)")
+      .eq("team_id", activeTeamTarget);
+
+    // Build a Set of "name__membership" keys for fast lookup
+    // If membership_number is null, use name only as the key
+    const existingKeys = new Set<string>(
+      (existingTeamVols || []).map((t: any) => {
+        const v = t.volunteers_base;
+        return v?.membership_number
+          ? `${v.full_name}__${v.membership_number}`
+          : `${v?.full_name}__`;
+      })
+    );
+    // Also build a map from the same key → volunteer id (for linking)
+    const existingVolIdMap = new Map<string, string>(
+      (existingTeamVols || []).map((t: any) => {
+        const v = t.volunteers_base;
+        const key = v?.membership_number
+          ? `${v.full_name}__${v.membership_number}`
+          : `${v?.full_name}__`;
+        return [key, v?.id];
+      })
+    );
 
     for (let i = 0; i < total; i++) {
       const row = excelData[i];
       const fullName = String(row[nameCol] || "").trim();
 
       if (!fullName) {
+        emptyNameCount++;
         errorCount++;
+        console.warn(`[Row ${i + 1}] Skipped: empty name. Row data:`, row);
         setUploadProgress({ current: i + 1, total });
         continue;
       }
@@ -223,37 +253,33 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
       }
 
       try {
-        // 1. Check if volunteer exists in volunteers_base
+        // ── Phase 1: 3-step deduplication ────────────────────────────────────
+        // Step 1: Already in THIS team? (in-memory, fast)
+        const dupKey = membershipNumber
+          ? `${fullName}__${membershipNumber}`
+          : `${fullName}__`;
+
+        if (existingKeys.has(dupKey)) {
+          updatedCount++;
+          setUploadProgress({ current: i + 1, total });
+          continue;
+        }
+
+        // Step 2: Exists in volunteers_base globally? (name + membership_number)
+        // This handles volunteers already in DB but not yet linked to this team.
         let volunteerId: string | null = null;
 
-        if (nationalId) {
-          const { data: existingByNat } = await supabase
-            .from("volunteers_base")
-            .select("id")
-            .eq("national_id", nationalId)
-            .maybeSingle();
-          if (existingByNat) volunteerId = existingByNat.id;
-        }
-
-        if (!volunteerId && membershipNumber) {
-          const { data: existingByMem } = await supabase
-            .from("volunteers_base")
-            .select("id")
-            .eq("membership_number", membershipNumber)
-            .maybeSingle();
-          if (existingByMem) volunteerId = existingByMem.id;
-        }
-
-        if (!volunteerId) {
-          const { data: existingByName } = await supabase
+        if (membershipNumber) {
+          const { data: existingInDb } = await supabase
             .from("volunteers_base")
             .select("id")
             .eq("full_name", fullName)
+            .eq("membership_number", membershipNumber)
             .maybeSingle();
-          if (existingByName) volunteerId = existingByName.id;
+          if (existingInDb) volunteerId = existingInDb.id;
         }
 
-        // 2. If not found, insert new volunteer into volunteers_base
+        // If still not found → Step 3: insert as brand new volunteer
         if (!volunteerId) {
           const { data: newVol, error: insertError } = await supabase
             .from("volunteers_base")
@@ -262,7 +288,6 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
               membership_number: membershipNumber,
               branch: branch,
               phone_number: phone,
-              national_id: nationalId,
               gender: gender,
               education_status: educationStatus,
             })
@@ -270,6 +295,7 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
             .single();
 
           if (insertError || !newVol) {
+            console.error(`[Row ${i + 1}] Insert failed for "${fullName}":`, insertError);
             errorCount++;
             setUploadProgress({ current: i + 1, total });
             continue;
@@ -279,6 +305,9 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
         } else {
           updatedCount++;
         }
+
+        // Add to in-memory set to prevent re-processing same volunteer in same file
+        existingKeys.add(dupKey);
 
         // 3. Link volunteer to team in volunteer_teams
         const { data: existingTeamLink } = await supabase
