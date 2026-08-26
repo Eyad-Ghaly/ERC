@@ -34,15 +34,15 @@ export default function MissionDetail() {
   const [busy, setBusy] = useState(false);
 
   const primaryRole = roles[0];
-  const isOps = primaryRole === "operations_room" || primaryRole === "operations_supervisor" || primaryRole === "admin";
-  const isJoker = primaryRole === "joker" || primaryRole === "admin";
-  const isSup = primaryRole === "operations_supervisor" || primaryRole === "admin";
-  const isYouth = primaryRole === "youth_room" || primaryRole === "admin";
-  const isData = primaryRole === "data_manager" || primaryRole === "admin";
+  const isOps = roles.includes("operations_room") || roles.includes("operations_supervisor") || roles.includes("admin");
+  const isJoker = roles.includes("joker") || roles.includes("admin");
+  const isSup = roles.includes("operations_supervisor") || roles.includes("admin");
+  const isYouth = roles.includes("youth_room") || roles.includes("admin");
+  const isData = roles.includes("data_manager") || roles.includes("admin");
   const canEdit = isOps || isJoker || isSup || isYouth || isData;
 
   // Hidden in operations room (sensitive). Visible to joker/supervisor/data/admin.
-  const opsHide = !(isJoker || isSup || isData || primaryRole === "admin");
+  const opsHide = !(isJoker || isSup || isData || roles.includes("admin"));
 
   const load = async () => {
     if (!id) return;
