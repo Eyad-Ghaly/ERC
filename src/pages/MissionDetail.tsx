@@ -49,12 +49,12 @@ export default function MissionDetail() {
     setLoading(true);
     const [{ data: m }, { data: v }, { data: d }, { data: r }, { data: n }, { data: dr }, { data: nv }] = await Promise.all([
       supabase.from("missions").select("*").eq("id", id).maybeSingle(),
-      supabase.from("mission_volunteers").select("*").eq("mission_id", id).order("created_at"),
+      supabase.from("mission_volunteers").select("*").eq("mission_id", id).order("created_at").order("id"),
       supabase.from("mission_drivers").select("*").eq("mission_id", id),
       supabase.from("mission_routes").select("*").eq("mission_id", id).order("position"),
       supabase.from("volunteer_notes").select("*").eq("mission_id", id),
       supabase.from("mission_daily_reports").select("*").eq("mission_id", id).order("day_number"),
-      supabase.from("mission_non_volunteers").select("*").eq("mission_id", id).order("created_at"),
+      supabase.from("mission_non_volunteers").select("*").eq("mission_id", id).order("created_at").order("id"),
     ]);
 
     if (m && !m.is_open_mission && dr && dr.length > 0) {
@@ -167,11 +167,11 @@ export default function MissionDetail() {
   };
 
   const reloadVolunteers = async () => {
-    const { data } = await supabase.from("mission_volunteers").select("*").eq("mission_id", mission.id).order("created_at");
+    const { data } = await supabase.from("mission_volunteers").select("*").eq("mission_id", mission.id).order("created_at").order("id");
     setVolunteers(data ?? []);
   };
   const reloadNonVolunteers = async () => {
-    const { data } = await supabase.from("mission_non_volunteers").select("*").eq("mission_id", mission.id).order("created_at");
+    const { data } = await supabase.from("mission_non_volunteers").select("*").eq("mission_id", mission.id).order("created_at").order("id");
     setNonVolunteers(data ?? []);
   };
   const reloadDrivers = async () => {
@@ -526,14 +526,14 @@ export default function MissionDetail() {
                   <div className="space-y-1"><Label className="text-xs">النقاط</Label>
                     <Select disabled={!canUserEdit} value={String(v.points ?? "")} onValueChange={(val) => updateVol(v.id, { points: Number(val) })}>
                       <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
-                      <SelectContent>{POINTS_OPTIONS.map((p) => <SelectItem key={p} value={String(p)}>{p}</SelectItem>)}</SelectContent>
+                      <SelectContent side="bottom" avoidCollisions={false}>{POINTS_OPTIONS.map((p) => <SelectItem key={p} value={String(p)}>{p}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 )}
                 <div className="space-y-1"><Label className="text-xs">سبب التغيير</Label>
                   <Select disabled={!canUserEdit} value={v.change_reason ?? ""} onValueChange={(val) => updateVol(v.id, { change_reason: val })}>
                     <SelectTrigger className="h-8"><SelectValue placeholder="—" /></SelectTrigger>
-                    <SelectContent>{Object.entries(VOLUNTEER_CHANGE_REASONS).map(([k, vv]) => <SelectItem key={k} value={k}>{vv}</SelectItem>)}</SelectContent>
+                    <SelectContent side="bottom" avoidCollisions={false}>{Object.entries(VOLUNTEER_CHANGE_REASONS).map(([k, vv]) => <SelectItem key={k} value={k}>{vv}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 {isYouth && canUserEdit && (
@@ -543,7 +543,7 @@ export default function MissionDetail() {
                       load(); toast.success("تمت إضافة الملاحظة");
                     }}>
                       <SelectTrigger className="h-8"><SelectValue placeholder="إضافة ملاحظة" /></SelectTrigger>
-                      <SelectContent>{Object.entries(VOLUNTEER_NOTE_TYPES).map(([k, vv]) => <SelectItem key={k} value={k}>{vv}</SelectItem>)}</SelectContent>
+                      <SelectContent side="bottom" avoidCollisions={false}>{Object.entries(VOLUNTEER_NOTE_TYPES).map(([k, vv]) => <SelectItem key={k} value={k}>{vv}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 )}

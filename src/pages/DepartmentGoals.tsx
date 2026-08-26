@@ -19,6 +19,10 @@ export default function DepartmentGoals() {
   const [progressView, setProgressView] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Multi-team selection for new/edit indicator
+  const [newIndTeams, setNewIndTeams] = useState<string[]>([]);
+  const [editIndTeams, setEditIndTeams] = useState<string[]>([]);
 
   // States for new items
   const [newGoal, setNewGoal] = useState({ code: "", title: "" });
@@ -41,7 +45,7 @@ export default function DepartmentGoals() {
 
     const [goalsRes, progressRes, teamsRes] = await Promise.all([
       supabase.from('department_goals')
-        .select('*, department_objectives(*, department_indicators(*))')
+        .select('*, department_objectives(*, department_indicators(*, indicator_teams(team_id)))')
         .eq('department_id', profile.department_id)
         .order('created_at', { ascending: true }),
       supabase.from('indicator_progress_view').select('*'),
@@ -74,20 +78,39 @@ export default function DepartmentGoals() {
     loadData();
   }, [profile?.department_id]);
 
-  const nextGoalCode = `G${goals.length + 1}`;
+  // Helper to extract the highest number after a prefix
+  const getMaxNumber = (items: any[], prefix: string, regex: RegExp) => {
+    let max = 0;
+    items.forEach(item => {
+      const match = item.code?.match(regex);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num > max) max = num;
+      }
+    });
+    return max;
+  };
+
+  const nextGoalCode = `G${getMaxNumber(goals, 'G', /^G(\d+)$/) + 1}`;
   
   const currentGoalForObj = goals.find(g => g.id === newObj.goal_id);
-  const nextObjCode = currentGoalForObj ? `${currentGoalForObj.code}O${(currentGoalForObj.department_objectives?.length || 0) + 1}` : '';
+  const nextObjCode = currentGoalForObj 
+    ? `${currentGoalForObj.code}O${getMaxNumber(currentGoalForObj.department_objectives || [], currentGoalForObj.code + 'O', /O(\d+)$/) + 1}` 
+    : '';
 
   let currentObjForInd = null;
   for (const g of goals) {
     const obj = g.department_objectives?.find((o: any) => o.id === newInd.objective_id);
     if (obj) { currentObjForInd = obj; break; }
   }
-  const nextIndCode = currentObjForInd ? `${currentObjForInd.code}I${(currentObjForInd.department_indicators?.length || 0) + 1}` : '';
+  const nextIndCode = currentObjForInd 
+    ? `${currentObjForInd.code}I${getMaxNumber(currentObjForInd.department_indicators || [], currentObjForInd.code + 'I', /I(\d+)$/) + 1}` 
+    : '';
 
   const addGoal = async () => {
+    if (isSubmitting) return;
     if (!newGoal.title) return toast.error("أدخل اسم الهدف");
+    setIsSubmitting(true);
     const { error } = await supabase.from('department_goals').insert({
       department_id: profile?.department_id,
       code: nextGoalCode,
@@ -98,12 +121,15 @@ export default function DepartmentGoals() {
       return;
     }
     setNewGoal({ code: "", title: "" });
-    loadData();
+    await loadData();
+    setIsSubmitting(false);
     toast.success("تم الإضافة");
   };
 
   const addObjective = async () => {
+    if (isSubmitting) return;
     if (!newObj.goal_id || !newObj.title) return toast.error("أدخل اسم الهدف الفرعي");
+    setIsSubmitting(true);
     const { error } = await supabase.from('department_objectives').insert({
       ...newObj,
       code: nextObjCode
@@ -113,13 +139,16 @@ export default function DepartmentGoals() {
       return;
     }
     setNewObj({ goal_id: "", code: "", title: "" });
-    loadData();
+    await loadData();
+    setIsSubmitting(false);
     toast.success("تم الإضافة");
   };
 
   const addIndicator = async () => {
+    if (isSubmitting) return;
     if (!newInd.objective_id || !newInd.title || !newInd.target_value) return toast.error("أكمل بيانات المؤشر");
-    if (newInd.target_type === 'service_type' && !newInd.team_id) return toast.error("يجب تحديد الفريق لحساب بنوع الخدمة");
+    if (newInd.target_type === 'service_type' && newIndTeams.length === 0) return toast.error("يجب تحديد فريق واحد على الأقل لحساب بنوع الخدمة");
+    setIsSubmitting(true);
 
     const insertData: any = {
       objective_id: newInd.objective_id,
@@ -131,17 +160,27 @@ export default function DepartmentGoals() {
       start_date: newInd.start_date || null,
       end_date: newInd.end_date || null,
       source_of_fund: newInd.source_of_fund || null,
-      team_id: newInd.target_type === 'service_type' ? newInd.team_id : null
+      team_id: newInd.target_type === 'service_type' ? (newIndTeams[0] || null) : null
     };
 
-    const { error } = await supabase.from('department_indicators').insert(insertData);
+    const { data: indData, error } = await supabase.from('department_indicators').insert(insertData).select().single();
     if (error) {
       toast.error(error.message);
+      setIsSubmitting(false);
       return;
     }
 
+    // Save team assignments in indicator_teams
+    if (newIndTeams.length > 0 && indData) {
+      await supabase.from('indicator_teams').insert(
+        newIndTeams.map(tid => ({ indicator_id: indData.id, team_id: tid }))
+      );
+    }
+
     setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" });
-    loadData();
+    setNewIndTeams([]);
+    await loadData();
+    setIsSubmitting(false);
     toast.success("تم الإضافة");
   };
 
@@ -169,7 +208,7 @@ export default function DepartmentGoals() {
 
   const updateIndicator = async () => {
     if (!editInd || !editInd.title || !editInd.target_value) return toast.error("أكمل بيانات المؤشر");
-    if (editInd.target_type === 'service_type' && !editInd.team_id) return toast.error("يجب تحديد الفريق لحساب بنوع الخدمة");
+    if (editInd.target_type === 'service_type' && editIndTeams.length === 0) return toast.error("يجب تحديد فريق واحد على الأقل لحساب بنوع الخدمة");
 
     const updateData: any = {
       title: editInd.title,
@@ -179,13 +218,23 @@ export default function DepartmentGoals() {
       start_date: editInd.start_date || null,
       end_date: editInd.end_date || null,
       source_of_fund: editInd.source_of_fund || null,
-      team_id: editInd.target_type === 'service_type' ? editInd.team_id : null,
+      team_id: editInd.target_type === 'service_type' ? (editIndTeams[0] || null) : null,
       notes: editInd.notes || null,
     };
 
     const { error } = await supabase.from('department_indicators').update(updateData).eq('id', editInd.id);
     if (error) { toast.error(error.message); return; }
+
+    // Update indicator_teams: delete all then re-insert
+    await supabase.from('indicator_teams').delete().eq('indicator_id', editInd.id);
+    if (editIndTeams.length > 0) {
+      await supabase.from('indicator_teams').insert(
+        editIndTeams.map(tid => ({ indicator_id: editInd.id, team_id: tid }))
+      );
+    }
+
     setEditInd(null);
+    setEditIndTeams([]);
     loadData();
     toast.success("تم تعديل المؤشر بنجاح");
   };
@@ -260,7 +309,14 @@ export default function DepartmentGoals() {
         </Dialog>
 
         {/* Dialog for Editing Indicator */}
-        <Dialog open={!!editInd} onOpenChange={(open) => !open && setEditInd(null)}>
+        <Dialog open={!!editInd} onOpenChange={(open) => {
+          if (!open) { setEditInd(null); setEditIndTeams([]); }
+          else if (editInd) {
+            // Load existing teams for this indicator
+            const existingTeams = editInd.indicator_teams?.map((it: any) => it.team_id) || [];
+            setEditIndTeams(existingTeams);
+          }
+        }}>
           <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>تعديل مؤشر النتيجة (النشاط)</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-4 pt-4">
@@ -279,17 +335,31 @@ export default function DepartmentGoals() {
                 </Select>
               </div>
 
-              {editInd?.target_type === 'service_type' && (
-                <div className="space-y-2">
-                  <Label>تخصيص للفريق *</Label>
-                  <Select value={editInd?.team_id || ''} onValueChange={v => setEditInd({ ...editInd, team_id: v })}>
-                    <SelectTrigger><SelectValue placeholder="اختر الفريق..." /></SelectTrigger>
-                    <SelectContent>
-                      {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+              {/* Multi-team selector — always visible for all target types */}
+              <div className="space-y-2 col-span-2">
+                <Label>الفرق المخصصة للمؤشر {editInd?.target_type === 'service_type' && <span className="text-destructive">*</span>}</Label>
+                <div className="border rounded-md p-3 space-y-2 max-h-40 overflow-y-auto bg-muted/20">
+                  {teams.length === 0 && <p className="text-xs text-muted-foreground">لا توجد فرق مسجلة</p>}
+                  {teams.map(t => (
+                    <label key={t.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 p-1 rounded">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-primary"
+                        checked={editIndTeams.includes(t.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setEditIndTeams(prev => [...prev, t.id]);
+                          else setEditIndTeams(prev => prev.filter(id => id !== t.id));
+                        }}
+                      />
+                      <span className="font-mono text-xs bg-background px-1 rounded border">{t.code}</span>
+                      <span className="text-sm">{t.name}</span>
+                    </label>
+                  ))}
                 </div>
-              )}
+                {editIndTeams.length > 0 && (
+                  <p className="text-xs text-muted-foreground">{editIndTeams.length} فريق محدد</p>
+                )}
+              </div>
 
               <div className="space-y-2"><Label>وحدة القياس</Label><Input value={editInd?.unit || ''} onChange={e => setEditInd({ ...editInd, unit: e.target.value })} /></div>
               <div className="space-y-2"><Label>العدد المستهدف (Target)</Label><Input type="number" min="1" value={editInd?.target_value || 0} onChange={e => setEditInd({ ...editInd, target_value: parseInt(e.target.value) || 0 })} /></div>
@@ -391,17 +461,31 @@ export default function DepartmentGoals() {
                                     </Select>
                                   </div>
 
-                                  {newInd.target_type === 'service_type' && (
-                                    <div className="space-y-2">
-                                      <Label>تخصيص للفريق *</Label>
-                                      <Select value={newInd.team_id} onValueChange={v => setNewInd({...newInd, team_id: v})}>
-                                        <SelectTrigger><SelectValue placeholder="اختر الفريق..." /></SelectTrigger>
-                                        <SelectContent>
-                                          {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code} - {t.name}</SelectItem>)}
-                                        </SelectContent>
-                                      </Select>
+                                  {/* Multi-team selector for new indicator */}
+                                  <div className="space-y-2 col-span-2">
+                                    <Label>الفرق المخصصة للمؤشر {newInd.target_type === 'service_type' && <span className="text-destructive">*</span>}</Label>
+                                    <div className="border rounded-md p-3 space-y-2 max-h-36 overflow-y-auto bg-muted/20">
+                                      {teams.length === 0 && <p className="text-xs text-muted-foreground">لا توجد فرق مسجلة</p>}
+                                      {teams.map(t => (
+                                        <label key={t.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 p-1 rounded">
+                                          <input
+                                            type="checkbox"
+                                            className="w-4 h-4 accent-primary"
+                                            checked={newIndTeams.includes(t.id)}
+                                            onChange={(e) => {
+                                              if (e.target.checked) setNewIndTeams(prev => [...prev, t.id]);
+                                              else setNewIndTeams(prev => prev.filter(id => id !== t.id));
+                                            }}
+                                          />
+                                          <span className="font-mono text-xs bg-background px-1 rounded border">{t.code}</span>
+                                          <span className="text-sm">{t.name}</span>
+                                        </label>
+                                      ))}
                                     </div>
-                                  )}
+                                    {newIndTeams.length > 0 && (
+                                      <p className="text-xs text-muted-foreground">{newIndTeams.length} فريق محدد</p>
+                                    )}
+                                  </div>
 
                                   <div className="space-y-2"><Label>وحدة القياس</Label><Input value={newInd.unit} onChange={e => setNewInd({...newInd, unit: e.target.value})} placeholder="فرد، جلسة، حملة..." /></div>
                                   
@@ -432,6 +516,7 @@ export default function DepartmentGoals() {
                               <th className="p-3 font-medium">كود</th>
                               <th className="p-3 font-medium min-w-[200px]">المؤشر (النشاط)</th>
                               <th className="p-3 font-medium">التمويل</th>
+                              <th className="p-3 font-medium">الفرق المخصصة</th>
                               <th className="p-3 font-medium text-center">المستهدف</th>
                               <th className="p-3 font-medium text-center">المحقق</th>
                               <th className="p-3 font-medium text-center">الإنجاز %</th>
@@ -470,6 +555,18 @@ export default function DepartmentGoals() {
                                   <td className="p-3 font-mono text-xs">{ind.code}</td>
                                   <td className="p-3 font-bold">{ind.title}</td>
                                   <td className="p-3 text-xs text-muted-foreground">{ind.source_of_fund || '—'}</td>
+                                  <td className="p-3 text-xs">
+                                    {ind.indicator_teams && ind.indicator_teams.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {ind.indicator_teams.map((it: any) => {
+                                          const team = teams.find(t => t.id === it.team_id);
+                                          return team ? (
+                                            <span key={it.team_id} className="font-mono text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">{team.code}</span>
+                                          ) : null;
+                                        })}
+                                      </div>
+                                    ) : <span className="text-muted-foreground">—</span>}
+                                  </td>
                                   <td className="p-3 text-center font-bold text-primary">{ind.target_value} <span className="text-xs font-normal text-muted-foreground">{ind.unit}</span></td>
                                   <td className="p-3 text-center font-bold">{achieved}</td>
                                   <td className="p-3 text-center">

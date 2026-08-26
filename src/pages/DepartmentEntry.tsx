@@ -104,7 +104,7 @@ export default function DepartmentEntry() {
     if (profile?.department_id) {
       const fetchIndicators = async () => {
         const { data } = await supabase.from('department_goals')
-          .select('*, department_objectives(*, department_indicators(*))')
+          .select('*, department_objectives(*, department_indicators(*, indicator_teams(team_id)))')
           .eq('department_id', profile.department_id);
         
         if (data) {
@@ -112,9 +112,19 @@ export default function DepartmentEntry() {
             g.department_objectives?.flatMap((o: any) => o.department_indicators) || []
           ).filter(Boolean);
 
-          const uniqueIndicators = [];
+          // Filter out service_type indicators (they are counted by service type, not selected per mission)
+          // Only keep beneficiaries and missions target types
+          // Also filter by team assignment: show indicator if it has no team assigned OR if current team is assigned
+          const filteredIndicators = allIndicators.filter((ind: any) => {
+            if (ind.target_type === 'service_type') return false; // never show in mission entry
+            const assignedTeams = ind.indicator_teams?.map((it: any) => it.team_id) || [];
+            if (assignedTeams.length === 0) return true; // no restriction, show to all
+            return profile?.team_id && assignedTeams.includes(profile.team_id); // only show if team is assigned
+          });
+
+          const uniqueIndicators: any[] = [];
           const seen = new Set();
-          for (const ind of allIndicators) {
+          for (const ind of filteredIndicators) {
             const key = `${ind.objective_id}-${ind.title}`;
             if (!seen.has(key)) {
               seen.add(key);

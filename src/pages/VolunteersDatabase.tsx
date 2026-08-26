@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Search, MapPin, Hash, User, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SmartVolunteersUploader } from "@/components/SmartVolunteersUploader";
+import { useAuth } from "@/hooks/useAuth";
 
 interface VolunteerWithTeams {
   id: string;
@@ -22,6 +23,7 @@ interface VolunteerWithTeams {
 }
 
 export default function VolunteersDatabase({ embedded }: { embedded?: boolean }) {
+  const { profile } = useAuth();
   const [volunteers, setVolunteers] = useState<VolunteerWithTeams[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,25 +33,58 @@ export default function VolunteersDatabase({ embedded }: { embedded?: boolean })
   const [nameFilter, setNameFilter] = useState("");
 
   useEffect(() => {
+    if (!profile) return;
+
     const fetchVolunteers = async () => {
       setLoading(true);
-      // Fetch volunteers and their associated teams
-      const { data, error } = await supabase
-        .from("volunteers_base")
-        .select(`
-          id, full_name, membership_number, branch, phone_number, national_id,
-          gender, education_status, renewal_2026,
-          volunteer_teams ( team:teams(code), is_approved )
-        `);
 
-      if (!error && data) {
-        setVolunteers(data as unknown as VolunteerWithTeams[]);
+      const teamId = profile.team_id;
+
+      if (teamId) {
+        // Team user → fetch only their team's volunteers via volunteer_teams join
+        const { data, error } = await supabase
+          .from("volunteer_teams")
+          .select(`
+            is_approved,
+            team:teams(code),
+            volunteers_base (
+              id, full_name, membership_number, branch, phone_number,
+              gender, education_status, renewal_2026
+            )
+          `)
+          .eq("team_id", teamId);
+
+        if (!error && data) {
+          // Map to VolunteerWithTeams shape
+          const mapped: VolunteerWithTeams[] = data
+            .filter((row: any) => row.volunteers_base)
+            .map((row: any) => ({
+              ...row.volunteers_base,
+              national_id: null,
+              volunteer_teams: [{ team: row.team, is_approved: row.is_approved }],
+            }));
+          setVolunteers(mapped);
+        }
+      } else {
+        // Admin / no team → fetch all volunteers
+        const { data, error } = await supabase
+          .from("volunteers_base")
+          .select(`
+            id, full_name, membership_number, branch, phone_number,
+            gender, education_status, renewal_2026,
+            volunteer_teams ( team:teams(code), is_approved )
+          `);
+
+        if (!error && data) {
+          setVolunteers(data as unknown as VolunteerWithTeams[]);
+        }
       }
+
       setLoading(false);
     };
 
     fetchVolunteers();
-  }, []);
+  }, [profile]);
 
   const filteredVolunteers = useMemo(() => {
     return volunteers.filter(v => {

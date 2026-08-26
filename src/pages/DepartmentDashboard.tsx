@@ -164,6 +164,12 @@ export default function DepartmentDashboard() {
 
   const loadVolunteers = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
     setLoadingVols(true);
+
+    // Non-admin users with a team_id: ALWAYS lock to their own team, no exceptions
+    const effectiveTeamId = (!isManagementOrAdmin && profile?.team_id)
+      ? profile.team_id
+      : targetTeamId;
+
     let query = supabase
       .from("volunteer_teams")
       .select(`
@@ -172,50 +178,53 @@ export default function DepartmentDashboard() {
         team:teams ( id, code, name )
       `);
 
-    if (targetTeamId && targetTeamId !== "all") {
-      query = query.eq("team_id", targetTeamId);
-    } else if (targetTeamId === "all" && currentDeptTeams.length > 0) {
+    if (effectiveTeamId && effectiveTeamId !== "all") {
+      query = query.eq("team_id", effectiveTeamId);
+    } else if (effectiveTeamId === "all" && currentDeptTeams.length > 0) {
       const teamIds = currentDeptTeams.map((t: any) => t.id);
       query = query.in("team_id", teamIds);
     } else if (profile?.team_id) {
+      // Fallback: always restrict to own team
       query = query.eq("team_id", profile.team_id);
     }
 
     const { data: vtData } = await query;
     let finalVols: any[] = vtData || [];
 
-    if (finalVols.length === 0) {
-      // Fallback 1: Query all volunteer_teams without restrictions
+    if (finalVols.length === 0 && effectiveTeamId && effectiveTeamId !== "all") {
+      // Targeted fallback: only fetch for the specific team, never all teams
       const { data: fallbackVtData } = await supabase
         .from("volunteer_teams")
         .select(`
           id, is_approved, join_date, team_id,
           volunteers_base ( id, full_name, membership_number, branch, phone_number ),
           team:teams ( id, code, name )
-        `);
-      
-      // Only use fallback if we actually got team-linked volunteers
-      // And we should still filter them to only show ones linked to teams this user has access to,
-      // but if the fallback returns data, it means they are linked to a team.
+        `)
+        .eq("team_id", effectiveTeamId);
+
       if (fallbackVtData && fallbackVtData.length > 0) {
-        
-        // If a specific team was requested, don't show ALL teams from fallback
-        if (targetTeamId && targetTeamId !== "all") {
-           finalVols = fallbackVtData.filter((v: any) => v.team_id === targetTeamId);
-        } 
-        // If "all" teams requested, filter by current department teams
-        else if (targetTeamId === "all" && currentDeptTeams.length > 0) {
-           const teamIds = currentDeptTeams.map((t: any) => t.id);
-           finalVols = fallbackVtData.filter((v: any) => teamIds.includes(v.team_id));
-        } else {
-           finalVols = fallbackVtData;
-        }
+        finalVols = fallbackVtData;
+      }
+    } else if (finalVols.length === 0 && effectiveTeamId === "all" && currentDeptTeams.length > 0) {
+      // Admin "all" fallback: still restricted to department teams
+      const teamIds = currentDeptTeams.map((t: any) => t.id);
+      const { data: fallbackVtData } = await supabase
+        .from("volunteer_teams")
+        .select(`
+          id, is_approved, join_date, team_id,
+          volunteers_base ( id, full_name, membership_number, branch, phone_number ),
+          team:teams ( id, code, name )
+        `)
+        .in("team_id", teamIds);
+      if (fallbackVtData && fallbackVtData.length > 0) {
+        finalVols = fallbackVtData;
       }
     }
 
     setTeamVolunteers(finalVols);
     setLoadingVols(false);
   };
+
 
   const loadTargets = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
     let kpiQuery = supabase.from("team_kpi_targets").select("*");
