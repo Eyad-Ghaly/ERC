@@ -32,6 +32,8 @@ export default function MissionDetail() {
   const [nonVolunteers, setNonVolunteers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [globalStartTime, setGlobalStartTime] = useState("");
+  const [globalEndTime, setGlobalEndTime] = useState("");
 
   const primaryRole = roles[0];
   const isOps = roles.includes("operations_room") || roles.includes("operations_supervisor") || roles.includes("admin");
@@ -181,6 +183,38 @@ export default function MissionDetail() {
   const reloadRoutes = async () => {
     const { data } = await supabase.from("mission_routes").select("*").eq("mission_id", mission.id).order("position");
     setRoutes(data ?? []);
+  };
+
+  const applyGlobalTimes = async () => {
+    if (!globalStartTime && !globalEndTime) {
+      toast.error("يرجى تحديد وقت البداية أو النهاية على الأقل");
+      return;
+    }
+    if (!confirm("هل أنت متأكد من تطبيق هذا التوقيت على جميع المتطوعين الحاليين؟")) return;
+
+    setBusy(true);
+    const patch: any = {};
+    if (globalStartTime) patch.arrival_time = globalStartTime;
+    if (globalEndTime) patch.departure_time = globalEndTime;
+
+    const activeVols = volunteers.filter((v) => !v.removed);
+    if (activeVols.length > 0) {
+      const { error } = await supabase
+        .from("mission_volunteers")
+        .update(patch)
+        .in("id", activeVols.map((v) => v.id));
+
+      if (error) {
+        toast.error(error.message);
+      } else {
+        await markSupervisorEdit();
+        await reloadVolunteers();
+        toast.success("تم تطبيق التوقيت على جميع المتطوعين بنجاح");
+      }
+    } else {
+      toast.info("لا يوجد متطوعون حالياً لتطبيق التوقيت عليهم");
+    }
+    setBusy(false);
   };
 
   // Volunteer ops
@@ -408,6 +442,21 @@ export default function MissionDetail() {
                 </span>
               )}
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-muted/30 p-3 rounded-lg border mb-4">
+              <div className="space-y-1.5"><Label>توقيت البداية للجميع</Label>
+                <Input disabled={!canEditOpsBox} type="datetime-local" value={globalStartTime} onChange={e => setGlobalStartTime(e.target.value)} />
+              </div>
+              <div className="space-y-1.5"><Label>توقيت النهاية للجميع</Label>
+                <Input disabled={!canEditOpsBox} type="datetime-local" value={globalEndTime} onChange={e => setGlobalEndTime(e.target.value)} />
+              </div>
+              <div className="flex items-end">
+                <Button disabled={!canEditOpsBox || busy || (!globalStartTime && !globalEndTime)} onClick={applyGlobalTimes} className="w-full">
+                  تطبيق التوقيت على المتطوعين
+                </Button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-1.5"><Label>الإقليم</Label>
                 <Select disabled={!canEditOpsBox} value={mission.region ?? ""} onValueChange={(v) => updateMission({ region: v })}>
