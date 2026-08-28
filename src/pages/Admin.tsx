@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ROLES, DROPDOWN_FIELD_LABELS, type AppRole } from "@/lib/constants";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Trash2, Plus, Check, Pencil, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface ProfileRow {
   id: string; user_id: string; email: string; full_name: string | null;

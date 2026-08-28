@@ -37,7 +37,7 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
 
   // Teams selection state
   const [targetTeamId, setTargetTeamId] = useState<string>(teamId || profile?.team_id || "");
-  const [teamsList, setTeamsList] = useState<{ id: string; code: string; name?: string }[]>([]);
+  const [teamsList, setTeamsList] = useState<{ id: string; team_code: string; name?: string }[]>([]);
 
   // Excel data & mapping
   const [excelData, setExcelData] = useState<any[]>([]);
@@ -62,7 +62,7 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
   useEffect(() => {
     if (open) {
       const fetchTeams = async () => {
-        const { data } = await supabase.from("teams").select("id, code, name").order("code");
+        const { data } = await supabase.from("teams").select("id, team_code, name").order("team_code");
         if (data && data.length > 0) {
           setTeamsList(data);
           if (!targetTeamId) {
@@ -73,10 +73,10 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
           const deptId = profile?.department_id || null;
           if (deptId) {
             const { data: newTeam } = await supabase.from("teams").insert({
-              code: profile?.team_code || "P19",
+              team_code: profile?.team_code || "P19",
               name: "فريق المتطوعين",
               department_id: deptId
-            }).select("id, code, name").single();
+            }).select("id, team_code, name").single();
             if (newTeam) {
               setTeamsList([newTeam]);
               setTargetTeamId(newTeam.id);
@@ -183,6 +183,8 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
       }
     }
 
+    const activeTeamCode = teamsList.find(t => t.id === activeTeamTarget)?.team_code || profile?.team_code || "P19";
+
     const nameCol = columnMapping["full_name"];
     if (!nameCol) {
       toast.error("يرجى تحديد العمود الخاص بـ 'الاسم بالكامل'");
@@ -203,7 +205,7 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
     const { data: existingTeamVols } = await supabase
       .from("volunteer_teams")
       .select("volunteers_base!inner(id, full_name, membership_number)")
-      .eq("team_id", activeTeamTarget);
+      .eq("team_code", activeTeamCode);
 
     // Build a Set of "name__membership" keys for fast lookup
     // If membership_number is null, use name only as the key
@@ -314,13 +316,13 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
           .from("volunteer_teams")
           .select("id")
           .eq("volunteer_id", volunteerId)
-          .eq("team_id", activeTeamTarget)
+          .eq("team_code", activeTeamCode)
           .maybeSingle();
 
         if (!existingTeamLink) {
           const { error: vtError } = await supabase.from("volunteer_teams").insert({
             volunteer_id: volunteerId,
-            team_id: activeTeamTarget,
+            team_code: activeTeamCode,
             join_date: joinDate,
             is_approved: true, // Approve directly since uploaded by leadership
           });
@@ -344,7 +346,7 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
     if (onSuccess) onSuccess();
   };
 
-  const selectedTeamName = teamsList.find((t) => t.id === targetTeamId)?.code || teamCode || "فريقك الحالي";
+  const selectedTeamName = teamsList.find((t) => t.id === targetTeamId)?.team_code || teamCode || "فريقك الحالي";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -377,7 +379,7 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
                   <SelectContent>
                     {teamsList.map((t) => (
                       <SelectItem key={t.id} value={t.id}>
-                        فريق {t.code} {t.name ? `(${t.name})` : ""}
+                        فريق {t.team_code} {t.name ? `(${t.name})` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

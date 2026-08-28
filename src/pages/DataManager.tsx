@@ -11,6 +11,7 @@ import { Eye } from "lucide-react";
 
 interface Mission {
   id: string; mission_code: string; mission_name: string; status: string;
+  is_canceled?: boolean;
   activity_date: string; governorate: string | null;
   supervisor: string | null; monitor_name: string | null;
 }
