@@ -56,11 +56,16 @@ export function useDropdownOptions(fieldKey: string) {
         }
       }
 
-      if (fieldKey === 'service_type') {
+      if (fieldKey === 'service_type' || fieldKey === 'activity_details') {
         let indQuery = supabase
           .from("department_indicators")
-          .select("id, title")
-          .eq("target_type", "service_type");
+          .select("id, title");
+          
+        if (fieldKey === 'service_type') {
+          indQuery = indQuery.eq("target_type", "service_type");
+        } else {
+          indQuery = indQuery.neq("target_type", "service_type");
+        }
 
         if (profile?.team_id) {
           indQuery = indQuery.eq("team_id", profile.team_id);
@@ -70,7 +75,7 @@ export function useDropdownOptions(fieldKey: string) {
         if (indicators) {
           const indOptions = indicators.map(ind => ({
             id: ind.id,
-            field_key: 'service_type',
+            field_key: fieldKey,
             value: ind.title,
             label: ind.title,
             active: true

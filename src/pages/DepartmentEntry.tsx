@@ -11,8 +11,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, Save, AlertCircle, Search } from "lucide-react";
+import { Plus, Trash2, Send, Save, AlertCircle, Search, Check, ChevronsUpDown } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { VolunteerPicker, VolunteerData } from "@/components/VolunteerPicker";
 import { NON_VOLUNTEER_ROLES } from "@/lib/constants";
 
@@ -34,6 +37,67 @@ function FieldSelect({ fieldKey, value, onChange, label }: { fieldKey: string; v
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+function TeamVolunteerCombobox({
+  teamVolunteers,
+  value,
+  onChange
+}: {
+  teamVolunteers: any[];
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = teamVolunteers.find((tv) => tv.full_name === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between h-10 font-normal"
+        >
+          {selected ? (
+            <span className="truncate">{selected.full_name}</span>
+          ) : (
+            <span className="text-muted-foreground">اختر من متطوعي الفريق</span>
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] md:w-[400px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="ابحث بالاسم..." />
+          <CommandList>
+            <CommandEmpty>لم يتم العثور على متطوع.</CommandEmpty>
+            <CommandGroup>
+              {teamVolunteers.map((tv) => (
+                <CommandItem
+                  key={tv.id}
+                  value={tv.full_name}
+                  onSelect={(currentValue) => {
+                    onChange(tv.full_name);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === tv.full_name ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {tv.full_name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -457,9 +521,10 @@ export default function DepartmentEntry() {
                 {v.is_manual ? (
                   <Input value={v.full_name} onChange={(e) => updateVolunteer(i, "full_name", e.target.value)} placeholder="اسم المتطوع" />
                 ) : (
-                  <Select 
-                    value={v.full_name} 
-                    onValueChange={(val) => {
+                  <TeamVolunteerCombobox
+                    teamVolunteers={teamVolunteers}
+                    value={v.full_name}
+                    onChange={(val) => {
                       const tv = teamVolunteers.find(x => x.full_name === val);
                       if (tv) {
                         updateVolunteerFull(i, {
@@ -469,17 +534,7 @@ export default function DepartmentEntry() {
                         });
                       }
                     }}
-                  >
-                    <SelectTrigger><SelectValue placeholder="اختر من متطوعي الفريق" /></SelectTrigger>
-                    <SelectContent>
-                      {teamVolunteers.map(tv => (
-                        <SelectItem key={tv.id} value={tv.full_name}>
-                          {tv.full_name}
-                        </SelectItem>
-                      ))}
-                      {teamVolunteers.length === 0 && <div className="p-2 text-sm text-muted-foreground">لا يوجد متطوعين في فريقك</div>}
-                    </SelectContent>
-                  </Select>
+                  />
                 )}
               </div>
               <div className="md:col-span-3 space-y-1"><Label className="text-xs">رقم العضوية</Label><Input value={v.membership_number} onChange={(e) => updateVolunteer(i, "membership_number", e.target.value)} dir="ltr" disabled={!v.is_manual} /></div>

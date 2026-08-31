@@ -67,7 +67,7 @@ export const VOLUNTEER_NOTE_TYPES = {
   suspended: "موقوف",
 } as const;
 
-export const NON_VOLUNTEER_ROLES = ["ممرض", "دكتور", "صيدلي", "موظف"];
+export const NON_VOLUNTEER_ROLES = ["ممرض", "دكتور ممارس بشري", "دكتور استشاري بشري", "د.علاج طبيعي", "صيدلي", "موظف"];
 
 export const POINTS_OPTIONS = [0, 5, 10, 20];
 
@@ -78,6 +78,7 @@ export const DROPDOWN_FIELD_LABELS: Record<string, string> = {
   activity_classification: "تصنيف النشاط",
   activity_type: "نوع النشاط",
   activity_details: "تفاصيل النشاط",
+  service_type: "نوع الخدمة",
   mission_nature: "طبيعة المهمة",
   type_name: "اسم النوع",
   classification: "التصنيف",

@@ -13,7 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { ROLES, DROPDOWN_FIELD_LABELS, type AppRole } from "@/lib/constants";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Trash2, Plus, Check, Pencil, Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Trash2, Plus, Check, Pencil, Loader2, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProfileRow {
@@ -155,19 +156,70 @@ function DropdownsTab() {
   const [opts, setOpts] = useState<any[]>([]);
   const [val, setVal] = useState(""); const [lbl, setLbl] = useState("");
   const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [teamId, setTeamId] = useState<string>("all");
+  const [selectedTeams, setSelectedTeams] = useState<string[]>(["all"]);
 
   const load = async () => {
     const { data } = await supabase.from("dropdown_options").select("*, team:teams(code)").eq("field_key", field).order("label");
-    setOpts(data ?? []);
+    let options = data ?? [];
+    
+    if (field === 'service_type' || field === 'activity_details') {
+      let query = supabase.from("department_indicators").select("id, title, indicator_teams(teams(code))");
+      if (field === 'service_type') {
+        query = query.eq("target_type", "service_type");
+      } else {
+        query = query.neq("target_type", "service_type");
+      }
+      const { data: indicators } = await query;
+      if (indicators) {
+        const indOpts = indicators.map(ind => {
+          const teamCodes = (ind.indicator_teams || []).map((it: any) => it.teams?.code).filter(Boolean).join('، ');
+          return {
+            id: ind.id,
+            field_key: field,
+            value: ind.title,
+            label: ind.title,
+            team: teamCodes ? { code: teamCodes } : null,
+            active: true,
+            is_indicator: true
+          };
+        });
+        options = [...options, ...indOpts];
+      }
+    }
+    
+    setOpts(options);
   };
   useEffect(() => { load(); }, [field]);
   useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
 
+  const handleTeamToggle = (id: string) => {
+    if (id === "all") {
+      setSelectedTeams(["all"]);
+    } else {
+      setSelectedTeams(prev => {
+        const newSel = prev.filter(v => v !== "all");
+        if (newSel.includes(id)) {
+          const res = newSel.filter(v => v !== id);
+          return res.length === 0 ? ["all"] : res;
+        }
+        return [...newSel, id];
+      });
+    }
+  };
+
   const add = async () => {
     if (!val || !lbl) return;
-    const { error } = await supabase.from("dropdown_options").insert({ field_key: field, value: val, label: lbl, team_id: teamId === "all" ? null : teamId });
-    if (error) toast.error(error.message); else { toast.success("تمت الإضافة"); setVal(""); setLbl(""); load(); }
+    
+    const inserts = selectedTeams.map(tId => ({
+      field_key: field,
+      value: val,
+      label: lbl,
+      team_id: tId === "all" ? null : tId
+    }));
+    
+    const { error } = await supabase.from("dropdown_options").insert(inserts);
+    if (error) toast.error(error.message); 
+    else { toast.success("تمت الإضافة"); setVal(""); setLbl(""); setSelectedTeams(["all"]); load(); }
   };
 
   const del = async (id: string) => {
@@ -178,6 +230,7 @@ function DropdownsTab() {
   };
 
   const toggle = async (o: any) => {
+    if (o.is_indicator) return;
     setOpts(prev => prev.map(item => item.id === o.id ? { ...item, active: !o.active } : item));
     const { error } = await supabase.from("dropdown_options").update({ active: !o.active }).eq("id", o.id);
     if (error) { toast.error(error.message); load(); }
@@ -187,22 +240,37 @@ function DropdownsTab() {
   return (
     <Card className="card-elevated p-4 space-y-4">
       <div className="flex flex-wrap gap-3 items-end">
-        <div className="space-y-1.5"><Label>الحقل</Label>
+        <div className="space-y-1.5 flex flex-col"><Label>الحقل</Label>
           <Select value={field} onValueChange={setField}>
             <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
             <SelectContent>{Object.entries(DROPDOWN_FIELD_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5"><Label>القيمة (Value)</Label><Input value={val} onChange={(e) => setVal(e.target.value)} dir="ltr" /></div>
-        <div className="space-y-1.5"><Label>الاسم المعروض</Label><Input value={lbl} onChange={(e) => setLbl(e.target.value)} /></div>
-        <div className="space-y-1.5"><Label>الفريق</Label>
-          <Select value={teamId} onValueChange={setTeamId}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">عام</SelectItem>
-              {teams.map(t => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="space-y-1.5 flex flex-col"><Label>القيمة (Value)</Label><Input value={val} onChange={(e) => setVal(e.target.value)} dir="ltr" /></div>
+        <div className="space-y-1.5 flex flex-col"><Label>الاسم المعروض</Label><Input value={lbl} onChange={(e) => setLbl(e.target.value)} /></div>
+        <div className="space-y-1.5 flex flex-col"><Label>الفريق</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-32 justify-between font-normal">
+                {selectedTeams.includes("all") ? "عام" : `${selectedTeams.length} فرق محددة`}
+                <ChevronsUpDown className="w-4 h-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-2">
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                <label className="flex items-center gap-2 cursor-pointer p-1 hover:bg-muted/50 rounded">
+                  <input type="checkbox" className="w-4 h-4 accent-primary" checked={selectedTeams.includes("all")} onChange={() => handleTeamToggle("all")} />
+                  <span>عام</span>
+                </label>
+                {teams.map(t => (
+                  <label key={t.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-muted/50 rounded">
+                    <input type="checkbox" className="w-4 h-4 accent-primary" checked={selectedTeams.includes(t.id)} onChange={() => handleTeamToggle(t.id)} />
+                    <span className="font-mono text-xs">{t.code}</span>
+                  </label>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
         <Button onClick={add}><Plus className="w-4 h-4 ms-2" />إضافة</Button>
       </div>
@@ -215,8 +283,14 @@ function DropdownsTab() {
               <TableCell><code>{o.value}</code></TableCell>
               <TableCell>{o.label}</TableCell>
               <TableCell><Badge variant="outline">{o.team?.code || "عام"}</Badge></TableCell>
-              <TableCell><Switch checked={o.active} onCheckedChange={() => toggle(o)} /></TableCell>
-              <TableCell><Button size="icon" variant="ghost" onClick={() => del(o.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell>
+              <TableCell><Switch checked={o.active} onCheckedChange={() => toggle(o)} disabled={o.is_indicator} /></TableCell>
+              <TableCell>
+                {o.is_indicator ? (
+                  <Badge variant="secondary" className="text-[10px]">مؤشر بخطة الإدارة</Badge>
+                ) : (
+                  <Button size="icon" variant="ghost" onClick={() => del(o.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                )}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

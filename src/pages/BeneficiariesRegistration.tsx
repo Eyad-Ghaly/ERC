@@ -131,6 +131,7 @@ export default function BeneficiariesRegistration() {
   const [groupAgeCategory, setGroupAgeCategory] = useState("");
   const [groupCount, setGroupCount] = useState("1");
   const [groupServiceType, setGroupServiceType] = useState("");
+  const [groupServiceQuantity, setGroupServiceQuantity] = useState("1");
   const [busy, setBusy] = useState(false);
 
   // Global Beneficiaries Search & Stats State
@@ -211,7 +212,7 @@ export default function BeneficiariesRegistration() {
   };
 
   const totalServicesCount = (allIndivBens.reduce((acc, b) => acc + Number(b.service_quantity || 1), 0)) +
-    (allGroupBens.reduce((acc, g) => acc + Number(g.count || 0), 0));
+    (allGroupBens.reduce((acc, g) => acc + Number(g.service_quantity || g.count || 0), 0));
 
   const totalBeneficiariesCount = allIndivBens.length + (allGroupBens.reduce((acc, g) => acc + Number(g.count || 0), 0));
 
@@ -292,6 +293,7 @@ export default function BeneficiariesRegistration() {
       .from("missions")
       .select("id, mission_code, mission_name, execution_place, activity_date, team_id, team:teams(code), is_open_mission, beneficiaries_status")
       .eq("has_beneficiaries", true)
+      .neq("is_canceled", true)
       .limit(10000);
 
     if (profile?.team_id) {
@@ -598,6 +600,7 @@ export default function BeneficiariesRegistration() {
       age_category: groupAgeCategory || null,
       count: parseInt(groupCount),
       service_type: groupServiceType || null,
+      service_quantity: parseInt(groupServiceQuantity) || 1,
     });
     setBusy(false);
 
@@ -606,6 +609,7 @@ export default function BeneficiariesRegistration() {
     } else {
       toast.success("تم إضافة المجموعة بنجاح");
       setGroupCount("1");
+      setGroupServiceQuantity("1");
       fetchRegistered(target);
     }
   };
@@ -829,7 +833,8 @@ export default function BeneficiariesRegistration() {
                       </Select>
                     </div>
                     <FieldSelect fieldKey="service_type" value={groupServiceType} onChange={setGroupServiceType} label="نوع الخدمة" />
-                    <div className="space-y-1.5"><Label>العدد *</Label><Input type="number" min="1" value={groupCount} onChange={(e) => setGroupCount(e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>عدد المستفيدين *</Label><Input type="number" min="1" value={groupCount} onChange={(e) => setGroupCount(e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>عدد الخدمات</Label><Input type="number" min="1" value={groupServiceQuantity} onChange={(e) => setGroupServiceQuantity(e.target.value)} /></div>
                   </div>
                   <Button onClick={submitGroup} disabled={busy} className="w-full md:w-auto mt-4" variant="secondary"><Users className="w-4 h-4 ml-2"/> حفظ المجموعة</Button>
                 </Card>
