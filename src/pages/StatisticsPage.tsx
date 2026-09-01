@@ -315,26 +315,25 @@ export default function StatisticsPage() {
         {/* Error State */}
         {!loading && error && <StatisticsErrorState error={error} onRetry={loadData} />}
 
-        {/* Empty State */}
-        {!loading && !error && filteredMissions.length === 0 && (
-          <StatisticsEmptyState
-            hasActiveFilters={hasActiveFilters}
-            onResetFilters={handleResetFilters}
-            statisticName={
-              filters.serviceType
-                ? `خدمة "${filters.serviceType}"`
-                : filters.governorate
-                ? `محافظة "${filters.governorate}"`
-                : filters.classification
-                ? `تصنيف "${filters.classification}"`
-                : undefined
-            }
-          />
-        )}
-
-        {/* Dashboard Visualizations */}
-        {!loading && !error && filteredMissions.length > 0 && (
+        {/* Dashboard Visualizations & Registry */}
+        {!loading && !error && (
           <div className="space-y-6 animate-in fade-in duration-300">
+            {filteredMissions.length === 0 && hasActiveFilters && (
+              <StatisticsEmptyState
+                hasActiveFilters={hasActiveFilters}
+                onResetFilters={handleResetFilters}
+                statisticName={
+                  filters.serviceType
+                    ? `خدمة "${filters.serviceType}"`
+                    : filters.governorate
+                    ? `محافظة "${filters.governorate}"`
+                    : filters.classification
+                    ? `تصنيف "${filters.classification}"`
+                    : undefined
+                }
+              />
+            )}
+
             {/* 1. High-Level KPIs Section */}
             <KpiCardsSection kpis={kpis} targetSummary={targetSummary} />
 

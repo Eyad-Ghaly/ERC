@@ -4,13 +4,15 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, ShieldCheck, Loader2 } from "lucide-react";
+import { Search, Download, Loader2 } from "lucide-react";
 import { NormalizedMission } from "@/services/statistics/fieldMapping";
 import { decryptData } from "@/lib/crypto";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import * as XLSX from "xlsx";
 
 interface BeneficiariesRegistryExplorerProps {
-  missions: NormalizedMission[];
+  missions?: NormalizedMission[];
 }
 
 interface DecryptedBeneficiaryRow {
@@ -27,7 +29,8 @@ interface DecryptedBeneficiaryRow {
   date: string;
 }
 
-export function BeneficiariesRegistryExplorer({ missions }: BeneficiariesRegistryExplorerProps) {
+export function BeneficiariesRegistryExplorer({ missions = [] }: BeneficiariesRegistryExplorerProps) {
+  const { user, profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [beneficiaries, setBeneficiaries] = useState<DecryptedBeneficiaryRow[]>([]);
@@ -39,46 +42,110 @@ export function BeneficiariesRegistryExplorer({ missions }: BeneficiariesRegistr
       setLoading(true);
       const rows: DecryptedBeneficiaryRow[] = [];
 
-      for (const m of missions) {
-        // Individual beneficiaries
-        for (const b of m.beneficiariesIndividual) {
-          let decId = "—";
-          if (b.encryptedId) {
-            decId = await decryptData(b.encryptedId);
-          } else if (b.idHash) {
-            decId = "مسجل بالهاش";
+      // 1. Process from passed missions if available
+      if (missions && missions.length > 0) {
+        for (const m of missions) {
+          for (const b of m.beneficiariesIndividual || []) {
+            let decId = "—";
+            if (b.encryptedId) {
+              decId = await decryptData(b.encryptedId);
+            } else if (b.idHash) {
+              decId = "مسجل بالهاش";
+            }
+
+            rows.push({
+              id: b.id,
+              missionCode: m.code,
+              missionName: m.name,
+              fullName: b.fullName || "غير محدد",
+              decryptedId: decId,
+              phone: b.phone || "—",
+              nationality: b.nationality || "غير محدد",
+              gender: b.gender || "غير محدد",
+              serviceType: b.serviceType || "غير محدد",
+              quantity: b.quantity || 1,
+              date: m.date || (b.createdAt ? b.createdAt.substring(0, 10) : "—"),
+            });
           }
 
-          rows.push({
-            id: b.id,
-            missionCode: m.code,
-            missionName: m.name,
-            fullName: b.fullName || "غير محدد",
-            decryptedId: decId,
-            phone: b.phone || "—",
-            nationality: b.nationality || "غير محدد",
-            gender: b.gender || "غير محدد",
-            serviceType: b.serviceType || "غير محدد",
-            quantity: b.quantity || 1,
-            date: m.date || (b.createdAt ? b.createdAt.substring(0, 10) : "—"),
-          });
+          for (const g of m.beneficiariesGroup || []) {
+            rows.push({
+              id: g.id,
+              missionCode: m.code,
+              missionName: m.name,
+              fullName: `نشاط جماعي (${g.targetGroup || "فئة عامة"})`,
+              decryptedId: "تسجيل جماعي",
+              phone: "—",
+              nationality: g.nationality || "غير محدد",
+              gender: g.gender || "غير محدد",
+              serviceType: g.serviceType || "غير محدد",
+              quantity: g.count || 1,
+              date: m.date || (g.createdAt ? g.createdAt.substring(0, 10) : "—"),
+            });
+          }
         }
+      }
 
-        // Group beneficiaries
-        for (const g of m.beneficiariesGroup) {
-          rows.push({
-            id: g.id,
-            missionCode: m.code,
-            missionName: m.name,
-            fullName: `نشاط جماعي (${g.targetGroup || "فئة عامة"})`,
-            decryptedId: "تسجيل جماعي",
-            phone: "—",
-            nationality: g.nationality || "غير محدد",
-            gender: g.gender || "غير محدد",
-            serviceType: g.serviceType || "غير محدد",
-            quantity: g.count || 1,
-            date: m.date || (g.createdAt ? g.createdAt.substring(0, 10) : "—"),
-          });
+      // 2. If no rows from missions, fallback to direct Supabase fetch for this team
+      if (rows.length === 0 && user) {
+        try {
+          let directQuery = supabase
+            .from("missions")
+            .select("id, mission_code, mission_name, activity_date, beneficiaries_individual(*), beneficiaries_group(*)")
+            .order("created_at", { ascending: false })
+            .limit(1000);
+
+          if (profile?.team_id) {
+            directQuery = directQuery.eq("team_id", profile.team_id);
+          } else {
+            directQuery = directQuery.eq("created_by", user.id);
+          }
+
+          const { data: directData } = await directQuery;
+          if (directData && directData.length > 0) {
+            for (const dm of directData) {
+              for (const b of dm.beneficiaries_individual || []) {
+                let decId = "—";
+                if (b.encrypted_id) {
+                  decId = await decryptData(b.encrypted_id);
+                } else if (b.id_hash) {
+                  decId = "مسجل بالهاش";
+                }
+
+                rows.push({
+                  id: b.id,
+                  missionCode: dm.mission_code || "—",
+                  missionName: dm.mission_name || "—",
+                  fullName: b.full_name || "غير محدد",
+                  decryptedId: decId,
+                  phone: b.phone || "—",
+                  nationality: b.nationality || "غير محدد",
+                  gender: b.gender || "غير محدد",
+                  serviceType: b.service_type || "غير محدد",
+                  quantity: b.service_quantity || 1,
+                  date: dm.activity_date || (b.created_at ? b.created_at.substring(0, 10) : "—"),
+                });
+              }
+
+              for (const g of dm.beneficiaries_group || []) {
+                rows.push({
+                  id: g.id,
+                  missionCode: dm.mission_code || "—",
+                  missionName: dm.mission_name || "—",
+                  fullName: `نشاط جماعي (${g.target_group || "فئة عامة"})`,
+                  decryptedId: "تسجيل جماعي",
+                  phone: "—",
+                  nationality: g.nationality || "غير محدد",
+                  gender: g.gender || "غير محدد",
+                  serviceType: g.service_type || "غير محدد",
+                  quantity: g.count || 1,
+                  date: dm.activity_date || (g.created_at ? g.created_at.substring(0, 10) : "—"),
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Direct beneficiaries fetch fallback error:", e);
         }
       }
 
@@ -93,7 +160,7 @@ export function BeneficiariesRegistryExplorer({ missions }: BeneficiariesRegistr
     return () => {
       isCancelled = true;
     };
-  }, [missions]);
+  }, [missions, user, profile]);
 
   const filteredBeneficiaries = useMemo(() => {
     if (!searchQuery.trim()) return beneficiaries;

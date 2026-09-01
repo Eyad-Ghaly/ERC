@@ -120,15 +120,12 @@ export async function fetchStatisticsMissions(
         query = query.eq("team_id", targetTeamId);
       } else if (targetTeamId === "all") {
         if (!isAdmin && !isManagement && !isDataManager) {
-          // For entry users, show everything they created OR everything in their active team (required for Supabase RLS)
-          if (options.teamId && options.userId) {
-            query = query.or(`created_by.eq.${options.userId},team_id.eq.${options.teamId}`);
-          } else if (options.teamId) {
+          if (options.teamId) {
             query = query.eq("team_id", options.teamId);
           } else if (options.userId) {
             query = query.eq("created_by", options.userId);
           }
-        } else if (departmentTeams.length > 0) {
+        } else if (departmentTeams.length > 0 && !isAdmin) {
           const teamIds = departmentTeams.map((t) => t.id);
           query = query.in("team_id", teamIds);
         }
