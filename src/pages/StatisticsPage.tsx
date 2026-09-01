@@ -351,6 +351,10 @@ export default function StatisticsPage() {
                     <LayoutDashboard className="w-4 h-4 text-primary" />
                     اللوحة الشاملة 360°
                   </TabsTrigger>
+                  <TabsTrigger value="registry" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3 bg-primary/5 text-primary border border-primary/20 font-bold">
+                    <Search className="w-4 h-4 text-primary" />
+                    سجل المستفيدين والبحث الفوري
+                  </TabsTrigger>
                   <TabsTrigger value="beneficiaries" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3">
                     <HeartHandshake className="w-4 h-4 text-emerald-500" />
                     المستفيدين والخدمات
@@ -365,7 +369,7 @@ export default function StatisticsPage() {
                   </TabsTrigger>
                   <TabsTrigger value="data" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3">
                     <TableIcon className="w-4 h-4 text-amber-500" />
-                    سجل البيانات وتصدير Excel
+                    سجل المهام وتصدير Excel
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -387,6 +391,9 @@ export default function StatisticsPage() {
                     onSelectService={handleSelectService}
                   />
                 </div>
+
+                {/* Comprehensive Decrypted Beneficiaries Search Explorer */}
+                <BeneficiariesRegistryExplorer missions={filteredMissions.length > 0 ? filteredMissions : rawMissions} />
 
                 {/* Volunteer Effort Analytics */}
                 <VolunteerEffortAnalytics data={volunteerEffortData} />
@@ -449,14 +456,19 @@ export default function StatisticsPage() {
                   genderData={genderData}
                   nationalityData={nationalityData}
                 />
-
-                {/* Comprehensive Decrypted Beneficiaries Search Explorer */}
-                <BeneficiariesRegistryExplorer missions={filteredMissions} />
               </TabsContent>
 
-              {/* View 2: Beneficiaries & Services Focused */}
+              {/* View 2: Registry Dedicated Tab */}
+              <TabsContent value="registry" className="space-y-6 m-0">
+                <BeneficiariesRegistryExplorer missions={filteredMissions.length > 0 ? filteredMissions : rawMissions} />
+              </TabsContent>
+
+              {/* View 3: Beneficiaries & Services Focused */}
               <TabsContent value="beneficiaries" className="space-y-6 m-0">
                 <BeneficiaryModalityCard data={modalityData} />
+
+                {/* Searchable Beneficiaries Registry */}
+                <BeneficiariesRegistryExplorer missions={filteredMissions.length > 0 ? filteredMissions : rawMissions} />
 
                 <ServicesDemographicsStackedChart
                   data={servicesDemographicsData}
