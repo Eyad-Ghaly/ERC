@@ -45,7 +45,7 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/statistics" element={<ProtectedRoute roles={["*"]}><StatisticsPage /></ProtectedRoute>} />
+            <Route path="/statistics" element={<ProtectedRoute><StatisticsPage /></ProtectedRoute>} />
             <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin"]}><DepartmentDashboard /></ProtectedRoute>} />
             <Route path="/department-entry" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
             <Route path="/department-entry/:id" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
@@ -64,7 +64,7 @@ const App = () => (
             <Route path="/apply/:public_link_uuid" element={<PublicSupplyForm />} />
             <Route path="/volunteers-database" element={<ProtectedRoute roles={["youth_room", "admin"]}><VolunteersDatabase /></ProtectedRoute>} />
             <Route path="/branch-youth" element={<ProtectedRoute roles={["branch_youth"]}><BranchYouthDashboard /></ProtectedRoute>} />
-            <Route path="/dashboard" element={<ProtectedRoute roles={["*"]}><StatisticsPage /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><StatisticsPage /></ProtectedRoute>} />
             <Route path="/data-manager" element={<ProtectedRoute roles={["data_manager"]}><DataManager /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><Admin /></ProtectedRoute>} />
             <Route path="/team-beneficiaries" element={<ProtectedRoute roles={["department_entry"]}><TeamBeneficiaries /></ProtectedRoute>} />
