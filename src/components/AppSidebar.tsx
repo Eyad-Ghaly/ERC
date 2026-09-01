@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
-import { Heart, Home, FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, LogOut, UserPlus, Target, Star } from "lucide-react";
+import { Heart, Home, FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, LogOut, UserPlus, Target, Star, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROLES, type AppRole } from "@/lib/constants";
 
@@ -17,6 +17,7 @@ interface NavItem {
 
 const items: NavItem[] = [
   { title: "الرئيسية", url: "/", icon: Home, roles: ["*"] },
+  { title: "الإحصائيات", url: "/statistics", icon: TrendingUp, roles: ["*"] },
   { title: "لوحة معلومات فريقي والإدارة", url: "/department-dashboard", icon: BarChart3, roles: ["department_entry", "management", "department_admin", "admin"] },
   { title: "مستهدفات فريقي", url: "/team-targets", icon: Target, roles: ["department_entry", "data_manager", "admin"] },
   { title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, roles: ["department_entry", "department_admin", "admin"] },
@@ -31,7 +32,6 @@ const items: NavItem[] = [
   { title: "غرفة الشباب والتطوع", url: "/youth", icon: Users2, roles: ["youth_room", "admin"] },
   { title: "إدارة طلبات الإمداد", url: "/youth-supply-requests", icon: Users2, roles: ["youth_management", "admin"] },
   { title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, roles: ["branch_youth", "admin"] },
-  { title: "Dashboard", url: "/dashboard", icon: BarChart3, roles: ["stakeholder", "data_manager", "admin"] },
   { title: "إدارة وتحليل البيانات", url: "/data-manager", icon: Database, roles: ["data_manager", "admin"] },
   { title: "لوحة المدير", url: "/admin", icon: Settings, roles: ["admin"] },
 ];
