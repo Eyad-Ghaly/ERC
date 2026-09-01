@@ -54,7 +54,7 @@ import { StatisticsEmptyState } from "@/components/statistics/StatisticsEmptySta
 import { StatisticsLoadingSkeleton } from "@/components/statistics/StatisticsLoadingSkeleton";
 import { StatisticsErrorState } from "@/components/statistics/StatisticsErrorState";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { LayoutDashboard, HeartHandshake, Users, MapPin, Table as TableIcon } from "lucide-react";
+import { LayoutDashboard, HeartHandshake, Users, MapPin, Table as TableIcon, Search } from "lucide-react";
 
 export default function StatisticsPage() {
   const { user, profile, roles, hasRole } = useAuth();
