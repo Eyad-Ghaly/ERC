@@ -17,13 +17,13 @@ interface NavItem {
 
 const items: NavItem[] = [
   { title: "الرئيسية", url: "/", icon: Home, roles: ["*"] },
-  { title: "الإحصائيات", url: "/statistics", icon: TrendingUp, roles: ["*"] },
   { title: "لوحة معلومات فريقي والإدارة", url: "/department-dashboard", icon: BarChart3, roles: ["department_entry", "management", "department_admin", "admin"] },
   { title: "مستهدفات فريقي", url: "/team-targets", icon: Target, roles: ["department_entry", "data_manager", "admin"] },
   { title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, roles: ["department_entry", "department_admin", "admin"] },
   { title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, roles: ["department_entry", "data_manager", "admin"] },
   { title: "إدخال مهمة جديدة", url: "/department-entry", icon: FilePlus, roles: ["department_entry", "admin"] },
   { title: "تسجيل المستفيدين", url: "/beneficiaries-registration", icon: UserPlus, roles: ["department_entry", "admin"] },
+  { title: "سجل المستفيدين والإحصائيات", url: "/statistics", icon: TrendingUp, roles: ["*"] },
   { title: "طلب إمداد بالمتطوعين", url: "/volunteer-supply-request/new", icon: UserPlus, roles: ["department_entry", "management", "admin"] },
   { title: "موافقات الإدارة لطلبات الإمداد", url: "/management-supply-requests", icon: FilePlus, roles: ["management", "admin"] },
   { title: "غرفة العمليات", url: "/operations-room", icon: Radio, roles: ["operations_room", "operations_supervisor", "admin"] },

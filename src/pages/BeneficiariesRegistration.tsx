@@ -515,6 +515,30 @@ export default function BeneficiariesRegistration() {
     <AppLayout title="تسجيل المستفيدين">
       <div className="space-y-6 max-w-5xl mx-auto">
 
+        {/* زر ورابط الانتقال إلى سجل المستفيدين الشامل والإحصائيات */}
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-primary/25 bg-gradient-to-r from-primary/10 via-background to-primary/5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/15 text-primary flex items-center justify-center font-bold">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm md:text-base font-bold text-foreground">
+                سجل المستفيدين الشامل والبحث الفوري
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                البحث الفوري بالاسم أو الرقم القومي (فك التشفير تلقائياً) وتصدير تقارير Excel
+              </p>
+            </div>
+          </div>
+
+          <Button variant="default" size="sm" asChild className="gap-2 text-xs font-bold shadow-sm">
+            <Link to="/statistics">
+              <TrendingUp className="w-4 h-4" />
+              الانتقال إلى سجل المستفيدين الشامل
+            </Link>
+          </Button>
+        </div>
+
         {/* 1. Task Selection Card */}
         <Card className="p-6 border-primary/20 shadow-sm">
           <div className="flex items-center justify-between mb-4">
