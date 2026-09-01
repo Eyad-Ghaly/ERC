@@ -49,6 +49,7 @@ import { VolunteerEffortAnalytics } from "@/components/statistics/VolunteerEffor
 import { DayOfWeekHeatmap } from "@/components/statistics/DayOfWeekHeatmap";
 import { ActivityDetailsRanking } from "@/components/statistics/ActivityDetailsRanking";
 import { StatisticsDataTable } from "@/components/statistics/StatisticsDataTable";
+import { BeneficiariesRegistryExplorer } from "@/components/statistics/BeneficiariesRegistryExplorer";
 import { StatisticsEmptyState } from "@/components/statistics/StatisticsEmptyState";
 import { StatisticsLoadingSkeleton } from "@/components/statistics/StatisticsLoadingSkeleton";
 import { StatisticsErrorState } from "@/components/statistics/StatisticsErrorState";
@@ -72,11 +73,11 @@ export default function StatisticsPage() {
   const [targets, setTargets] = useState<NormalizedTarget[]>([]);
   const [customKpiDefs, setCustomKpiDefs] = useState<NormalizedCustomKpi[]>([]);
 
-  // Filter State
+  // Filter State - Defaults to "all" teams so it doesn't automatically restrict to P18
   const [filters, setFilters] = useState<StatisticsFilterState>(() => {
     return {
       ...INITIAL_STATISTICS_FILTERS,
-      teamId: profile?.team_id || "all",
+      teamId: "all",
     };
   });
 
@@ -304,7 +305,7 @@ export default function StatisticsPage() {
           onFilterChange={handleFilterChange}
           onResetFilters={handleResetFilters}
           teams={teams}
-          canSelectTeam={isManagementOrAdmin}
+          canSelectTeam={true}
           rawMissions={rawMissions}
         />
 
@@ -448,6 +449,9 @@ export default function StatisticsPage() {
                   genderData={genderData}
                   nationalityData={nationalityData}
                 />
+
+                {/* Comprehensive Decrypted Beneficiaries Search Explorer */}
+                <BeneficiariesRegistryExplorer missions={filteredMissions} />
               </TabsContent>
 
               {/* View 2: Beneficiaries & Services Focused */}
@@ -474,6 +478,9 @@ export default function StatisticsPage() {
                   selectedService={filters.serviceType}
                   onSelectService={handleSelectService}
                 />
+
+                {/* Searchable Beneficiaries Registry */}
+                <BeneficiariesRegistryExplorer missions={filteredMissions} />
               </TabsContent>
 
               {/* View 3: Volunteers Intelligence */}
@@ -521,6 +528,8 @@ export default function StatisticsPage() {
 
               {/* View 5: Data Table & Excel */}
               <TabsContent value="data" className="space-y-6 m-0">
+                <BeneficiariesRegistryExplorer missions={filteredMissions} />
+
                 <StatisticsDataTable
                   missions={detailedTableRows}
                   governoratesData={governoratesData}

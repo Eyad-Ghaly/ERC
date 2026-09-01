@@ -134,99 +134,6 @@ export default function BeneficiariesRegistration() {
   const [groupServiceQuantity, setGroupServiceQuantity] = useState("1");
   const [busy, setBusy] = useState(false);
 
-  // Global Beneficiaries Search & Stats State
-  const [allIndivBens, setAllIndivBens] = useState<any[]>([]);
-  const [allGroupBens, setAllGroupBens] = useState<any[]>([]);
-  const [benSearchQuery, setBenSearchQuery] = useState("");
-
-  const fetchAllBeneficiaries = async () => {
-    if (!user) return;
-    let allMissions: any[] = [];
-    let hasMore = true;
-    let page = 0;
-    const pageSize = 1000;
-
-    while (hasMore) {
-      let query = supabase
-        .from("missions")
-        .select("id, mission_code, mission_name, activity_date, beneficiaries_individual(*), beneficiaries_group(*)")
-        .order("created_at", { ascending: false })
-        .range(page * pageSize, (page + 1) * pageSize - 1);
-
-      if (profile?.team_id) {
-        query = query.eq("team_id", profile.team_id);
-      } else {
-        query = query.eq("created_by", user.id);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        console.error("fetchAllBeneficiaries error:", error);
-        break;
-      }
-
-      if (data && data.length > 0) {
-        allMissions = [...allMissions, ...data];
-        if (data.length < pageSize) hasMore = false;
-        else page++;
-      } else {
-        hasMore = false;
-      }
-    }
-
-    let indivList: any[] = [];
-    let groupList: any[] = [];
-
-    allMissions.forEach((m) => {
-      (m.beneficiaries_individual || []).forEach((b: any) => {
-        indivList.push({
-          ...b,
-          mission_code: m.mission_code,
-          mission_name: m.mission_name,
-          date: m.activity_date,
-        });
-      });
-      (m.beneficiaries_group || []).forEach((g: any) => {
-        groupList.push({
-          ...g,
-          mission_code: m.mission_code,
-          mission_name: m.mission_name,
-          date: m.activity_date,
-        });
-      });
-    });
-
-    const decryptedIndivs = await Promise.all(
-      indivList.map(async (b) => ({
-        ...b,
-        decrypted_id: b.encrypted_id
-          ? await decryptData(b.encrypted_id)
-          : b.id_hash
-          ? "مسجل بالهاش"
-          : "غير مدخل",
-      }))
-    );
-
-    setAllIndivBens(decryptedIndivs);
-    setAllGroupBens(groupList);
-  };
-
-  const totalServicesCount = (allIndivBens.reduce((acc, b) => acc + Number(b.service_quantity || 1), 0)) +
-    (allGroupBens.reduce((acc, g) => acc + Number(g.service_quantity || g.count || 0), 0));
-
-  const filteredAllBens = (() => {
-    if (!benSearchQuery.trim()) return allIndivBens;
-    const q = benSearchQuery.trim().toLowerCase();
-    return allIndivBens.filter(
-      (b) =>
-        (b.full_name && b.full_name.toLowerCase().includes(q)) ||
-        (b.decrypted_id && b.decrypted_id.includes(q)) ||
-        (b.phone && b.phone.includes(q)) ||
-        (b.mission_code && b.mission_code.toLowerCase().includes(q)) ||
-        (b.service_type && b.service_type.toLowerCase().includes(q))
-    );
-  })();
-
   const triggerLookup = async (id: string) => {
     if (!id || id.length < 5) return;
     setLookingUp(true);
@@ -384,7 +291,6 @@ export default function BeneficiariesRegistration() {
   useEffect(() => {
     if (user) {
       fetchTargets();
-      fetchAllBeneficiaries();
     }
   }, [user, profile, statusFilter]);
 
@@ -614,7 +520,7 @@ export default function BeneficiariesRegistration() {
           <div className="flex items-center justify-between mb-4">
              <Label className="text-base font-semibold text-primary">اختر المهمة لإدخال مستفيديها:</Label>
              <div className="flex items-center gap-4">
-                 <SmartBeneficiariesUploader onSuccess={() => { fetchTargets(); fetchAllBeneficiaries(); if (selectedTargetId) fetchRegistered(targets.find(t => t.id === selectedTargetId)); }} />
+                 <SmartBeneficiariesUploader onSuccess={() => { fetchTargets(); if (selectedTargetId) fetchRegistered(targets.find(t => t.id === selectedTargetId)); }} />
                  <div className="flex bg-muted/50 p-1 rounded-md">
                     <Button size="sm" variant={statusFilter === 'pending' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('pending'); setSelectedTargetId(""); }} className="rounded-sm"><ListTodo className="w-4 h-4 ms-2"/> قيد الانتظار</Button>
                     <Button size="sm" variant={statusFilter === 'completed' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('completed'); setSelectedTargetId(""); }} className="rounded-sm"><CheckSquare className="w-4 h-4 ms-2"/> مكتملة</Button>
@@ -840,96 +746,6 @@ export default function BeneficiariesRegistration() {
             </div>
           </div>
         )}
-
-        {/* رابط صفحة الإحصائيات الشاملة وجدول البحث */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mt-8 pt-4 border-t border-border">
-          <div className="flex items-center gap-3">
-            <Badge variant="secondary" className="font-bold text-sm bg-primary/10 text-primary border-primary/20">
-              إجمالي عدد الخدمات المسجلة: {totalServicesCount}
-            </Badge>
-            <Badge variant="outline" className="font-medium text-xs">
-              عدد المستفيدين في السجل: {allIndivBens.length}
-            </Badge>
-          </div>
-
-          <Button variant="outline" size="sm" asChild className="gap-2 border-primary/30 text-primary hover:bg-primary/10">
-            <Link to="/statistics">
-              <TrendingUp className="w-4 h-4" />
-              عرض لوحة الإحصائيات والتحليلات البيانية الشاملة
-            </Link>
-          </Button>
-        </div>
-
-        {/* 5. جدول البحث الشامل في سجل المستفيدين */}
-        <Card className="p-6 border-primary/20 space-y-4 shadow-sm mt-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="font-bold text-lg text-primary flex items-center gap-2">
-                <Search className="w-5 h-5" />
-                سجل المستفيدين الشامل والبحث الفوري (بالاسم أو الرقم القومي)
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">يمكنك البحث بالاسم، الرقم القومي (فك التشفير تلقائياً)، رقم الهاتف، أو كود المهمة</p>
-            </div>
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative flex-1 md:w-80">
-                <Search className="w-4 h-4 absolute right-3 top-3 text-muted-foreground" />
-                <Input 
-                  placeholder="ابحث بالاسم، الرقم القومي، الهاتف..." 
-                  value={benSearchQuery} 
-                  onChange={e => setBenSearchQuery(e.target.value)} 
-                  className="pr-9" 
-                />
-              </div>
-              <Badge variant="outline" className="font-bold text-xs bg-primary/10 text-primary whitespace-nowrap">
-                عدد النتائج: {filteredAllBens.length}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="font-bold">كود المهمة</TableHead>
-                  <TableHead className="font-bold">اسم المستفيد</TableHead>
-                  <TableHead className="font-bold">الرقم القومي (مفكوك التشفير)</TableHead>
-                  <TableHead className="font-bold">رقم الهاتف</TableHead>
-                  <TableHead className="font-bold">الجنسية</TableHead>
-                  <TableHead className="font-bold">النوع</TableHead>
-                  <TableHead className="font-bold">نوع الخدمة</TableHead>
-                  <TableHead className="font-bold text-center">الكمية</TableHead>
-                  <TableHead className="font-bold text-center">التاريخ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAllBens.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      لا يوجد مستفيدين مطابقين للبحث
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredAllBens.slice(0, 100).map((b: any, idx: number) => (
-                    <TableRow key={b.id || idx} className="hover:bg-muted/30">
-                      <TableCell className="font-mono text-xs font-bold text-primary">{b.mission_code || '—'}</TableCell>
-                      <TableCell className="font-bold">{b.full_name || 'غير محدد'}</TableCell>
-                      <TableCell className="font-mono text-xs">{b.decrypted_id || '—'}</TableCell>
-                      <TableCell className="font-mono text-xs">{b.phone || '—'}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{b.nationality || 'غير محدد'}</Badge></TableCell>
-                      <TableCell><Badge variant="secondary" className="text-xs">{b.gender || 'غير محدد'}</Badge></TableCell>
-                      <TableCell className="font-medium text-xs">{b.service_type || 'غير محدد'}</TableCell>
-                      <TableCell className="text-center font-bold">{b.service_quantity || 1}</TableCell>
-                      <TableCell className="text-center text-xs text-muted-foreground">{b.date || (b.created_at ? b.created_at.substring(0, 10) : '—')}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          {filteredAllBens.length > 100 && (
-            <p className="text-xs text-center text-muted-foreground">يتم عرض أول 100 نتيجة من أصل {filteredAllBens.length} مستفيد</p>
-          )}
-        </Card>
       </div>
     </AppLayout>
   );

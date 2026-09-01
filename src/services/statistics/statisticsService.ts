@@ -36,15 +36,10 @@ export interface StatisticsDataset {
  */
 export async function fetchStatisticsTeams(options: FetchStatisticsOptions): Promise<NormalizedTeam[]> {
   try {
-    let query = supabase
+    const query = supabase
       .from("teams")
       .select("*, department:departments(id, code, name)")
       .order("code");
-
-    const isAdmin = options.roles?.includes("admin");
-    if (!isAdmin && options.departmentId) {
-      query = query.eq("department_id", options.departmentId);
-    }
 
     const { data, error } = await query;
     if (error) {
@@ -163,22 +158,6 @@ export async function fetchStatisticsMissions(
 
       if (targetTeamId && targetTeamId !== "all") {
         query = query.eq("team_id", targetTeamId);
-      } else if (targetTeamId === "all") {
-        if (!isAdmin && !isManagement && !isDataManager) {
-          // Regular team entry user: show missions they created OR missions for their team
-          if (options.teamId && options.userId) {
-            query = query.or(`created_by.eq.${options.userId},team_id.eq.${options.teamId}`);
-          } else if (options.teamId) {
-            query = query.eq("team_id", options.teamId);
-          } else if (options.userId) {
-            query = query.eq("created_by", options.userId);
-          }
-        } else if (departmentTeams.length > 0 && !isAdmin && !isDataManager) {
-          const teamIds = departmentTeams.map((t) => t.id);
-          query = query.in("team_id", teamIds);
-        } else if (options.teamId && !isAdmin && !isDataManager) {
-          query = query.eq("team_id", options.teamId);
-        }
       }
 
       const { data, error } = await query;
