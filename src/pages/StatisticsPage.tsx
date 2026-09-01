@@ -26,6 +26,10 @@ import {
   calculateActivityDetailsRanking,
   calculateGenderDistribution,
   calculateNationalityDistribution,
+  calculateBeneficiaryModality,
+  calculateServicesDemographicsCross,
+  calculateVolunteerEffortMetrics,
+  calculateDayOfWeekActivity,
   formatDetailedTableRows,
 } from "@/services/statistics/statisticsCalculator";
 
@@ -39,11 +43,17 @@ import { ResponseTypeChart } from "@/components/statistics/ResponseTypeChart";
 import { GovernoratesRankingChart } from "@/components/statistics/GovernoratesRankingChart";
 import { ServicesBreakdownChart } from "@/components/statistics/ServicesBreakdownChart";
 import { DemographicsSection } from "@/components/statistics/DemographicsSection";
+import { BeneficiaryModalityCard } from "@/components/statistics/BeneficiaryModalityCard";
+import { ServicesDemographicsStackedChart } from "@/components/statistics/ServicesDemographicsStackedChart";
+import { VolunteerEffortAnalytics } from "@/components/statistics/VolunteerEffortAnalytics";
+import { DayOfWeekHeatmap } from "@/components/statistics/DayOfWeekHeatmap";
 import { ActivityDetailsRanking } from "@/components/statistics/ActivityDetailsRanking";
 import { StatisticsDataTable } from "@/components/statistics/StatisticsDataTable";
 import { StatisticsEmptyState } from "@/components/statistics/StatisticsEmptyState";
 import { StatisticsLoadingSkeleton } from "@/components/statistics/StatisticsLoadingSkeleton";
 import { StatisticsErrorState } from "@/components/statistics/StatisticsErrorState";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { LayoutDashboard, HeartHandshake, Users, MapPin, Table as TableIcon } from "lucide-react";
 
 export default function StatisticsPage() {
   const { user, profile, roles, hasRole } = useAuth();
@@ -226,6 +236,22 @@ export default function StatisticsPage() {
     return calculateNationalityDistribution(filteredMissions);
   }, [filteredMissions]);
 
+  const modalityData = useMemo(() => {
+    return calculateBeneficiaryModality(filteredMissions);
+  }, [filteredMissions]);
+
+  const servicesDemographicsData = useMemo(() => {
+    return calculateServicesDemographicsCross(filteredMissions);
+  }, [filteredMissions]);
+
+  const volunteerEffortData = useMemo(() => {
+    return calculateVolunteerEffortMetrics(filteredMissions);
+  }, [filteredMissions]);
+
+  const dayOfWeekData = useMemo(() => {
+    return calculateDayOfWeekActivity(filteredMissions);
+  }, [filteredMissions]);
+
   const detailedTableRows = useMemo(() => {
     return formatDetailedTableRows(filteredMissions);
   }, [filteredMissions]);
@@ -308,7 +334,7 @@ export default function StatisticsPage() {
         {/* Dashboard Visualizations */}
         {!loading && !error && filteredMissions.length > 0 && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            {/* 1. KPIs Section */}
+            {/* 1. High-Level KPIs Section */}
             <KpiCardsSection kpis={kpis} targetSummary={targetSummary} />
 
             {/* 2. Target Progress (If targets exist) */}
@@ -316,67 +342,194 @@ export default function StatisticsPage() {
               <TargetProgressSection targetSummary={targetSummary} />
             )}
 
-            {/* 3. Timeline Trend Chart */}
-            <TrendTimelineChart
-              timelineMonthly={timelineMonthly}
-              timelineDaily={timelineDaily}
-            />
+            {/* 3. Perspectives Tabs Navigator */}
+            <Tabs defaultValue="all" className="w-full space-y-6">
+              <div className="overflow-x-auto pb-1">
+                <TabsList className="bg-muted/60 p-1 rounded-xl h-auto flex flex-wrap gap-1 border">
+                  <TabsTrigger value="all" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3">
+                    <LayoutDashboard className="w-4 h-4 text-primary" />
+                    اللوحة الشاملة 360°
+                  </TabsTrigger>
+                  <TabsTrigger value="beneficiaries" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3">
+                    <HeartHandshake className="w-4 h-4 text-emerald-500" />
+                    المستفيدين والخدمات
+                  </TabsTrigger>
+                  <TabsTrigger value="volunteers" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3">
+                    <Users className="w-4 h-4 text-indigo-500" />
+                    كفاءة وأداء المتطوعين
+                  </TabsTrigger>
+                  <TabsTrigger value="operations" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3">
+                    <MapPin className="w-4 h-4 text-sky-500" />
+                    الجغرافيا والنبض الزمني
+                  </TabsTrigger>
+                  <TabsTrigger value="data" className="rounded-lg gap-2 text-xs md:text-sm py-2 px-3">
+                    <TableIcon className="w-4 h-4 text-amber-500" />
+                    سجل البيانات وتصدير Excel
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
-            {/* 4. Activity Classification & Response Type Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ActivityClassificationChart
-                treeData={classificationTree}
-                selectedClassification={filters.classification}
-                selectedActivityType={filters.activityType}
-                onSelectClassification={handleSelectClassification}
-                onSelectActivityType={handleSelectActivityType}
-              />
-              <ResponseTypeChart
-                data={responseTypeData}
-                selectedResponseType={filters.responseType}
-                onSelectResponseType={handleSelectResponseType}
-              />
-            </div>
+              {/* View 1: Complete Dashboard */}
+              <TabsContent value="all" className="space-y-6 m-0">
+                {/* Timeline Trend Chart */}
+                <TrendTimelineChart
+                  timelineMonthly={timelineMonthly}
+                  timelineDaily={timelineDaily}
+                />
 
-            {/* 5. Governorates & Services Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <GovernoratesRankingChart
-                data={governoratesData}
-                selectedGovernorate={filters.governorate}
-                onSelectGovernorate={handleSelectGovernorate}
-              />
-              <ServicesBreakdownChart
-                data={servicesData}
-                selectedService={filters.serviceType}
-                onSelectService={handleSelectService}
-              />
-            </div>
+                {/* Beneficiary Modality & Services Matrix */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <BeneficiaryModalityCard data={modalityData} />
+                  <ServicesDemographicsStackedChart
+                    data={servicesDemographicsData}
+                    selectedService={filters.serviceType}
+                    onSelectService={handleSelectService}
+                  />
+                </div>
 
-            {/* 6. Demographics (Gender & Nationality) */}
-            <DemographicsSection
-              genderData={genderData}
-              nationalityData={nationalityData}
-              selectedGender={filters.gender}
-              selectedNationality={filters.nationality}
-              onSelectGender={handleSelectGender}
-              onSelectNationality={handleSelectNationality}
-            />
+                {/* Volunteer Effort Analytics */}
+                <VolunteerEffortAnalytics data={volunteerEffortData} />
 
-            {/* 7. Activity Details Ranking */}
-            <ActivityDetailsRanking
-              data={activityDetailsData}
-              selectedDetail={filters.activityDetail}
-              onSelectDetail={handleSelectDetail}
-            />
+                {/* Activity Classification & Response Type Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <ActivityClassificationChart
+                    treeData={classificationTree}
+                    selectedClassification={filters.classification}
+                    selectedActivityType={filters.activityType}
+                    onSelectClassification={handleSelectClassification}
+                    onSelectActivityType={handleSelectActivityType}
+                  />
+                  <ResponseTypeChart
+                    data={responseTypeData}
+                    selectedResponseType={filters.responseType}
+                    onSelectResponseType={handleSelectResponseType}
+                  />
+                </div>
 
-            {/* 8. Detailed Data Tables & Excel Export */}
-            <StatisticsDataTable
-              missions={detailedTableRows}
-              governoratesData={governoratesData}
-              servicesData={servicesData}
-              genderData={genderData}
-              nationalityData={nationalityData}
-            />
+                {/* Governorates & Services Breakdown */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <GovernoratesRankingChart
+                    data={governoratesData}
+                    selectedGovernorate={filters.governorate}
+                    onSelectGovernorate={handleSelectGovernorate}
+                  />
+                  <ServicesBreakdownChart
+                    data={servicesData}
+                    selectedService={filters.serviceType}
+                    onSelectService={handleSelectService}
+                  />
+                </div>
+
+                {/* Demographics (Gender & Nationality) */}
+                <DemographicsSection
+                  genderData={genderData}
+                  nationalityData={nationalityData}
+                  selectedGender={filters.gender}
+                  selectedNationality={filters.nationality}
+                  onSelectGender={handleSelectGender}
+                  onSelectNationality={handleSelectNationality}
+                />
+
+                {/* Weekly Rhythm & Activity Details Ranking */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <DayOfWeekHeatmap data={dayOfWeekData} />
+                  <ActivityDetailsRanking
+                    data={activityDetailsData}
+                    selectedDetail={filters.activityDetail}
+                    onSelectDetail={handleSelectDetail}
+                  />
+                </div>
+
+                {/* Detailed Data Tables & Excel Export */}
+                <StatisticsDataTable
+                  missions={detailedTableRows}
+                  governoratesData={governoratesData}
+                  servicesData={servicesData}
+                  genderData={genderData}
+                  nationalityData={nationalityData}
+                />
+              </TabsContent>
+
+              {/* View 2: Beneficiaries & Services Focused */}
+              <TabsContent value="beneficiaries" className="space-y-6 m-0">
+                <BeneficiaryModalityCard data={modalityData} />
+
+                <ServicesDemographicsStackedChart
+                  data={servicesDemographicsData}
+                  selectedService={filters.serviceType}
+                  onSelectService={handleSelectService}
+                />
+
+                <DemographicsSection
+                  genderData={genderData}
+                  nationalityData={nationalityData}
+                  selectedGender={filters.gender}
+                  selectedNationality={filters.nationality}
+                  onSelectGender={handleSelectGender}
+                  onSelectNationality={handleSelectNationality}
+                />
+
+                <ServicesBreakdownChart
+                  data={servicesData}
+                  selectedService={filters.serviceType}
+                  onSelectService={handleSelectService}
+                />
+              </TabsContent>
+
+              {/* View 3: Volunteers Intelligence */}
+              <TabsContent value="volunteers" className="space-y-6 m-0">
+                <VolunteerEffortAnalytics data={volunteerEffortData} />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <ActivityClassificationChart
+                    treeData={classificationTree}
+                    selectedClassification={filters.classification}
+                    selectedActivityType={filters.activityType}
+                    onSelectClassification={handleSelectClassification}
+                    onSelectActivityType={handleSelectActivityType}
+                  />
+                  <ResponseTypeChart
+                    data={responseTypeData}
+                    selectedResponseType={filters.responseType}
+                    onSelectResponseType={handleSelectResponseType}
+                  />
+                </div>
+              </TabsContent>
+
+              {/* View 4: Operations & Geography Flow */}
+              <TabsContent value="operations" className="space-y-6 m-0">
+                <TrendTimelineChart
+                  timelineMonthly={timelineMonthly}
+                  timelineDaily={timelineDaily}
+                />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <GovernoratesRankingChart
+                    data={governoratesData}
+                    selectedGovernorate={filters.governorate}
+                    onSelectGovernorate={handleSelectGovernorate}
+                  />
+                  <DayOfWeekHeatmap data={dayOfWeekData} />
+                </div>
+
+                <ActivityDetailsRanking
+                  data={activityDetailsData}
+                  selectedDetail={filters.activityDetail}
+                  onSelectDetail={handleSelectDetail}
+                />
+              </TabsContent>
+
+              {/* View 5: Data Table & Excel */}
+              <TabsContent value="data" className="space-y-6 m-0">
+                <StatisticsDataTable
+                  missions={detailedTableRows}
+                  governoratesData={governoratesData}
+                  servicesData={servicesData}
+                  genderData={genderData}
+                  nationalityData={nationalityData}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         )}
       </div>

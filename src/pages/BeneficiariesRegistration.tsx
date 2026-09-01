@@ -7,15 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History, HeartHandshake, Globe, BarChart as BarChartIcon } from "lucide-react";
+import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History, HeartHandshake, TrendingUp } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SmartBeneficiariesUploader } from "@/components/SmartBeneficiariesUploader";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 // Utility: SHA-256 hash of a string (browser native)
 async function sha256(text: string): Promise<string> {
@@ -214,38 +214,6 @@ export default function BeneficiariesRegistration() {
   const totalServicesCount = (allIndivBens.reduce((acc, b) => acc + Number(b.service_quantity || 1), 0)) +
     (allGroupBens.reduce((acc, g) => acc + Number(g.service_quantity || g.count || 0), 0));
 
-  const totalBeneficiariesCount = allIndivBens.length + (allGroupBens.reduce((acc, g) => acc + Number(g.count || 0), 0));
-
-  const genderData = (() => {
-    const counts: Record<string, number> = {};
-    allIndivBens.forEach((b) => {
-      let g = b.gender || "غير محدد";
-      if (g.trim().includes("ذكر") || g.toLowerCase() === "male") g = "ذكر";
-      else if (g.trim().includes("أنثى") || g.toLowerCase() === "female") g = "أنثى";
-      counts[g] = (counts[g] || 0) + (b.service_quantity || 1);
-    });
-    allGroupBens.forEach((g) => {
-      let gen = g.gender || "غير محدد";
-      if (gen.trim().includes("ذكر") || gen.toLowerCase() === "male") gen = "ذكر";
-      else if (gen.trim().includes("أنثى") || gen.toLowerCase() === "female") gen = "أنثى";
-      counts[gen] = (counts[gen] || 0) + (g.count || 0);
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  })();
-
-  const nationalityData = (() => {
-    const counts: Record<string, number> = {};
-    allIndivBens.forEach((b) => {
-      const nat = b.nationality || "غير محدد";
-      counts[nat] = (counts[nat] || 0) + (b.service_quantity || 1);
-    });
-    allGroupBens.forEach((g) => {
-      const nat = g.nationality || "غير محدد";
-      counts[nat] = (counts[nat] || 0) + (g.count || 0);
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  })();
-
   const filteredAllBens = (() => {
     if (!benSearchQuery.trim()) return allIndivBens;
     const q = benSearchQuery.trim().toLowerCase();
@@ -258,8 +226,6 @@ export default function BeneficiariesRegistration() {
         (b.service_type && b.service_type.toLowerCase().includes(q))
     );
   })();
-
-  const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'];
 
   const triggerLookup = async (id: string) => {
     if (!id || id.length < 5) return;
@@ -875,64 +841,23 @@ export default function BeneficiariesRegistration() {
           </div>
         )}
 
-        {/* 4. التقسيمة الشاملة للمستفيدين والخدمات (الجنسية والنوع) */}
-        <div className="space-y-4 mt-12 pt-6 border-t border-border">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-lg text-primary flex items-center gap-2">
-              <BarChartIcon className="w-5 h-5" /> إحصائيات وتقسيمة جميع المستفيدين والخدمات
-            </h3>
-            <Badge variant="secondary" className="font-bold text-sm bg-amber-500/10 text-amber-600 border-amber-500/30">
-              إجمالي عدد الخدمات المقدمة: {totalServicesCount}
+        {/* رابط صفحة الإحصائيات الشاملة وجدول البحث */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mt-8 pt-4 border-t border-border">
+          <div className="flex items-center gap-3">
+            <Badge variant="secondary" className="font-bold text-sm bg-primary/10 text-primary border-primary/20">
+              إجمالي عدد الخدمات المسجلة: {totalServicesCount}
+            </Badge>
+            <Badge variant="outline" className="font-medium text-xs">
+              عدد المستفيدين في السجل: {allIndivBens.length}
             </Badge>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="p-5 border-primary/20 shadow-sm">
-              <h4 className="font-bold text-sm text-primary flex items-center gap-2 mb-3">
-                <Globe className="w-4 h-4" /> توزيع المستفيدين والخدمات حسب الجنسية
-              </h4>
-              <div className="h-[220px] w-full">
-                {nationalityData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={nationalityData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value">
-                        {nationalityData.map((e, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">لا توجد بيانات مسجلة</div>
-                )}
-              </div>
-            </Card>
-
-            <Card className="p-5 border-primary/20 shadow-sm">
-              <h4 className="font-bold text-sm text-primary flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4" /> توزيع المستفيدين والخدمات حسب النوع
-              </h4>
-              <div className="h-[220px] w-full">
-                {genderData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={genderData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value">
-                        {genderData.map((e, i) => (
-                          <Cell key={i} fill={e.name === 'ذكر' ? '#3b82f6' : e.name === 'أنثى' ? '#ec4899' : '#888888'} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">لا توجد بيانات مسجلة</div>
-                )}
-              </div>
-            </Card>
-          </div>
+          <Button variant="outline" size="sm" asChild className="gap-2 border-primary/30 text-primary hover:bg-primary/10">
+            <Link to="/statistics">
+              <TrendingUp className="w-4 h-4" />
+              عرض لوحة الإحصائيات والتحليلات البيانية الشاملة
+            </Link>
+          </Button>
         </div>
 
         {/* 5. جدول البحث الشامل في سجل المستفيدين */}

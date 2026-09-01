@@ -99,6 +99,49 @@ export interface DistributionItem {
   secondaryValue?: number;
 }
 
+export interface BeneficiaryModalityData {
+  individualBeneficiaries: number;
+  groupBeneficiaries: number;
+  individualServices: number;
+  groupServices: number;
+  totalBeneficiaries: number;
+  totalServices: number;
+  individualPct: number;
+  groupPct: number;
+}
+
+export interface ServiceDemographicItem {
+  service: string;
+  totalServices: number;
+  maleServices: number;
+  femaleServices: number;
+  unspecifiedGenderServices: number;
+  egyptianServices: number;
+  foreignServices: number;
+}
+
+export interface VolunteerEffortData {
+  totalHours: number;
+  totalPoints: number;
+  uniqueVolunteers: number;
+  leaderParticipations: number;
+  memberParticipations: number;
+  leaderHours: number;
+  memberHours: number;
+  avgHoursPerVolunteer: number;
+  avgHoursPerMission: number;
+  hoursBrackets: { range: string; count: number; percentage: number }[];
+}
+
+export interface DayOfWeekItem {
+  dayName: string;
+  dayIndex: number;
+  missionsCount: number;
+  beneficiariesCount: number;
+  servicesCount: number;
+  percentage: number;
+}
+
 export interface DetailedMissionTableRow {
   id: string;
   code: string;
@@ -677,4 +720,231 @@ export function formatDetailedTableRows(missions: NormalizedMission[]): Detailed
       servicesCount: srvs,
     };
   });
+}
+
+/**
+ * Calculates beneficiary modality (Individual vs Group)
+ */
+export function calculateBeneficiaryModality(missions: NormalizedMission[]): BeneficiaryModalityData {
+  let indivBens = 0;
+  let groupBens = 0;
+  let indivSrvs = 0;
+  let groupSrvs = 0;
+
+  missions.forEach((m) => {
+    m.beneficiariesIndividual.forEach((b) => {
+      indivBens += 1;
+      indivSrvs += b.quantity || 1;
+    });
+
+    m.beneficiariesGroup.forEach((g) => {
+      if (!g.isRepeated) groupBens += g.count || 0;
+      groupSrvs += g.count || 0;
+    });
+  });
+
+  const totalBeneficiaries = indivBens + groupBens || 1;
+  const totalServices = indivSrvs + groupSrvs || 1;
+
+  return {
+    individualBeneficiaries: indivBens,
+    groupBeneficiaries: groupBens,
+    individualServices: indivSrvs,
+    groupServices: groupSrvs,
+    totalBeneficiaries: indivBens + groupBens,
+    totalServices: indivSrvs + groupSrvs,
+    individualPct: Math.round((indivBens / totalBeneficiaries) * 100),
+    groupPct: Math.round((groupBens / totalBeneficiaries) * 100),
+  };
+}
+
+/**
+ * Calculates cross-demographics per service (Gender & Egyptian vs Non-Egyptian)
+ */
+export function calculateServicesDemographicsCross(missions: NormalizedMission[]): ServiceDemographicItem[] {
+  const map: Record<
+    string,
+    {
+      total: number;
+      male: number;
+      female: number;
+      unspecified: number;
+      egyptian: number;
+      foreign: number;
+    }
+  > = {};
+
+  missions.forEach((m) => {
+    m.beneficiariesIndividual.forEach((b) => {
+      const s = b.serviceType || "غير محدد";
+      if (!map[s]) {
+        map[s] = { total: 0, male: 0, female: 0, unspecified: 0, egyptian: 0, foreign: 0 };
+      }
+      const q = b.quantity || 1;
+      map[s].total += q;
+
+      const g = (b.gender || "").trim().toLowerCase();
+      if (g.includes("ذكر") || g === "male") map[s].male += q;
+      else if (g.includes("أنثى") || g === "female") map[s].female += q;
+      else map[s].unspecified += q;
+
+      const nat = (b.nationality || "").trim().toLowerCase();
+      if (nat.includes("مصر") || nat.includes("egypt")) map[s].egyptian += q;
+      else map[s].foreign += q;
+    });
+
+    m.beneficiariesGroup.forEach((g) => {
+      const s = g.serviceType || "غير محدد";
+      if (!map[s]) {
+        map[s] = { total: 0, male: 0, female: 0, unspecified: 0, egyptian: 0, foreign: 0 };
+      }
+      const c = g.count || 0;
+      map[s].total += c;
+
+      const gen = (g.gender || "").trim().toLowerCase();
+      if (gen.includes("ذكر") || gen === "male") map[s].male += c;
+      else if (gen.includes("أنثى") || gen === "female") map[s].female += c;
+      else map[s].unspecified += c;
+
+      const nat = (g.nationality || "").trim().toLowerCase();
+      if (nat.includes("مصر") || nat.includes("egypt")) map[s].egyptian += c;
+      else map[s].foreign += c;
+    });
+  });
+
+  return Object.entries(map)
+    .map(([service, d]) => ({
+      service,
+      totalServices: d.total,
+      maleServices: d.male,
+      femaleServices: d.female,
+      unspecifiedGenderServices: d.unspecified,
+      egyptianServices: d.egyptian,
+      foreignServices: d.foreign,
+    }))
+    .sort((a, b) => b.totalServices - a.totalServices)
+    .slice(0, 10);
+}
+
+/**
+ * Calculates volunteer productivity & engagement effort metrics
+ */
+export function calculateVolunteerEffortMetrics(missions: NormalizedMission[]): VolunteerEffortData {
+  let totalHours = 0;
+  let totalPoints = 0;
+  let leaderParts = 0;
+  let memberParts = 0;
+  let leaderHours = 0;
+  let memberHours = 0;
+
+  const volHoursMap = new Map<string, number>();
+
+  missions.forEach((m) => {
+    m.volunteers.forEach((v) => {
+      if (v.removed) return;
+      const h = v.hours || 0;
+      const p = v.points || 0;
+      totalHours += h;
+      totalPoints += p;
+
+      if (v.isLeader) {
+        leaderParts++;
+        leaderHours += h;
+      } else {
+        memberParts++;
+        memberHours += h;
+      }
+
+      const key = v.membershipNumber || v.fullName || v.id;
+      volHoursMap.set(key, (volHoursMap.get(key) || 0) + h);
+    });
+  });
+
+  const uniqueVolunteers = volHoursMap.size || 1;
+  const totalMissions = missions.length || 1;
+
+  // Bracket distribution
+  let b1 = 0; // 1-5 hrs
+  let b2 = 0; // 6-15 hrs
+  let b3 = 0; // 16-30 hrs
+  let b4 = 0; // 30+ hrs
+
+  volHoursMap.forEach((hrs) => {
+    if (hrs <= 5) b1++;
+    else if (hrs <= 15) b2++;
+    else if (hrs <= 30) b3++;
+    else b4++;
+  });
+
+  const brackets = [
+    { range: "1 - 5 ساعات", count: b1, percentage: Math.round((b1 / uniqueVolunteers) * 100) },
+    { range: "6 - 15 ساعة", count: b2, percentage: Math.round((b2 / uniqueVolunteers) * 100) },
+    { range: "16 - 30 ساعة", count: b3, percentage: Math.round((b3 / uniqueVolunteers) * 100) },
+    { range: "أكثر من 30 ساعة", count: b4, percentage: Math.round((b4 / uniqueVolunteers) * 100) },
+  ];
+
+  return {
+    totalHours: Number(totalHours.toFixed(1)),
+    totalPoints,
+    uniqueVolunteers: volHoursMap.size,
+    leaderParticipations: leaderParts,
+    memberParticipations: memberParts,
+    leaderHours: Number(leaderHours.toFixed(1)),
+    memberHours: Number(memberHours.toFixed(1)),
+    avgHoursPerVolunteer: Number((totalHours / uniqueVolunteers).toFixed(1)),
+    avgHoursPerMission: Number((totalHours / totalMissions).toFixed(1)),
+    hoursBrackets: brackets,
+  };
+}
+
+/**
+ * Calculates day of week activity distribution
+ */
+export function calculateDayOfWeekActivity(missions: NormalizedMission[]): DayOfWeekItem[] {
+  const days = [
+    { name: "الأحد", count: 0, bens: 0, srvs: 0 },
+    { name: "الإثنين", count: 0, bens: 0, srvs: 0 },
+    { name: "الثلاثاء", count: 0, bens: 0, srvs: 0 },
+    { name: "الأربعاء", count: 0, bens: 0, srvs: 0 },
+    { name: "الخميس", count: 0, bens: 0, srvs: 0 },
+    { name: "الجمعة", count: 0, bens: 0, srvs: 0 },
+    { name: "السبت", count: 0, bens: 0, srvs: 0 },
+  ];
+
+  missions.forEach((m) => {
+    if (!m.date) return;
+    const dateObj = new Date(m.date);
+    if (isNaN(dateObj.getTime())) return;
+    const dayIdx = dateObj.getDay(); // 0 = Sunday
+
+    let bens = 0;
+    let srvs = 0;
+    m.beneficiariesIndividual.forEach((b) => {
+      bens += 1;
+      srvs += b.quantity || 1;
+    });
+    m.beneficiariesGroup.forEach((g) => {
+      if (!g.isRepeated) bens += g.count || 0;
+      srvs += g.count || 0;
+    });
+
+    if (days[dayIdx]) {
+      days[dayIdx].count++;
+      days[dayIdx].bens += bens;
+      days[dayIdx].srvs += srvs;
+    }
+  });
+
+  const totalMissions = missions.length || 1;
+
+  // Reorder to start with Saturday for Egyptian work week
+  const egyptianOrder = [6, 0, 1, 2, 3, 4, 5];
+  return egyptianOrder.map((idx) => ({
+    dayName: days[idx].name,
+    dayIndex: idx,
+    missionsCount: days[idx].count,
+    beneficiariesCount: days[idx].bens,
+    servicesCount: days[idx].srvs,
+    percentage: Math.round((days[idx].count / totalMissions) * 100),
+  }));
 }
