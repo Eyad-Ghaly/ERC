@@ -112,52 +112,26 @@ export async function fetchStatisticsMissions(
     while (hasMore) {
       let query = supabase
         .from("missions")
-        .select(`
-          *,
-          mission_volunteers (
-            id,
-            mission_id,
-            membership_number,
-            full_name,
-            hours,
-            points,
-            is_leader,
-            added_in_ops,
-            removed
-          ),
-          beneficiaries_individual (
-            id,
-            mission_id,
-            full_name,
-            encrypted_id,
-            id_hash,
-            registryId:registry_id,
-            phone,
-            service_type,
-            service_quantity,
-            gender,
-            nationality,
-            age,
-            governorate,
-            created_at
-          ),
-          beneficiaries_group (
-            id,
-            mission_id,
-            count,
-            service_type,
-            gender,
-            nationality,
-            is_repeated,
-            target_group,
-            created_at
-          )
-        `)
-        .order("activity_date", { ascending: false })
+        .select("*, mission_volunteers(*), beneficiaries_individual(*), beneficiaries_group(*)")
+        .order("created_at", { ascending: false })
         .range(page * pageSize, (page + 1) * pageSize - 1);
 
       if (targetTeamId && targetTeamId !== "all") {
         query = query.eq("team_id", targetTeamId);
+      } else if (targetTeamId === "all") {
+        if (!isAdmin && !isManagement && !isDataManager) {
+          // For entry users, show everything they created OR everything in their active team (required for Supabase RLS)
+          if (options.teamId && options.userId) {
+            query = query.or(`created_by.eq.${options.userId},team_id.eq.${options.teamId}`);
+          } else if (options.teamId) {
+            query = query.eq("team_id", options.teamId);
+          } else if (options.userId) {
+            query = query.eq("created_by", options.userId);
+          }
+        } else if (departmentTeams.length > 0) {
+          const teamIds = departmentTeams.map((t) => t.id);
+          query = query.in("team_id", teamIds);
+        }
       }
 
       const { data, error } = await query;
