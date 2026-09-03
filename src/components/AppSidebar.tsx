@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
-import { Heart, Home, FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, LogOut, UserPlus, Target, Star } from "lucide-react";
+import { Heart, Home, FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, LogOut, UserPlus, Target, Star, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROLES, type AppRole } from "@/lib/constants";
 
@@ -23,6 +23,7 @@ const items: NavItem[] = [
   { title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, roles: ["department_entry", "data_manager", "admin"] },
   { title: "إدخال مهمة جديدة", url: "/department-entry", icon: FilePlus, roles: ["department_entry", "admin"] },
   { title: "تسجيل المستفيدين", url: "/beneficiaries-registration", icon: UserPlus, roles: ["department_entry", "admin"] },
+  { title: "سجل المستفيدين والإحصائيات", url: "/statistics", icon: TrendingUp, roles: ["*"] },
   { title: "طلب إمداد بالمتطوعين", url: "/volunteer-supply-request/new", icon: UserPlus, roles: ["department_entry", "management", "admin"] },
   { title: "موافقات الإدارة لطلبات الإمداد", url: "/management-supply-requests", icon: FilePlus, roles: ["management", "admin"] },
   { title: "غرفة العمليات", url: "/operations-room", icon: Radio, roles: ["operations_room", "operations_supervisor", "admin"] },
@@ -31,7 +32,6 @@ const items: NavItem[] = [
   { title: "غرفة الشباب والتطوع", url: "/youth", icon: Users2, roles: ["youth_room", "admin"] },
   { title: "إدارة طلبات الإمداد", url: "/youth-supply-requests", icon: Users2, roles: ["youth_management", "admin"] },
   { title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, roles: ["branch_youth", "admin"] },
-  { title: "Dashboard", url: "/dashboard", icon: BarChart3, roles: ["stakeholder", "data_manager", "admin"] },
   { title: "إدارة وتحليل البيانات", url: "/data-manager", icon: Database, roles: ["data_manager", "admin"] },
   { title: "لوحة المدير", url: "/admin", icon: Settings, roles: ["admin"] },
 ];

@@ -24,7 +24,7 @@ export function ProtectedRoute({ children, roles }: { children: React.ReactNode;
     );
   }
 
-  if (roles && !roles.some((r) => userRoles.includes(r)) && !hasRole("admin")) {
+  if (roles && !roles.includes("*" as AppRole) && !roles.some((r) => userRoles.includes(r)) && !hasRole("admin")) {
     return <Navigate to="/" replace />;
   }
   return <>{children}</>;

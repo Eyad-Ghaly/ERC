@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, UserCheck, Activity, Map, Database, FileUp, Loader2, Plus, X, Filter, HeartHandshake, Globe, Search } from "lucide-react";
+import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, UserCheck, Activity, Map, Database, FileUp, Loader2, Plus, X, Filter, HeartHandshake, Globe, Search, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -715,11 +715,22 @@ export default function DepartmentDashboard() {
             <TabsTrigger value="missions" className="px-6"><ListTodo className="w-4 h-4 ml-2" /> مهام الفريق</TabsTrigger>
             <TabsTrigger value="volunteers" className="px-6"><UserCheck className="w-4 h-4 ml-2" /> متطوعو الفريق</TabsTrigger>
           </TabsList>
-          {(activeTeamCode || profile?.team_code) && (
-            <Badge variant="outline" className="hidden md:inline-flex">
-              {selectedTeamId === "all" ? `عدد الفرق: ${departmentTeams.length}` : `كود الفريق المحدد: ${activeTeamCode}`}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {(activeTeamCode || profile?.team_code) && (
+              <Badge variant="outline" className="hidden md:inline-flex">
+                {selectedTeamId === "all" ? `عدد الفرق: ${departmentTeams.length}` : `كود الفريق المحدد: ${activeTeamCode}`}
+              </Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/statistics")}
+              className="gap-1.5 gradient-primary text-white hover:opacity-90 shadow-sm text-xs font-bold"
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              لوحة الإحصائيات الكاملة
+            </Button>
+          </div>
         </div>
 
         <TabsContent value="missions" className="space-y-6 mt-0">

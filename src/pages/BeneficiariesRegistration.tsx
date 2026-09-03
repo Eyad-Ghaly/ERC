@@ -7,15 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
+import { Link } from "react-router-dom";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History, HeartHandshake, Globe, BarChart as BarChartIcon } from "lucide-react";
+import { CheckCircle2, UserPlus, Users, Loader2, ListTodo, CheckSquare, Search, History, HeartHandshake, TrendingUp } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { SmartBeneficiariesUploader } from "@/components/SmartBeneficiariesUploader";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 // Utility: SHA-256 hash of a string (browser native)
 async function sha256(text: string): Promise<string> {
@@ -133,133 +133,6 @@ export default function BeneficiariesRegistration() {
   const [groupServiceType, setGroupServiceType] = useState("");
   const [groupServiceQuantity, setGroupServiceQuantity] = useState("1");
   const [busy, setBusy] = useState(false);
-
-  // Global Beneficiaries Search & Stats State
-  const [allIndivBens, setAllIndivBens] = useState<any[]>([]);
-  const [allGroupBens, setAllGroupBens] = useState<any[]>([]);
-  const [benSearchQuery, setBenSearchQuery] = useState("");
-
-  const fetchAllBeneficiaries = async () => {
-    if (!user) return;
-    let allMissions: any[] = [];
-    let hasMore = true;
-    let page = 0;
-    const pageSize = 1000;
-
-    while (hasMore) {
-      let query = supabase
-        .from("missions")
-        .select("id, mission_code, mission_name, activity_date, beneficiaries_individual(*), beneficiaries_group(*)")
-        .order("created_at", { ascending: false })
-        .range(page * pageSize, (page + 1) * pageSize - 1);
-
-      if (profile?.team_id) {
-        query = query.eq("team_id", profile.team_id);
-      } else {
-        query = query.eq("created_by", user.id);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        console.error("fetchAllBeneficiaries error:", error);
-        break;
-      }
-
-      if (data && data.length > 0) {
-        allMissions = [...allMissions, ...data];
-        if (data.length < pageSize) hasMore = false;
-        else page++;
-      } else {
-        hasMore = false;
-      }
-    }
-
-    let indivList: any[] = [];
-    let groupList: any[] = [];
-
-    allMissions.forEach((m) => {
-      (m.beneficiaries_individual || []).forEach((b: any) => {
-        indivList.push({
-          ...b,
-          mission_code: m.mission_code,
-          mission_name: m.mission_name,
-          date: m.activity_date,
-        });
-      });
-      (m.beneficiaries_group || []).forEach((g: any) => {
-        groupList.push({
-          ...g,
-          mission_code: m.mission_code,
-          mission_name: m.mission_name,
-          date: m.activity_date,
-        });
-      });
-    });
-
-    const decryptedIndivs = await Promise.all(
-      indivList.map(async (b) => ({
-        ...b,
-        decrypted_id: b.encrypted_id
-          ? await decryptData(b.encrypted_id)
-          : b.id_hash
-          ? "مسجل بالهاش"
-          : "غير مدخل",
-      }))
-    );
-
-    setAllIndivBens(decryptedIndivs);
-    setAllGroupBens(groupList);
-  };
-
-  const totalServicesCount = (allIndivBens.reduce((acc, b) => acc + Number(b.service_quantity || 1), 0)) +
-    (allGroupBens.reduce((acc, g) => acc + Number(g.service_quantity || g.count || 0), 0));
-
-  const totalBeneficiariesCount = allIndivBens.length + (allGroupBens.reduce((acc, g) => acc + Number(g.count || 0), 0));
-
-  const genderData = (() => {
-    const counts: Record<string, number> = {};
-    allIndivBens.forEach((b) => {
-      let g = b.gender || "غير محدد";
-      if (g.trim().includes("ذكر") || g.toLowerCase() === "male") g = "ذكر";
-      else if (g.trim().includes("أنثى") || g.toLowerCase() === "female") g = "أنثى";
-      counts[g] = (counts[g] || 0) + (b.service_quantity || 1);
-    });
-    allGroupBens.forEach((g) => {
-      let gen = g.gender || "غير محدد";
-      if (gen.trim().includes("ذكر") || gen.toLowerCase() === "male") gen = "ذكر";
-      else if (gen.trim().includes("أنثى") || gen.toLowerCase() === "female") gen = "أنثى";
-      counts[gen] = (counts[gen] || 0) + (g.count || 0);
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  })();
-
-  const nationalityData = (() => {
-    const counts: Record<string, number> = {};
-    allIndivBens.forEach((b) => {
-      const nat = b.nationality || "غير محدد";
-      counts[nat] = (counts[nat] || 0) + (b.service_quantity || 1);
-    });
-    allGroupBens.forEach((g) => {
-      const nat = g.nationality || "غير محدد";
-      counts[nat] = (counts[nat] || 0) + (g.count || 0);
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  })();
-
-  const filteredAllBens = (() => {
-    if (!benSearchQuery.trim()) return allIndivBens;
-    const q = benSearchQuery.trim().toLowerCase();
-    return allIndivBens.filter(
-      (b) =>
-        (b.full_name && b.full_name.toLowerCase().includes(q)) ||
-        (b.decrypted_id && b.decrypted_id.includes(q)) ||
-        (b.phone && b.phone.includes(q)) ||
-        (b.mission_code && b.mission_code.toLowerCase().includes(q)) ||
-        (b.service_type && b.service_type.toLowerCase().includes(q))
-    );
-  })();
-
-  const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'];
 
   const triggerLookup = async (id: string) => {
     if (!id || id.length < 5) return;
@@ -418,7 +291,6 @@ export default function BeneficiariesRegistration() {
   useEffect(() => {
     if (user) {
       fetchTargets();
-      fetchAllBeneficiaries();
     }
   }, [user, profile, statusFilter]);
 
@@ -643,12 +515,36 @@ export default function BeneficiariesRegistration() {
     <AppLayout title="تسجيل المستفيدين">
       <div className="space-y-6 max-w-5xl mx-auto">
 
+        {/* زر ورابط الانتقال إلى سجل المستفيدين الشامل والإحصائيات */}
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-primary/25 bg-gradient-to-r from-primary/10 via-background to-primary/5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/15 text-primary flex items-center justify-center font-bold">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm md:text-base font-bold text-foreground">
+                سجل المستفيدين الشامل والبحث الفوري
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                البحث الفوري بالاسم أو الرقم القومي (فك التشفير تلقائياً) وتصدير تقارير Excel
+              </p>
+            </div>
+          </div>
+
+          <Button variant="default" size="sm" asChild className="gap-2 text-xs font-bold shadow-sm">
+            <Link to="/statistics">
+              <TrendingUp className="w-4 h-4" />
+              الانتقال إلى سجل المستفيدين الشامل
+            </Link>
+          </Button>
+        </div>
+
         {/* 1. Task Selection Card */}
         <Card className="p-6 border-primary/20 shadow-sm">
           <div className="flex items-center justify-between mb-4">
              <Label className="text-base font-semibold text-primary">اختر المهمة لإدخال مستفيديها:</Label>
              <div className="flex items-center gap-4">
-                 <SmartBeneficiariesUploader onSuccess={() => { fetchTargets(); fetchAllBeneficiaries(); if (selectedTargetId) fetchRegistered(targets.find(t => t.id === selectedTargetId)); }} />
+                 <SmartBeneficiariesUploader onSuccess={() => { fetchTargets(); if (selectedTargetId) fetchRegistered(targets.find(t => t.id === selectedTargetId)); }} />
                  <div className="flex bg-muted/50 p-1 rounded-md">
                     <Button size="sm" variant={statusFilter === 'pending' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('pending'); setSelectedTargetId(""); }} className="rounded-sm"><ListTodo className="w-4 h-4 ms-2"/> قيد الانتظار</Button>
                     <Button size="sm" variant={statusFilter === 'completed' ? 'default' : 'ghost'} onClick={() => { setStatusFilter('completed'); setSelectedTargetId(""); }} className="rounded-sm"><CheckSquare className="w-4 h-4 ms-2"/> مكتملة</Button>
@@ -874,137 +770,6 @@ export default function BeneficiariesRegistration() {
             </div>
           </div>
         )}
-
-        {/* 4. التقسيمة الشاملة للمستفيدين والخدمات (الجنسية والنوع) */}
-        <div className="space-y-4 mt-12 pt-6 border-t border-border">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-lg text-primary flex items-center gap-2">
-              <BarChartIcon className="w-5 h-5" /> إحصائيات وتقسيمة جميع المستفيدين والخدمات
-            </h3>
-            <Badge variant="secondary" className="font-bold text-sm bg-amber-500/10 text-amber-600 border-amber-500/30">
-              إجمالي عدد الخدمات المقدمة: {totalServicesCount}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="p-5 border-primary/20 shadow-sm">
-              <h4 className="font-bold text-sm text-primary flex items-center gap-2 mb-3">
-                <Globe className="w-4 h-4" /> توزيع المستفيدين والخدمات حسب الجنسية
-              </h4>
-              <div className="h-[220px] w-full">
-                {nationalityData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={nationalityData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value">
-                        {nationalityData.map((e, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">لا توجد بيانات مسجلة</div>
-                )}
-              </div>
-            </Card>
-
-            <Card className="p-5 border-primary/20 shadow-sm">
-              <h4 className="font-bold text-sm text-primary flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4" /> توزيع المستفيدين والخدمات حسب النوع
-              </h4>
-              <div className="h-[220px] w-full">
-                {genderData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={genderData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={4} dataKey="value">
-                        {genderData.map((e, i) => (
-                          <Cell key={i} fill={e.name === 'ذكر' ? '#3b82f6' : e.name === 'أنثى' ? '#ec4899' : '#888888'} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">لا توجد بيانات مسجلة</div>
-                )}
-              </div>
-            </Card>
-          </div>
-        </div>
-
-        {/* 5. جدول البحث الشامل في سجل المستفيدين */}
-        <Card className="p-6 border-primary/20 space-y-4 shadow-sm mt-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="font-bold text-lg text-primary flex items-center gap-2">
-                <Search className="w-5 h-5" />
-                سجل المستفيدين الشامل والبحث الفوري (بالاسم أو الرقم القومي)
-              </h3>
-              <p className="text-xs text-muted-foreground mt-1">يمكنك البحث بالاسم، الرقم القومي (فك التشفير تلقائياً)، رقم الهاتف، أو كود المهمة</p>
-            </div>
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative flex-1 md:w-80">
-                <Search className="w-4 h-4 absolute right-3 top-3 text-muted-foreground" />
-                <Input 
-                  placeholder="ابحث بالاسم، الرقم القومي، الهاتف..." 
-                  value={benSearchQuery} 
-                  onChange={e => setBenSearchQuery(e.target.value)} 
-                  className="pr-9" 
-                />
-              </div>
-              <Badge variant="outline" className="font-bold text-xs bg-primary/10 text-primary whitespace-nowrap">
-                عدد النتائج: {filteredAllBens.length}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="font-bold">كود المهمة</TableHead>
-                  <TableHead className="font-bold">اسم المستفيد</TableHead>
-                  <TableHead className="font-bold">الرقم القومي (مفكوك التشفير)</TableHead>
-                  <TableHead className="font-bold">رقم الهاتف</TableHead>
-                  <TableHead className="font-bold">الجنسية</TableHead>
-                  <TableHead className="font-bold">النوع</TableHead>
-                  <TableHead className="font-bold">نوع الخدمة</TableHead>
-                  <TableHead className="font-bold text-center">الكمية</TableHead>
-                  <TableHead className="font-bold text-center">التاريخ</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAllBens.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      لا يوجد مستفيدين مطابقين للبحث
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredAllBens.slice(0, 100).map((b: any, idx: number) => (
-                    <TableRow key={b.id || idx} className="hover:bg-muted/30">
-                      <TableCell className="font-mono text-xs font-bold text-primary">{b.mission_code || '—'}</TableCell>
-                      <TableCell className="font-bold">{b.full_name || 'غير محدد'}</TableCell>
-                      <TableCell className="font-mono text-xs">{b.decrypted_id || '—'}</TableCell>
-                      <TableCell className="font-mono text-xs">{b.phone || '—'}</TableCell>
-                      <TableCell><Badge variant="outline" className="text-xs">{b.nationality || 'غير محدد'}</Badge></TableCell>
-                      <TableCell><Badge variant="secondary" className="text-xs">{b.gender || 'غير محدد'}</Badge></TableCell>
-                      <TableCell className="font-medium text-xs">{b.service_type || 'غير محدد'}</TableCell>
-                      <TableCell className="text-center font-bold">{b.service_quantity || 1}</TableCell>
-                      <TableCell className="text-center text-xs text-muted-foreground">{b.date || (b.created_at ? b.created_at.substring(0, 10) : '—')}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          {filteredAllBens.length > 100 && (
-            <p className="text-xs text-center text-muted-foreground">يتم عرض أول 100 نتيجة من أصل {filteredAllBens.length} مستفيد</p>
-          )}
-        </Card>
       </div>
     </AppLayout>
   );
