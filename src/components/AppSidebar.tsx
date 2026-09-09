@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
-import { Heart, Home, FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, LogOut, UserPlus, Target, Star, TrendingUp } from "lucide-react";
+import { Heart, Home, FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, LogOut, UserPlus, Target, Star, TrendingUp, GitPullRequest, MessageSquare, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROLES, type AppRole } from "@/lib/constants";
 
@@ -33,6 +33,9 @@ const items: NavItem[] = [
   { title: "إدارة طلبات الإمداد", url: "/youth-supply-requests", icon: Users2, roles: ["youth_management", "admin"] },
   { title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, roles: ["branch_youth", "admin"] },
   { title: "إدارة وتحليل البيانات", url: "/data-manager", icon: Database, roles: ["data_manager", "admin"] },
+  { title: "طلبات التعديل", url: "/edit-requests", icon: GitPullRequest, roles: ["admin", "data_manager", "management"] },
+  { title: "ملاحظات المراجعة", url: "/review-notes", icon: MessageSquare, roles: ["department_entry"] },
+  { title: "مهام اليوم", url: "/dashboard", icon: Activity, roles: ["stakeholder", "admin"] },
   { title: "لوحة المدير", url: "/admin", icon: Settings, roles: ["admin"] },
 ];
 

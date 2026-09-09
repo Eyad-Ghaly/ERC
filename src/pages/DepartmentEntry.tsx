@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, Save, AlertCircle, Search, Check, ChevronsUpDown } from "lucide-react";
+import { Plus, Trash2, Send, Save, AlertCircle, Search, Check, ChevronsUpDown, GitPullRequest } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -137,6 +137,10 @@ export default function DepartmentEntry() {
   const [nonVolunteers, setNonVolunteers] = useState<{ full_name: string; role: string; }[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // Track if the mission being edited is already submitted (coded or beyond)
+  const [originalMissionStatus, setOriginalMissionStatus] = useState<string | null>(null);
+  const isEditRequest = !!id && !!originalMissionStatus && originalMissionStatus !== "planned";
+
   const today = new Date().toISOString().split('T')[0];
   const isLateSubmission = activityDate ? activityDate < today : false;
 
@@ -209,6 +213,7 @@ export default function DepartmentEntry() {
         setBusy(true);
         const { data: mission } = await supabase.from("missions").select("*").eq("id", id).single();
         if (mission) {
+          setOriginalMissionStatus(mission.status || null);
           setTeamId(mission.team_id || "");
           setProjectCode(mission.project_code || "");
           setGovernorate(mission.governorate || "");
@@ -282,6 +287,66 @@ export default function DepartmentEntry() {
     const updated = [...nonVolunteers];
     updated[index] = { ...updated[index], [field]: value };
     setNonVolunteers(updated);
+  };
+
+  // Submit an edit request instead of direct update (for submitted missions)
+  const submitEditRequest = async () => {
+    if (!user || !id) return;
+    if (!missionName.trim()) { toast.error("أدخل اسم المهمة"); return; }
+    if (!activityDate) { toast.error("أدخل تاريخ النشاط"); return; }
+    if (!followUpResponsible.trim()) { toast.error("أدخل مسؤول المتابعة"); return; }
+    if (!/^\d{11}$/.test(followUpPhone.trim())) { toast.error("رقم تليفون مسؤول المتابعة يجب أن يكون 11 رقماً"); return; }
+
+    setBusy(true);
+    try {
+      const changes: Record<string, any> = {
+        project_code: projectCode,
+        governorate,
+        activity_classification: activityClassification,
+        activity_type: activityType,
+        activity_details: indicators.find(i => i.id === indicatorId)?.title || activityDetails,
+        indicator_id: indicatorId || null,
+        type_name: typeName,
+        classification,
+        classification_name: classificationName,
+        organizing_entity: activityClassification === "تنمية معرفية ومهارية" ? organizingEntity : null,
+        activity_date: activityDate,
+        execution_place: executionPlace,
+        mission_name: missionName,
+        follow_up_responsible: followUpResponsible,
+        follow_up_phone: followUpPhone,
+        has_beneficiaries: hasBeneficiaries,
+        is_open_mission: isOpenMission,
+      };
+
+      // Include volunteers and non-volunteers in the changes
+      const validVols = volunteers.filter((v) => v.full_name.trim());
+      changes.volunteers = validVols.map((v) => ({
+        full_name: v.is_manual ? `${v.full_name} (مضاف يدوياً)` : v.full_name,
+        membership_number: v.membership_number,
+        branch: v.branch,
+      }));
+
+      const validNonVols = nonVolunteers.filter((v) => v.full_name.trim());
+      changes.non_volunteers = validNonVols.map((v) => ({ full_name: v.full_name, role: v.role }));
+
+      const { error } = await supabase.from("edit_requests").insert({
+        record_id: id,
+        entity_type: "mission",
+        team_id: profile?.team_id || null,
+        requested_by: profile?.id,
+        changes,
+        status: "pending",
+      });
+      if (error) throw error;
+
+      toast.success("تم إرسال طلب التعديل للمراجعة. ستصلك ملاحظة عند الرد.");
+      navigate("/department-dashboard");
+    } catch (e: any) {
+      toast.error(e.message || "فشل إرسال طلب التعديل");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const submit = async (sendNow: boolean) => {
@@ -406,8 +471,17 @@ export default function DepartmentEntry() {
   };
 
   return (
-    <AppLayout title={id ? "تعديل المهمة" : "إدخال مهمة جديدة"}>
+    <AppLayout title={isEditRequest ? "طلب تعديل المهمة" : id ? "تعديل المهمة" : "إدخال مهمة جديدة"}>
       <div className="space-y-6 max-w-5xl">
+
+        {isEditRequest && (
+          <Card className="p-4 border-info/50 bg-info/10 flex items-start gap-3">
+            <GitPullRequest className="w-5 h-5 text-info mt-0.5" />
+            <div className="text-sm">
+              <strong>وضع طلب التعديل:</strong> هذه المهمة تم إرسالها مسبقاً. أي تعديل سيتم إرساله كطلب للمراجعة من الإدارة ولن يُطبق مباشرة.
+            </div>
+          </Card>
+        )}
 
 
         {!profile?.team_id && (
@@ -578,8 +652,17 @@ export default function DepartmentEntry() {
         </Card>
 
         <div className="flex gap-3 justify-end">
-          <Button variant="outline" onClick={() => submit(false)} disabled={busy}><Save className="w-4 h-4 ms-2" />حفظ</Button>
-          <Button onClick={() => submit(true)} disabled={busy}><Send className="w-4 h-4 ms-2" />إرسال</Button>
+          {isEditRequest ? (
+            <Button onClick={submitEditRequest} disabled={busy} className="gap-2 bg-info hover:bg-info/90 text-white">
+              <GitPullRequest className="w-4 h-4" />
+              إرسال طلب تعديل
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => submit(false)} disabled={busy}><Save className="w-4 h-4 ms-2" />حفظ</Button>
+              <Button onClick={() => submit(true)} disabled={busy}><Send className="w-4 h-4 ms-2" />إرسال</Button>
+            </>
+          )}
         </div>
       </div>
     </AppLayout>

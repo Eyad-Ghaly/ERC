@@ -24,12 +24,9 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
   const [memberId, setMemberId] = useState("");
   const [branch, setBranch] = useState("");
   const [phone, setPhone] = useState("");
-  const [nationalId, setNationalId] = useState("");
 
   // Existing Volunteer state
   const [selectedVolunteer, setSelectedVolunteer] = useState<VolunteerData | null>(null);
-  const [teamPhone, setTeamPhone] = useState("");
-  const [teamNationalId, setTeamNationalId] = useState("");
 
   const handleAddExisting = async () => {
     if (!selectedVolunteer) return toast.error("الرجاء اختيار متطوع");
@@ -40,7 +37,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
       .from("volunteer_teams")
       .select("id")
       .eq("volunteer_id", selectedVolunteer.id)
-      .eq("team_code", teamId)
+      .eq("team_id", teamId)
       .single();
 
     if (existing) {
@@ -50,7 +47,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
 
     const { error } = await supabase.from("volunteer_teams").insert({
       volunteer_id: selectedVolunteer.id,
-      team_code: teamId,
+      team_id: teamId,
       join_date: new Date().toISOString().split('T')[0],
       is_approved: false
     });
@@ -61,8 +58,6 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
     } else {
       toast.success("تم إرسال طلب إضافة المتطوع للفريق وهو قيد الاعتماد");
       setOpen(false);
-      setTeamPhone("");
-      setTeamNationalId("");
       onAdded();
     }
   };
@@ -78,8 +73,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
         full_name: fullName,
         membership_number: memberId || null,
         branch: branch || null,
-        phone_number: phone || null,
-        national_id: nationalId || null
+        phone_number: phone || null
       })
       .select()
       .single();
@@ -92,7 +86,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
     // 2. Insert into teams
     const { error: teamError } = await supabase.from("volunteer_teams").insert({
       volunteer_id: newVol.id,
-      team_code: teamId,
+      team_id: teamId,
       join_date: new Date().toISOString().split('T')[0],
       is_approved: false
     });
@@ -102,7 +96,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
       toast.error(teamError.message);
     } else {
       toast.success("تم تسجيل المتطوع وإرسال طلب الانضمام للاعتماد");
-      setFullName(""); setMemberId(""); setBranch(""); setPhone(""); setNationalId("");
+      setFullName(""); setMemberId(""); setBranch(""); setPhone("");
       setOpen(false);
       onAdded();
     }
@@ -129,16 +123,6 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
               <p className="text-sm text-muted-foreground mb-4">ابحث عن متطوع مسجل مسبقاً في قاعدة بيانات المتطوعين لضمه لفريقك.</p>
               <VolunteerPicker onSelect={setSelectedVolunteer} />
               
-              {selectedVolunteer && (
-                <div className="mt-4 p-3 bg-background border rounded-md space-y-3">
-                  <p className="text-xs font-bold text-primary">بيانات إضافية خاصة بالفريق (اختياري)</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5"><Label className="text-xs">رقم التليفون (للفريق)</Label><Input value={teamPhone} onChange={e => setTeamPhone(e.target.value)} dir="ltr" className="h-8 text-sm" /></div>
-                    <div className="space-y-1.5"><Label className="text-xs">الرقم القومي (للفريق)</Label><Input value={teamNationalId} onChange={e => setTeamNationalId(e.target.value)} dir="ltr" className="h-8 text-sm" /></div>
-                  </div>
-                </div>
-              )}
-              
               <Button onClick={handleAddExisting} disabled={busy || !selectedVolunteer} className="w-full mt-4">إرسال طلب انضمام</Button>
             </div>
           </TabsContent>
@@ -149,7 +133,6 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
               <div className="space-y-1.5"><Label>الفرع</Label><Input value={branch} onChange={e => setBranch(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>رقم العضوية</Label><Input value={memberId} onChange={e => setMemberId(e.target.value)} dir="ltr" /></div>
               <div className="space-y-1.5"><Label>رقم التليفون</Label><Input value={phone} onChange={e => setPhone(e.target.value)} dir="ltr" /></div>
-              <div className="space-y-1.5"><Label>الرقم القومي</Label><Input value={nationalId} onChange={e => setNationalId(e.target.value)} dir="ltr" /></div>
             </div>
             <Button onClick={handleAddNew} disabled={busy} className="w-full mt-4">تسجيل وإضافة للفريق</Button>
           </TabsContent>
@@ -158,3 +141,4 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
     </Dialog>
   );
 }
+

@@ -158,10 +158,42 @@ function DropdownsTab() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [selectedTeams, setSelectedTeams] = useState<string[]>(["all"]);
 
+  const [editingOpt, setEditingOpt] = useState<any | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const [editLbl, setEditLbl] = useState("");
+  const [editSelectedTeams, setEditSelectedTeams] = useState<string[]>(["all"]);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   const load = async () => {
     const { data } = await supabase.from("dropdown_options").select("*, team:teams(code)").eq("field_key", field).order("label");
-    let options = data ?? [];
+    let options: any[] = [];
     
+    if (data) {
+      const groupedMap = new Map<string, any>();
+      for (const opt of data) {
+        const key = `${opt.value}_${opt.label}`;
+        if (!groupedMap.has(key)) {
+          groupedMap.set(key, {
+            ...opt,
+            id: opt.id,
+            ids: [opt.id],
+            team_ids: [opt.team_id || "all"],
+            team_codes: opt.team ? [opt.team.code] : ["عام"]
+          });
+        } else {
+          const existing = groupedMap.get(key);
+          existing.ids.push(opt.id);
+          existing.team_ids.push(opt.team_id || "all");
+          existing.team_codes.push(opt.team ? opt.team.code : "عام");
+        }
+      }
+      
+      options = Array.from(groupedMap.values()).map(g => ({
+        ...g,
+        team: { code: Array.from(new Set(g.team_codes)).join('، ') }
+      }));
+    }
+
     if (field === 'service_type' || field === 'activity_details') {
       let query = supabase.from("department_indicators").select("id, title, indicator_teams(teams(code))");
       if (field === 'service_type') {
@@ -175,6 +207,7 @@ function DropdownsTab() {
           const teamCodes = (ind.indicator_teams || []).map((it: any) => it.teams?.code).filter(Boolean).join('، ');
           return {
             id: ind.id,
+            ids: [ind.id],
             field_key: field,
             value: ind.title,
             label: ind.title,
@@ -222,19 +255,105 @@ function DropdownsTab() {
     else { toast.success("تمت الإضافة"); setVal(""); setLbl(""); setSelectedTeams(["all"]); load(); }
   };
 
-  const del = async (id: string) => {
-    setOpts(prev => prev.filter(o => o.id !== id));
-    const { error } = await supabase.from("dropdown_options").delete().eq("id", id);
+  const del = async (o: any) => {
+    const idsToDelete = o.ids || [o.id];
+    setOpts(prev => prev.filter(item => item.id !== o.id));
+    const { error } = await supabase.from("dropdown_options").delete().in("id", idsToDelete);
     if (error) { toast.error(error.message); load(); }
     else { toast.success("تم الحذف"); load(); }
   };
 
   const toggle = async (o: any) => {
     if (o.is_indicator) return;
+    const idsToUpdate = o.ids || [o.id];
     setOpts(prev => prev.map(item => item.id === o.id ? { ...item, active: !o.active } : item));
-    const { error } = await supabase.from("dropdown_options").update({ active: !o.active }).eq("id", o.id);
+    const { error } = await supabase.from("dropdown_options").update({ active: !o.active }).in("id", idsToUpdate);
     if (error) { toast.error(error.message); load(); }
     else { toast.success("تم التحديث"); load(); }
+  };
+
+  const openEditOptModal = (o: any) => {
+    setEditingOpt(o);
+    setEditVal(o.value || "");
+    setEditLbl(o.label || "");
+    setEditSelectedTeams(o.team_ids || [o.team_id || "all"]);
+  };
+
+  const saveEditOpt = async () => {
+    if (!editingOpt) return;
+    if (!editVal || !editLbl || editSelectedTeams.length === 0) { toast.error("أكمل البيانات المطلوبة"); return; }
+    setIsSavingEdit(true);
+    
+    const existingIds = editingOpt.ids || [editingOpt.id];
+    const availableIds = [...existingIds];
+    
+    const updates = [];
+    const teamsToInsert = [];
+    const idsToDelete = [];
+
+    for (const tId of editSelectedTeams) {
+      if (availableIds.length > 0) {
+        updates.push({
+          id: availableIds.shift(),
+          field_key: editingOpt.field_key,
+          value: editVal,
+          label: editLbl,
+          team_id: tId === "all" ? null : tId,
+          active: editingOpt.active
+        });
+      } else {
+        teamsToInsert.push(tId);
+      }
+    }
+    
+    idsToDelete.push(...availableIds);
+
+    if (updates.length > 0) {
+      const { error: upsertError } = await supabase.from("dropdown_options").upsert(updates);
+      if (upsertError) {
+        toast.error(upsertError.message);
+        setIsSavingEdit(false);
+        return;
+      }
+    }
+
+    if (teamsToInsert.length > 0) {
+      const inserts = teamsToInsert.map(tId => ({
+        field_key: editingOpt.field_key,
+        value: editVal,
+        label: editLbl,
+        team_id: tId === "all" ? null : tId,
+        active: editingOpt.active
+      }));
+      const { error: insertError } = await supabase.from("dropdown_options").insert(inserts);
+      if (insertError) {
+        toast.error(insertError.message);
+      }
+    }
+
+    if (idsToDelete.length > 0) {
+      await supabase.from("dropdown_options").delete().in("id", idsToDelete);
+    }
+
+    setIsSavingEdit(false);
+    toast.success("تم التعديل بنجاح");
+    setEditingOpt(null);
+    load();
+  };
+
+  const handleEditTeamToggle = (id: string) => {
+    if (id === "all") {
+      setEditSelectedTeams(["all"]);
+    } else {
+      setEditSelectedTeams(prev => {
+        const newSel = prev.filter(v => v !== "all");
+        if (newSel.includes(id)) {
+          const res = newSel.filter(v => v !== id);
+          return res.length === 0 ? ["all"] : res;
+        }
+        return [...newSel, id];
+      });
+    }
   };
 
   return (
@@ -288,13 +407,69 @@ function DropdownsTab() {
                 {o.is_indicator ? (
                   <Badge variant="secondary" className="text-[10px]">مؤشر بخطة الإدارة</Badge>
                 ) : (
-                  <Button size="icon" variant="ghost" onClick={() => del(o.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" variant="ghost" onClick={() => openEditOptModal(o)} title="تعديل">
+                      <Pencil className="w-4 h-4 text-primary" />
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => del(o)} title="حذف">
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
                 )}
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+
+      <Dialog open={!!editingOpt} onOpenChange={(open) => { if (!open) setEditingOpt(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>تعديل الخيار</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5 flex flex-col">
+              <Label>القيمة (Value)</Label>
+              <Input value={editVal} onChange={(e) => setEditVal(e.target.value)} dir="ltr" />
+            </div>
+            <div className="space-y-1.5 flex flex-col">
+              <Label>الاسم المعروض</Label>
+              <Input value={editLbl} onChange={(e) => setEditLbl(e.target.value)} />
+            </div>
+            <div className="space-y-1.5 flex flex-col">
+              <Label>الفريق</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-between font-normal">
+                    {editSelectedTeams.includes("all") ? "عام" : `${editSelectedTeams.length} فرق محددة`}
+                    <ChevronsUpDown className="w-4 h-4 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2">
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    <label className="flex items-center gap-2 cursor-pointer p-1 hover:bg-muted/50 rounded">
+                      <input type="checkbox" className="w-4 h-4 accent-primary" checked={editSelectedTeams.includes("all")} onChange={() => handleEditTeamToggle("all")} />
+                      <span>عام</span>
+                    </label>
+                    {teams.map(t => (
+                      <label key={t.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-muted/50 rounded">
+                        <input type="checkbox" className="w-4 h-4 accent-primary" checked={editSelectedTeams.includes(t.id)} onChange={() => handleEditTeamToggle(t.id)} />
+                        <span className="font-mono text-xs">{t.code}</span>
+                      </label>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-3 border-t">
+            <Button variant="outline" onClick={() => setEditingOpt(null)}>إلغاء</Button>
+            <Button onClick={saveEditOpt} disabled={isSavingEdit}>
+              {isSavingEdit ? "جاري الحفظ..." : "حفظ التعديلات"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

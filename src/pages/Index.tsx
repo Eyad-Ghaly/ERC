@@ -28,9 +28,15 @@ const Index = () => {
   const visibleTiles = TILES.filter((t) => hasRole("admin") || roles.includes(t.role as any));
 
   if (roles.length === 1 && roles[0] === "department_entry") {
-    // If  eee user is ONLY department_entry, direct them to their dashboard
+    // If the user is ONLY department_entry, direct them to their dashboard
     return <Navigate to="/department-dashboard" replace />;
   }
+
+  if (roles.length >= 1 && roles.every((r) => r === "stakeholder")) {
+    // If the user is ONLY a stakeholder, direct them to the missions dashboard
+    return <Navigate to="/dashboard" replace />;
+  }
+
 
   return (
     <AppLayout title="الرئيسية">

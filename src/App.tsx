@@ -32,6 +32,9 @@ import PublicSupplyForm from "./pages/PublicSupplyForm.tsx";
 import TeamSupplyReview from "./pages/TeamSupplyReview.tsx";
 import ManagementSupplyRequests from "@/pages/ManagementSupplyRequests";
 import StatisticsPage from "./pages/StatisticsPage.tsx";
+import EditRequestsPage from "./pages/EditRequestsPage.tsx";
+import ReviewNotesPage from "./pages/ReviewNotesPage.tsx";
+import StakeholderDashboard from "./pages/StakeholderDashboard.tsx";
 
 const queryClient = new QueryClient();
 
@@ -64,12 +67,14 @@ const App = () => (
             <Route path="/apply/:public_link_uuid" element={<PublicSupplyForm />} />
             <Route path="/volunteers-database" element={<ProtectedRoute roles={["youth_room", "admin"]}><VolunteersDatabase /></ProtectedRoute>} />
             <Route path="/branch-youth" element={<ProtectedRoute roles={["branch_youth"]}><BranchYouthDashboard /></ProtectedRoute>} />
-            <Route path="/dashboard" element={<ProtectedRoute roles={["*"]}><StatisticsPage /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute roles={["stakeholder", "admin"]}><StakeholderDashboard /></ProtectedRoute>} />
             <Route path="/data-manager" element={<ProtectedRoute roles={["data_manager"]}><DataManager /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><Admin /></ProtectedRoute>} />
             <Route path="/team-beneficiaries" element={<ProtectedRoute roles={["department_entry"]}><TeamBeneficiaries /></ProtectedRoute>} />
             <Route path="/volunteer-supply-request/new" element={<ProtectedRoute roles={["department_entry", "management"]}><VolunteerSupplyRequestNew /></ProtectedRoute>} />
             <Route path="/missions/:id" element={<ProtectedRoute><MissionDetail /></ProtectedRoute>} />
+            <Route path="/edit-requests" element={<ProtectedRoute roles={["admin", "data_manager", "management"]}><EditRequestsPage /></ProtectedRoute>} />
+            <Route path="/review-notes" element={<ProtectedRoute roles={["department_entry"]}><ReviewNotesPage /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
