@@ -58,7 +58,7 @@ export default function DepartmentDashboard() {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
 
-  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin");
+  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin") || hasRole("stakeholder");
 
   // Department teams state
   const [departmentTeams, setDepartmentTeams] = useState<any[]>([]);
@@ -121,7 +121,7 @@ export default function DepartmentDashboard() {
       if (targetTeamId && targetTeamId !== "all") {
         query = query.eq("team_id", targetTeamId);
       } else if (targetTeamId === "all") {
-        if (!roles.includes("admin") && !roles.includes("management") && !roles.includes("department_admin")) {
+        if (!roles.includes("admin") && !roles.includes("management") && !roles.includes("department_admin") && !roles.includes("stakeholder")) {
           // For entry users, show everything they created OR everything in their active team
           if (profile?.team_id) {
              query = query.or(`created_by.eq.${user.id},team_id.eq.${profile.team_id}`);
@@ -265,7 +265,7 @@ export default function DepartmentDashboard() {
     const initData = async () => {
       let deptTeams: any[] = [];
       let query = supabase.from("teams").select("*, department:departments(code, name)").order("code");
-      if (!roles.includes("admin") && profile?.department_id) {
+      if (!roles.includes("admin") && !roles.includes("stakeholder") && profile?.department_id) {
         query = query.eq("department_id", profile.department_id);
       }
       const { data } = await query;

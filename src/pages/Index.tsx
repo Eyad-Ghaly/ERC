@@ -15,7 +15,8 @@ const TILES = [
   { role: "management", title: "لوحة معلومات فرق الإدارة", url: "/department-dashboard", icon: BarChart3, desc: "متابعة وتعديل مهام ومتطوعين فرق الإدارة" },
   { role: "management", title: "موافقات الإدارة لطلبات الإمداد", url: "/management-supply-requests", icon: FilePlus, desc: "مراجعة وتحويل الطلبات الواردة من الفرق" },
   { role: "branch_youth", title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, desc: "تسجيل المتطوعين في القاعدة" },
-  { role: "stakeholder", title: "Dashboard", url: "/dashboard", icon: BarChart3, desc: "مؤشرات الأداء" },
+  { role: "stakeholder", title: "الـ Dashboard", url: "/department-dashboard", icon: BarChart3, desc: "مؤشرات الأداء والخريطة التفاعلية" },
+  { role: "stakeholder", title: "المهام الميدانية", url: "/dashboard", icon: Radio, desc: "متابعة المهام المفتوحة على الأرض" },
   { role: "data_manager", title: "إدارة البيانات", url: "/data-manager", icon: Database, desc: "رؤية مزدوجة وكاملة" },
   { role: "admin", title: "لوحة المدير", url: "/admin", icon: Settings, desc: "المستخدمون والقوائم" },
   { role: "department_entry", title: "قاعدة بيانات المستفيدين", url: "/team-beneficiaries", icon: Database, desc: "سجل المستفيدين الخاص بالفريق" },
@@ -33,8 +34,8 @@ const Index = () => {
   }
 
   if (roles.length >= 1 && roles.every((r) => r === "stakeholder")) {
-    // If the user is ONLY a stakeholder, direct them to the missions dashboard
-    return <Navigate to="/dashboard" replace />;
+    // If the user is ONLY a stakeholder, direct them to the advanced statistics dashboard
+    return <Navigate to="/department-dashboard" replace />;
   }
 
 
@@ -55,7 +56,7 @@ const Index = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {visibleTiles.map((t) => (
-              <Link key={t.url} to={t.url}>
+              <Link key={`${t.url}-${t.role}`} to={t.url}>
                 <Card className="p-6 card-elevated hover:shadow-glow transition-all hover:-translate-y-0.5">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-primary-soft text-primary flex items-center justify-center shrink-0">

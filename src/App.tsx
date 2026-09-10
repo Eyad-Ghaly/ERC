@@ -49,7 +49,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/statistics" element={<ProtectedRoute roles={["*"]}><StatisticsPage /></ProtectedRoute>} />
-            <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin"]}><DepartmentDashboard /></ProtectedRoute>} />
+            <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><DepartmentDashboard /></ProtectedRoute>} />
             <Route path="/department-entry" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
             <Route path="/department-entry/:id" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
             <Route path="/department-goals" element={<ProtectedRoute roles={["department_entry", "department_admin", "admin"]}><DepartmentGoals /></ProtectedRoute>} />

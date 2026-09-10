@@ -18,7 +18,7 @@ interface NavItem {
 const items: NavItem[] = [
   { title: "الرئيسية", url: "/", icon: Home, roles: ["*"] },
   { title: "الإحصائيات", url: "/statistics", icon: TrendingUp, roles: ["*"] },
-  { title: "لوحة معلومات فريقي والإدارة", url: "/department-dashboard", icon: BarChart3, roles: ["department_entry", "management", "department_admin", "admin"] },
+  { title: "الـ Dashboard (الفرق والإدارة)", url: "/department-dashboard", icon: BarChart3, roles: ["department_entry", "management", "department_admin", "admin", "stakeholder"] },
   { title: "مستهدفات فريقي", url: "/team-targets", icon: Target, roles: ["department_entry", "data_manager", "admin"] },
   { title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, roles: ["department_entry", "department_admin", "admin"] },
   { title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, roles: ["department_entry", "data_manager", "admin"] },
@@ -35,7 +35,7 @@ const items: NavItem[] = [
   { title: "إدارة وتحليل البيانات", url: "/data-manager", icon: Database, roles: ["data_manager", "admin"] },
   { title: "طلبات التعديل", url: "/edit-requests", icon: GitPullRequest, roles: ["admin", "data_manager", "management"] },
   { title: "ملاحظات المراجعة", url: "/review-notes", icon: MessageSquare, roles: ["department_entry"] },
-  { title: "مهام اليوم", url: "/dashboard", icon: Activity, roles: ["stakeholder", "admin"] },
+  { title: "المهام الميدانية", url: "/dashboard", icon: Activity, roles: ["stakeholder", "admin"] },
   { title: "لوحة المدير", url: "/admin", icon: Settings, roles: ["admin"] },
 ];
 

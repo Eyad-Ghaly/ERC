@@ -103,10 +103,10 @@ export default function StatisticsPage() {
         filters.teamId !== "all"
           ? [filters.teamId]
           : loadedTeams.length > 0
-          ? loadedTeams.map((t) => t.id)
-          : profile?.team_id
-          ? [profile.team_id]
-          : [];
+            ? loadedTeams.map((t) => t.id)
+            : profile?.team_id
+              ? [profile.team_id]
+              : [];
 
       const { targets: loadedTargets, customKpis: loadedCustomKpis } =
         await fetchStatisticsTargets(teamIds);
@@ -244,18 +244,18 @@ export default function StatisticsPage() {
 
   const hasActiveFilters = Boolean(
     filters.startDate ||
-      filters.endDate ||
-      (filters.teamId && filters.teamId !== "all") ||
-      filters.governorate ||
-      filters.classification ||
-      filters.activityType ||
-      filters.activityDetail ||
-      filters.responseType ||
-      filters.serviceType ||
-      (filters.status && filters.status !== "all") ||
-      filters.gender ||
-      filters.nationality ||
-      filters.searchQuery
+    filters.endDate ||
+    (filters.teamId && filters.teamId !== "all") ||
+    filters.governorate ||
+    filters.classification ||
+    filters.activityType ||
+    filters.activityDetail ||
+    filters.responseType ||
+    filters.serviceType ||
+    (filters.status && filters.status !== "all") ||
+    filters.gender ||
+    filters.nationality ||
+    filters.searchQuery
   );
 
   return (
@@ -297,10 +297,10 @@ export default function StatisticsPage() {
               filters.serviceType
                 ? `خدمة "${filters.serviceType}"`
                 : filters.governorate
-                ? `محافظة "${filters.governorate}"`
-                : filters.classification
-                ? `تصنيف "${filters.classification}"`
-                : undefined
+                  ? `محافظة "${filters.governorate}"`
+                  : filters.classification
+                    ? `تصنيف "${filters.classification}"`
+                    : undefined
             }
           />
         )}
