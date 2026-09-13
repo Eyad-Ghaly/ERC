@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Eye, Loader2, GitPullRequest, Filter, Clock, CheckCheck } from "lucide-react";
+import { CheckCircle2, XCircle, Eye, Loader2, GitPullRequest, Filter, Clock, CheckCheck, UserPlus, Trash2 } from "lucide-react";
 import { STATUS_LABELS } from "@/lib/constants";
 
 // Field labels for display
@@ -54,8 +54,23 @@ interface EditRequest {
   mission_code?: string;
 }
 
+interface JoinRequest {
+  id: string;
+  team_id: string;
+  volunteer_id: string;
+  join_date: string;
+  is_approved: boolean;
+  volunteer_name?: string;
+  volunteer_phone?: string;
+  volunteer_branch?: string;
+  team_name?: string;
+}
+
 export default function EditRequestsPage() {
   const { user, profile } = useAuth();
+  const [mainTab, setMainTab] = useState("edit_requests");
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [loadingJoin, setLoadingJoin] = useState(true);
   const [requests, setRequests] = useState<EditRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<string>("all");
@@ -117,9 +132,82 @@ export default function EditRequestsPage() {
     }
   };
 
+  const loadJoinRequests = async () => {
+    setLoadingJoin(true);
+    try {
+      const { data, error } = await supabase
+        .from("volunteer_teams")
+        .select("*")
+        .eq("is_approved", false);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const volIds = [...new Set(data.map(r => r.volunteer_id))];
+        const teamIds = [...new Set(data.map(r => r.team_id))];
+
+        const [volsRes, teamsRes] = await Promise.all([
+          supabase.from("volunteers_base").select("id, full_name, phone_number, branch").in("id", volIds),
+          supabase.from("teams").select("id, name").in("id", teamIds)
+        ]);
+
+        const volMap = new Map((volsRes.data || []).map(v => [v.id, v]));
+        const teamMap = new Map((teamsRes.data || []).map(t => [t.id, t.name]));
+
+        const enriched = data.map(r => {
+          const v = volMap.get(r.volunteer_id) || {} as any;
+          return {
+            ...r,
+            volunteer_name: v.full_name || "غير معروف",
+            volunteer_phone: v.phone_number || "—",
+            volunteer_branch: v.branch || "—",
+            team_name: teamMap.get(r.team_id) || "غير معروف",
+          };
+        });
+        setJoinRequests(enriched);
+      } else {
+        setJoinRequests([]);
+      }
+    } catch (e: any) {
+      toast.error("فشل تحميل طلبات الانضمام: " + (e.message || ""));
+    } finally {
+      setLoadingJoin(false);
+    }
+  };
+
   useEffect(() => {
     loadRequests();
+    loadJoinRequests();
   }, []);
+
+  const handleApproveJoin = async (id: string) => {
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("volunteer_teams").update({ is_approved: true }).eq("id", id);
+      if (error) throw error;
+      toast.success("تمت الموافقة على انضمام المتطوع بنجاح");
+      loadJoinRequests();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRejectJoin = async (id: string) => {
+    if (!window.confirm("هل أنت متأكد من رفض طلب الانضمام؟ سيتم حذفه.")) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("volunteer_teams").delete().eq("id", id);
+      if (error) throw error;
+      toast.success("تم رفض الطلب بنجاح");
+      loadJoinRequests();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const openRequestDetail = async (req: EditRequest) => {
     setSelectedRequest(req);
@@ -150,46 +238,55 @@ export default function EditRequestsPage() {
 
       // Apply changes to the original record
       if (selectedRequest.entity_type === "mission") {
-        // Separate volunteer data from mission data
-        const { volunteers, non_volunteers, ...missionChanges } = changes;
+        // Separate meta data and volunteer data from mission data
+        const { volunteers, non_volunteers, _request_deletion, reason, ...missionChanges } = changes;
 
-        // Update mission fields
-        if (Object.keys(missionChanges).length > 0) {
+        if (_request_deletion) {
+          // Delete mission if this is a deletion request
           const { error } = await supabase
             .from("missions")
-            .update(missionChanges)
+            .delete()
             .eq("id", selectedRequest.record_id);
           if (error) throw error;
-        }
-
-        // Update volunteers if changed
-        if (volunteers) {
-          await supabase.from("mission_volunteers").delete().eq("mission_id", selectedRequest.record_id);
-          if (volunteers.length > 0) {
-            const { error } = await supabase.from("mission_volunteers").insert(
-              volunteers.map((v: any) => ({
-                mission_id: selectedRequest.record_id,
-                full_name: v.full_name,
-                membership_number: v.membership_number || "",
-                branch: v.branch || "",
-              }))
-            );
+        } else {
+          // Update mission fields
+          if (Object.keys(missionChanges).length > 0) {
+            const { error } = await supabase
+              .from("missions")
+              .update(missionChanges)
+              .eq("id", selectedRequest.record_id);
             if (error) throw error;
           }
-        }
 
-        // Update non-volunteers if changed
-        if (non_volunteers) {
-          await supabase.from("mission_non_volunteers").delete().eq("mission_id", selectedRequest.record_id);
-          if (non_volunteers.length > 0) {
-            const { error } = await supabase.from("mission_non_volunteers").insert(
-              non_volunteers.map((v: any) => ({
-                mission_id: selectedRequest.record_id,
-                full_name: v.full_name,
-                role: v.role || "",
-              }))
-            );
-            if (error) throw error;
+          // Update volunteers if changed
+          if (volunteers) {
+            await supabase.from("mission_volunteers").delete().eq("mission_id", selectedRequest.record_id);
+            if (volunteers.length > 0) {
+              const { error } = await supabase.from("mission_volunteers").insert(
+                volunteers.map((v: any) => ({
+                  mission_id: selectedRequest.record_id,
+                  full_name: v.full_name,
+                  membership_number: v.membership_number || "",
+                  branch: v.branch || "",
+                }))
+              );
+              if (error) throw error;
+            }
+          }
+
+          // Update non-volunteers if changed
+          if (non_volunteers) {
+            await supabase.from("mission_non_volunteers").delete().eq("mission_id", selectedRequest.record_id);
+            if (non_volunteers.length > 0) {
+              const { error } = await supabase.from("mission_non_volunteers").insert(
+                non_volunteers.map((v: any) => ({
+                  mission_id: selectedRequest.record_id,
+                  full_name: v.full_name,
+                  role: v.role || "",
+                }))
+              );
+              if (error) throw error;
+            }
           }
         }
       } else {
@@ -346,11 +443,17 @@ export default function EditRequestsPage() {
   };
 
   return (
-    <AppLayout title="طلبات التعديل">
+    <AppLayout title="طلبات التعديل والانضمام">
       <div className="space-y-6 max-w-6xl">
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Tabs value={mainTab} onValueChange={setMainTab}>
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="edit_requests"><GitPullRequest className="w-4 h-4 ms-2" /> طلبات تعديل البيانات</TabsTrigger>
+            <TabsTrigger value="join_requests"><UserPlus className="w-4 h-4 ms-2" /> طلبات انضمام المتطوعين {joinRequests.length > 0 && <Badge variant="destructive" className="mx-2 text-xs px-1.5 py-0">{joinRequests.length}</Badge>}</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="edit_requests" className="space-y-6 mt-0">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4 flex items-center gap-3 border-warning/30 bg-warning/5">
             <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center">
               <Clock className="w-5 h-5 text-warning" />
@@ -507,6 +610,54 @@ export default function EditRequestsPage() {
                           <Button size="sm" variant="ghost" onClick={() => openRequestDetail(req)} className="gap-1">
                             <Eye className="w-4 h-4" />
                           </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          <TabsContent value="join_requests" className="mt-0">
+            <Card className="p-4 overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>اسم المتطوع</TableHead>
+                    <TableHead>الفريق</TableHead>
+                    <TableHead>تاريخ الطلب</TableHead>
+                    <TableHead>الفرع</TableHead>
+                    <TableHead>رقم التليفون</TableHead>
+                    <TableHead>إجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingJoin ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></TableCell></TableRow>
+                  ) : joinRequests.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">لا توجد طلبات انضمام معلقة</TableCell></TableRow>
+                  ) : (
+                    joinRequests.map(req => (
+                      <TableRow key={req.id}>
+                        <TableCell className="font-medium">{req.volunteer_name}</TableCell>
+                        <TableCell>{req.team_name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{req.join_date}</TableCell>
+                        <TableCell>{req.volunteer_branch}</TableCell>
+                        <TableCell dir="ltr" className="text-right">{req.volunteer_phone}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="default" onClick={() => handleApproveJoin(req.id)} className="bg-success hover:bg-success/90 h-8 gap-1" disabled={busy}>
+                              <CheckCircle2 className="w-4 h-4" />
+                              قبول
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleRejectJoin(req.id)} className="h-8 gap-1" disabled={busy}>
+                              <Trash2 className="w-4 h-4" />
+                              رفض
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))

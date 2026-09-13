@@ -72,7 +72,7 @@ interface Props {
 }
 
 export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
   const [uploadType, setUploadType] = useState<"individual" | "group">("individual");
@@ -100,12 +100,17 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
       setValueMapping({}); setInvalidValues([]); setInvalidMissionCodes([]); setUploadErrors([]);
       setIsValidating(false);
     } else {
-      // Load custom fields
-      supabase.from("team_custom_fields").select("*, team:teams(code)").then(({ data }) => {
-        setCustomFields(data || []);
-      });
+      // Load custom fields for the current team only
+      if (profile?.team_id) {
+        supabase.from("team_custom_fields")
+          .select("*, team:teams(code)")
+          .eq("team_id", profile.team_id)
+          .then(({ data }) => {
+            setCustomFields(data || []);
+          });
+      }
     }
-  }, [open]);
+  }, [open, profile]);
 
   const getActiveFields = () => {
     if (uploadType === "group") return GROUP_SYSTEM_FIELDS;

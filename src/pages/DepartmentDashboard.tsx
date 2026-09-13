@@ -14,9 +14,7 @@ import { Edit2, Eye, Trash2, Target, Users, BarChart as BarChartIcon, ListTodo, 
 import { toast } from "sonner";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AddVolunteerDialog } from "@/components/AddVolunteerDialog";
 import { SmartExcelUploader } from "@/components/SmartExcelUploader";
-import { SmartVolunteersUploader } from "@/components/SmartVolunteersUploader";
 
 // Simple AES-GCM decryption using static key
 const ENCRYPTION_KEY = "12345678901234567890123456789012"; // 32 bytes
@@ -122,9 +120,9 @@ export default function DepartmentDashboard() {
         query = query.eq("team_id", targetTeamId);
       } else if (targetTeamId === "all") {
         if (!roles.includes("admin") && !roles.includes("management") && !roles.includes("department_admin") && !roles.includes("stakeholder")) {
-          // For entry users, show everything they created OR everything in their active team
+          // For entry users, show everything in their active team
           if (profile?.team_id) {
-             query = query.or(`created_by.eq.${user.id},team_id.eq.${profile.team_id}`);
+             query = query.eq("team_id", profile.team_id);
           } else {
              query = query.eq("created_by", user.id);
           }
@@ -713,7 +711,6 @@ export default function DepartmentDashboard() {
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="missions" className="px-6"><ListTodo className="w-4 h-4 ml-2" /> مهام الفريق</TabsTrigger>
-            <TabsTrigger value="volunteers" className="px-6"><UserCheck className="w-4 h-4 ml-2" /> متطوعو الفريق</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-2">
             {(activeTeamCode || profile?.team_code) && (
@@ -721,15 +718,6 @@ export default function DepartmentDashboard() {
                 {selectedTeamId === "all" ? `عدد الفرق: ${departmentTeams.length}` : `كود الفريق المحدد: ${activeTeamCode}`}
               </Badge>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/statistics")}
-              className="gap-1.5 gradient-primary text-white hover:opacity-90 shadow-sm text-xs font-bold"
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              لوحة الإحصائيات الكاملة
-            </Button>
           </div>
         </div>
 
@@ -1181,74 +1169,6 @@ export default function DepartmentDashboard() {
                           </TableCell>
                         </TableRow>
                       ))}
-                </TableBody>
-              </Table>
-            </div>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="volunteers" className="mt-0 space-y-6">
-          <Card className="p-5 border-primary/20 overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-bold text-primary">المتطوعون المنضمون للفرق</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {selectedTeamId === "all"
-                    ? `عرض جميع المتطوعين في كافة فرق الإدارة (${departmentTeams.length} فريق)`
-                    : `يظهر هنا المتطوعون المرتبطون بكود الفريق (${activeTeamCode || "غير محدد"})`}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <SmartVolunteersUploader
-                  teamId={activeTeamId || undefined}
-                  teamCode={activeTeamCode || ""}
-                  onSuccess={() => loadVolunteers(selectedTeamId)}
-                />
-                {activeTeamId && (
-                  <AddVolunteerDialog teamId={activeTeamId} teamCode={activeTeamCode || ""} onAdded={() => loadVolunteers(selectedTeamId)} />
-                )}
-              </div>
-            </div>
-
-            <div className="overflow-x-auto border rounded-md">
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead>الاسم</TableHead>
-                    <TableHead>الفرع</TableHead>
-                    <TableHead>رقم العضوية</TableHead>
-                    <TableHead>التليفون</TableHead>
-                    <TableHead>تاريخ الانضمام</TableHead>
-                    <TableHead>الحالة</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingVols ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">جاري تحميل المتطوعين...</TableCell></TableRow>
-                  ) : teamVolunteers.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">لا يوجد متطوعين في فريقك حالياً</TableCell></TableRow>
-                  ) : (
-                    teamVolunteers.map((vt) => {
-                      const v = vt.volunteers_base;
-                      if (!v) return null;
-                      return (
-                        <TableRow key={vt.id} className={!vt.is_approved ? "opacity-60 bg-muted/20 grayscale" : ""}>
-                          <TableCell className="font-bold">{v.full_name}</TableCell>
-                          <TableCell>{v.branch || "—"}</TableCell>
-                          <TableCell dir="ltr" className="text-right">{v.membership_number || "—"}</TableCell>
-                          <TableCell dir="ltr" className="text-right">{v.phone_number || "—"}</TableCell>
-                          <TableCell>{vt.join_date || "—"}</TableCell>
-                          <TableCell>
-                            {vt.is_approved ? (
-                              <Badge variant="default" className="bg-success text-success-foreground hover:bg-success/90">معتمد</Badge>
-                            ) : (
-                              <Badge variant="secondary" className="border-warning text-warning bg-warning/10">قيد الاعتماد</Badge>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
                 </TableBody>
               </Table>
             </div>

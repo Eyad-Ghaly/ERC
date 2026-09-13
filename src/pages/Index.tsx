@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { ROLES } from "@/lib/constants";
-import { FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings } from "lucide-react";
+import { FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, Target, Star, UserPlus, MessageSquare } from "lucide-react";
 
 const TILES = [
   { role: "department_entry", title: "لوحة معلومات فريقي", url: "/department-dashboard", icon: BarChart3, desc: "إحصائيات ومهام مسجلة" },
@@ -19,8 +19,16 @@ const TILES = [
   { role: "stakeholder", title: "المهام الميدانية", url: "/dashboard", icon: Radio, desc: "متابعة المهام المفتوحة على الأرض" },
   { role: "data_manager", title: "إدارة البيانات", url: "/data-manager", icon: Database, desc: "رؤية مزدوجة وكاملة" },
   { role: "admin", title: "لوحة المدير", url: "/admin", icon: Settings, desc: "المستخدمون والقوائم" },
+  { role: "department_entry", title: "متطوعو الفريق", url: "/team-volunteers", icon: Users2, desc: "سجل المتطوعين الخاص بالفريق" },
   { role: "department_entry", title: "قاعدة بيانات المستفيدين", url: "/team-beneficiaries", icon: Database, desc: "سجل المستفيدين الخاص بالفريق" },
   { role: "department_entry", title: "طلب إمداد بالمتطوعين", url: "/volunteer-supply-request/new", icon: Users2, desc: "إنشاء طلب لإضافة متطوعين جدد للفريق" },
+  { role: "department_entry", title: "مستهدفات فريقي", url: "/team-targets", icon: Target, desc: "عرض وتحقيق مستهدفات الفريق" },
+  { role: "department_entry", title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, desc: "عرض مستهدفات الإدارة التابع لها" },
+  { role: "department_entry", title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, desc: "تقييم أداء المهمة وإضافة الصور" },
+  { role: "department_entry", title: "الشبكة الذكية للمهام", url: "/smart-missions-grid", icon: FilePlus, desc: "عرض مسودات المهام وتعديلها وإرسالها" },
+  { role: "department_entry", title: "إدخال مهمة جديدة", url: "/department-entry", icon: FilePlus, desc: "إنشاء وتسجيل مهمة جديدة" },
+  { role: "department_entry", title: "تسجيل المستفيدين", url: "/beneficiaries-registration", icon: UserPlus, desc: "تسجيل بيانات المستفيدين من المهام" },
+  { role: "department_entry", title: "ملاحظات المراجعة", url: "/review-notes", icon: MessageSquare, desc: "الرد على ملاحظات غرفة العمليات" },
 ] as const;
 
 const Index = () => {
@@ -28,10 +36,7 @@ const Index = () => {
 
   const visibleTiles = TILES.filter((t) => hasRole("admin") || roles.includes(t.role as any));
 
-  if (roles.length === 1 && roles[0] === "department_entry") {
-    // If the user is ONLY department_entry, direct them to their dashboard
-    return <Navigate to="/department-dashboard" replace />;
-  }
+
 
   if (roles.length >= 1 && roles.every((r) => r === "stakeholder")) {
     // If the user is ONLY a stakeholder, direct them to the advanced statistics dashboard

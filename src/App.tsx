@@ -25,16 +25,18 @@ import BeneficiariesRegistration from "./pages/BeneficiariesRegistration.tsx";
 import VolunteersDatabase from "./pages/VolunteersDatabase.tsx";
 import BranchYouthDashboard from "./pages/BranchYouthDashboard.tsx";
 import TeamBeneficiaries from "./pages/TeamBeneficiaries.tsx";
+import TeamVolunteers from "./pages/TeamVolunteers.tsx";
 import VolunteerSupplyRequestNew from "./pages/VolunteerSupplyRequestNew.tsx";
 import YouthSupplyRequests from "@/pages/YouthSupplyRequests";
 import YouthSupplyReview from "@/pages/YouthSupplyReview";
 import PublicSupplyForm from "./pages/PublicSupplyForm.tsx";
 import TeamSupplyReview from "./pages/TeamSupplyReview.tsx";
 import ManagementSupplyRequests from "@/pages/ManagementSupplyRequests";
-import StatisticsPage from "./pages/StatisticsPage.tsx";
+
 import EditRequestsPage from "./pages/EditRequestsPage.tsx";
 import ReviewNotesPage from "./pages/ReviewNotesPage.tsx";
 import StakeholderDashboard from "./pages/StakeholderDashboard.tsx";
+import SmartMissionsGrid from "./pages/SmartMissionsGrid.tsx";
 
 const queryClient = new QueryClient();
 
@@ -48,7 +50,7 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/statistics" element={<ProtectedRoute roles={["*"]}><StatisticsPage /></ProtectedRoute>} />
+
             <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><DepartmentDashboard /></ProtectedRoute>} />
             <Route path="/department-entry" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
             <Route path="/department-entry/:id" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
@@ -71,10 +73,12 @@ const App = () => (
             <Route path="/data-manager" element={<ProtectedRoute roles={["data_manager"]}><DataManager /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><Admin /></ProtectedRoute>} />
             <Route path="/team-beneficiaries" element={<ProtectedRoute roles={["department_entry"]}><TeamBeneficiaries /></ProtectedRoute>} />
+            <Route path="/team-volunteers" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><TeamVolunteers /></ProtectedRoute>} />
             <Route path="/volunteer-supply-request/new" element={<ProtectedRoute roles={["department_entry", "management"]}><VolunteerSupplyRequestNew /></ProtectedRoute>} />
             <Route path="/missions/:id" element={<ProtectedRoute><MissionDetail /></ProtectedRoute>} />
             <Route path="/edit-requests" element={<ProtectedRoute roles={["admin", "data_manager", "management"]}><EditRequestsPage /></ProtectedRoute>} />
             <Route path="/review-notes" element={<ProtectedRoute roles={["department_entry"]}><ReviewNotesPage /></ProtectedRoute>} />
+            <Route path="/smart-missions-grid" element={<ProtectedRoute roles={["department_entry"]}><SmartMissionsGrid /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

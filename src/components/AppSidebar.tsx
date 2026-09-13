@@ -17,12 +17,14 @@ interface NavItem {
 
 const items: NavItem[] = [
   { title: "الرئيسية", url: "/", icon: Home, roles: ["*"] },
-  { title: "الإحصائيات", url: "/statistics", icon: TrendingUp, roles: ["*"] },
+
   { title: "الـ Dashboard (الفرق والإدارة)", url: "/department-dashboard", icon: BarChart3, roles: ["department_entry", "management", "department_admin", "admin", "stakeholder"] },
   { title: "مستهدفات فريقي", url: "/team-targets", icon: Target, roles: ["department_entry", "data_manager", "admin"] },
   { title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, roles: ["department_entry", "department_admin", "admin"] },
   { title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, roles: ["department_entry", "data_manager", "admin"] },
   { title: "إدخال مهمة جديدة", url: "/department-entry", icon: FilePlus, roles: ["department_entry", "admin"] },
+  { title: "الشبكة الذكية للمهام (مسودات)", url: "/smart-missions-grid", icon: FilePlus, roles: ["department_entry", "admin"] },
+  { title: "متطوعو الفريق", url: "/team-volunteers", icon: UserPlus, roles: ["department_entry", "management", "department_admin", "admin", "stakeholder"] },
   { title: "تسجيل المستفيدين", url: "/beneficiaries-registration", icon: UserPlus, roles: ["department_entry", "admin"] },
   { title: "طلب إمداد بالمتطوعين", url: "/volunteer-supply-request/new", icon: UserPlus, roles: ["department_entry", "management", "admin"] },
   { title: "موافقات الإدارة لطلبات الإمداد", url: "/management-supply-requests", icon: FilePlus, roles: ["management", "admin"] },

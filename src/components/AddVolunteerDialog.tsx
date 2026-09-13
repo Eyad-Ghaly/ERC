@@ -24,6 +24,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
   const [memberId, setMemberId] = useState("");
   const [branch, setBranch] = useState("");
   const [phone, setPhone] = useState("");
+  const [nationalId, setNationalId] = useState("");
 
   // Existing Volunteer state
   const [selectedVolunteer, setSelectedVolunteer] = useState<VolunteerData | null>(null);
@@ -88,7 +89,8 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
       volunteer_id: newVol.id,
       team_id: teamId,
       join_date: new Date().toISOString().split('T')[0],
-      is_approved: false
+      is_approved: false,
+      national_id: nationalId || null
     });
 
     setBusy(false);
@@ -96,7 +98,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
       toast.error(teamError.message);
     } else {
       toast.success("تم تسجيل المتطوع وإرسال طلب الانضمام للاعتماد");
-      setFullName(""); setMemberId(""); setBranch(""); setPhone("");
+      setFullName(""); setMemberId(""); setBranch(""); setPhone(""); setNationalId("");
       setOpen(false);
       onAdded();
     }
@@ -133,6 +135,7 @@ export function AddVolunteerDialog({ teamId, teamCode, onAdded }: AddVolunteerDi
               <div className="space-y-1.5"><Label>الفرع</Label><Input value={branch} onChange={e => setBranch(e.target.value)} /></div>
               <div className="space-y-1.5"><Label>رقم العضوية</Label><Input value={memberId} onChange={e => setMemberId(e.target.value)} dir="ltr" /></div>
               <div className="space-y-1.5"><Label>رقم التليفون</Label><Input value={phone} onChange={e => setPhone(e.target.value)} dir="ltr" /></div>
+              <div className="space-y-1.5"><Label>رقم الهوية (اختياري)</Label><Input value={nationalId} onChange={e => setNationalId(e.target.value)} dir="ltr" /></div>
             </div>
             <Button onClick={handleAddNew} disabled={busy} className="w-full mt-4">تسجيل وإضافة للفريق</Button>
           </TabsContent>

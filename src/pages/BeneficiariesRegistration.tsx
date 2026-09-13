@@ -127,11 +127,13 @@ export default function BeneficiariesRegistration() {
 
   // Group State
   const [groupNationality, setGroupNationality] = useState("");
-  const [groupGender, setGroupGender] = useState("");
-  const [groupAgeCategory, setGroupAgeCategory] = useState("");
-  const [groupCount, setGroupCount] = useState("1");
   const [groupServiceType, setGroupServiceType] = useState("");
   const [groupServiceQuantity, setGroupServiceQuantity] = useState("1");
+  const [groupMatrix, setGroupMatrix] = useState<Record<string, Record<string, string>>>({
+    "ذكر": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
+    "أنثى": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
+    "مختلط": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
+  });
   const [busy, setBusy] = useState(false);
 
   // Global Beneficiaries Search & Stats State
@@ -586,30 +588,46 @@ export default function BeneficiariesRegistration() {
 
   const submitGroup = async () => {
     if (!selectedTargetId) return toast.error("اختر المهمة أولاً");
-    if (!groupCount || parseInt(groupCount) < 1) return toast.error("أدخل عدد صحيح");
 
     const target = targets.find(t => t.id === selectedTargetId);
     if (!target) return;
 
-    setBusy(true);
-    const { error } = await supabase.from("beneficiaries_group").insert({
-      mission_id: target.mission_id,
-      daily_report_id: target.daily_report_id,
-      nationality: groupNationality || null,
-      gender: groupGender || null,
-      age_category: groupAgeCategory || null,
-      count: parseInt(groupCount),
-      service_type: groupServiceType || null,
-      service_quantity: parseInt(groupServiceQuantity) || 1,
+    const inserts: any[] = [];
+    Object.entries(groupMatrix).forEach(([gender, ages]) => {
+      Object.entries(ages).forEach(([ageCategory, countStr]) => {
+        const count = parseInt(countStr);
+        if (count > 0) {
+          inserts.push({
+            mission_id: target.mission_id,
+            daily_report_id: target.daily_report_id,
+            nationality: groupNationality || null,
+            gender: gender,
+            age_category: ageCategory,
+            count: count,
+            service_type: groupServiceType || null,
+            service_quantity: parseInt(groupServiceQuantity) || 1,
+          });
+        }
+      });
     });
+
+    if (inserts.length === 0) {
+      return toast.error("برجاء إدخال عدد واحد على الأقل في الجدول");
+    }
+
+    setBusy(true);
+    const { error } = await supabase.from("beneficiaries_group").insert(inserts);
     setBusy(false);
 
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success("تم إضافة المجموعة بنجاح");
-      setGroupCount("1");
-      setGroupServiceQuantity("1");
+      toast.success(`تم إضافة ${inserts.length} فئات بنجاح`);
+      setGroupMatrix({
+        "ذكر": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
+        "أنثى": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
+        "مختلط": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
+      });
       fetchRegistered(target);
     }
   };
@@ -746,7 +764,19 @@ export default function BeneficiariesRegistration() {
                       />
                     </div>
                     <div className="space-y-1.5"><Label>تاريخ الميلاد</Label><Input type="date" value={indivBirthdate} onChange={(e) => setIndivBirthdate(e.target.value)} /></div>
-                    <div className="space-y-1.5"><Label>الجنسية</Label><Input value={indivNationality} onChange={(e) => setIndivNationality(e.target.value)} /></div>
+                    <div className="space-y-1.5">
+                      <Label>الجنسية</Label>
+                      <Select value={indivNationality} onValueChange={setIndivNationality}>
+                        <SelectTrigger><SelectValue placeholder="اختر الجنسية" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="مصري">مصري</SelectItem>
+                          <SelectItem value="فلسطيني">فلسطيني</SelectItem>
+                          <SelectItem value="سوداني">سوداني</SelectItem>
+                          <SelectItem value="يمني">يمني</SelectItem>
+                          <SelectItem value="أخرى">أخرى</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="space-y-1.5">
                       <Label>النوع</Label>
                       <Select value={indivGender} onValueChange={setIndivGender}>
@@ -815,28 +845,73 @@ export default function BeneficiariesRegistration() {
               </TabsContent>
 
               <TabsContent value="group">
-                <Card className="p-6 space-y-5 border-t-4 border-t-secondary shadow-md">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="space-y-1.5"><Label>الجنسية</Label><Input value={groupNationality} onChange={(e) => setGroupNationality(e.target.value)} /></div>
+                <Card className="p-6 space-y-6 border-t-4 border-t-secondary shadow-md">
+                  
+                  {/* Global Group Settings */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pb-6 border-b border-border/50">
                     <div className="space-y-1.5">
-                      <Label>النوع</Label>
-                      <Select value={groupGender} onValueChange={setGroupGender}>
-                        <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
-                        <SelectContent><SelectItem value="ذكر">ذكر</SelectItem><SelectItem value="أنثى">أنثى</SelectItem><SelectItem value="مختلط">مختلط</SelectItem></SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>الفئة العمرية</Label>
-                      <Select value={groupAgeCategory} onValueChange={setGroupAgeCategory}>
-                        <SelectTrigger><SelectValue placeholder="اختر" /></SelectTrigger>
-                        <SelectContent><SelectItem value="رضيع">رضيع</SelectItem><SelectItem value="طفل">طفل</SelectItem><SelectItem value="بالغ">بالغ</SelectItem><SelectItem value="كبار سن">كبار سن</SelectItem></SelectContent>
+                      <Label>الجنسية</Label>
+                      <Select value={groupNationality} onValueChange={setGroupNationality}>
+                        <SelectTrigger><SelectValue placeholder="اختر الجنسية" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="مصري">مصري</SelectItem>
+                          <SelectItem value="فلسطيني">فلسطيني</SelectItem>
+                          <SelectItem value="سوداني">سوداني</SelectItem>
+                          <SelectItem value="يمني">يمني</SelectItem>
+                          <SelectItem value="أخرى">أخرى</SelectItem>
+                        </SelectContent>
                       </Select>
                     </div>
                     <FieldSelect fieldKey="service_type" value={groupServiceType} onChange={setGroupServiceType} label="نوع الخدمة" />
-                    <div className="space-y-1.5"><Label>عدد المستفيدين *</Label><Input type="number" min="1" value={groupCount} onChange={(e) => setGroupCount(e.target.value)} /></div>
-                    <div className="space-y-1.5"><Label>عدد الخدمات</Label><Input type="number" min="1" value={groupServiceQuantity} onChange={(e) => setGroupServiceQuantity(e.target.value)} /></div>
+                    <div className="space-y-1.5"><Label>عدد الخدمات للفرد الواحد</Label><Input type="number" min="1" value={groupServiceQuantity} onChange={(e) => setGroupServiceQuantity(e.target.value)} /></div>
                   </div>
-                  <Button onClick={submitGroup} disabled={busy} className="w-full md:w-auto mt-4" variant="secondary"><Users className="w-4 h-4 ml-2"/> حفظ المجموعة</Button>
+
+                  {/* Matrix */}
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-primary mb-2">أعداد المستفيدين حسب النوع والفئة العمرية (Matrix)</h3>
+                    <div className="overflow-x-auto rounded-xl border border-border/50">
+                      <Table>
+                        <TableHeader className="bg-muted/50">
+                          <TableRow>
+                            <TableHead className="w-[120px] border-l font-bold text-center">النوع \ الفئة</TableHead>
+                            <TableHead className="text-center font-bold">رضيع</TableHead>
+                            <TableHead className="text-center font-bold">طفل</TableHead>
+                            <TableHead className="text-center font-bold">بالغ</TableHead>
+                            <TableHead className="text-center font-bold">كبار سن</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {["ذكر", "أنثى", "مختلط"].map((gender) => (
+                            <TableRow key={gender}>
+                              <TableCell className="font-bold border-l bg-muted/20 text-center">{gender}</TableCell>
+                              {["رضيع", "طفل", "بالغ", "كبار سن"].map((age) => (
+                                <TableCell key={age} className="p-1 border-l border-border/50">
+                                  <Input 
+                                    type="number" 
+                                    min="0"
+                                    placeholder="0"
+                                    className="h-10 text-center font-bold border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary rounded-none"
+                                    value={groupMatrix[gender][age]}
+                                    onChange={(e) => {
+                                      setGroupMatrix(prev => ({
+                                        ...prev,
+                                        [gender]: { ...prev[gender], [age]: e.target.value }
+                                      }))
+                                    }}
+                                  />
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <p className="text-xs text-muted-foreground">أدخل العدد في الخلية المناسبة. سيتم تجاهل الخلايا الفارغة أو التي تحتوي على صفر.</p>
+                  </div>
+
+                  <Button onClick={submitGroup} disabled={busy} className="w-full md:w-auto mt-4" variant="secondary">
+                    <Users className="w-4 h-4 ml-2"/> حفظ المجموعة
+                  </Button>
                 </Card>
               </TabsContent>
             </Tabs>

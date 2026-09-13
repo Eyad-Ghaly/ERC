@@ -30,7 +30,8 @@ interface SmartVolunteersUploaderProps {
 }
 
 export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }: SmartVolunteersUploaderProps) {
-  const { user, profile } = useAuth();
+  const { user, profile, roles, hasRole } = useAuth();
+  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin") || hasRole("stakeholder");
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -205,7 +206,7 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
     const { data: existingTeamVols } = await supabase
       .from("volunteer_teams")
       .select("volunteers_base!inner(id, full_name, membership_number)")
-      .eq("team_code", activeTeamCode);
+      .eq("team_id", activeTeamTarget);
 
     // Build a Set of "name__membership" keys for fast lookup
     // If membership_number is null, use name only as the key
@@ -316,15 +317,16 @@ export function SmartVolunteersUploader({ teamId, teamCode, onSuccess, trigger }
           .from("volunteer_teams")
           .select("id")
           .eq("volunteer_id", volunteerId)
-          .eq("team_code", activeTeamCode)
+          .eq("team_id", activeTeamTarget)
           .maybeSingle();
 
         if (!existingTeamLink) {
           const { error: vtError } = await supabase.from("volunteer_teams").insert({
             volunteer_id: volunteerId,
-            team_code: activeTeamCode,
+            team_id: activeTeamTarget,
             join_date: joinDate,
-            is_approved: true, // Approve directly since uploaded by leadership
+            is_approved: isManagementOrAdmin, 
+            national_id: nationalId,
           });
 
           if (vtError) {
