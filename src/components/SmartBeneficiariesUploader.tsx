@@ -248,7 +248,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
         }
         
         if (sf.key === 'gender' && val) {
-           if (val !== "ذكر" && val !== "أنثى" && (uploadType === "individual" || val !== "مختلط")) {
+           if (val !== "ذكر" && val !== "أنثى") {
               const key = `gender::${val}`;
               if (!uniqueInvalidMap.has(key)) {
                 uniqueInvalidMap.add(key);
@@ -271,6 +271,20 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
             const rawOpts = sf.originalField.field_options || [];
             const options = rawOpts.flatMap((opt: string) => typeof opt === "string" ? opt.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [opt]);
             if (!options.includes(val)) {
+                const key = `${sf.key}::${val}`;
+                if (!uniqueInvalidMap.has(key)) {
+                    uniqueInvalidMap.add(key);
+                    newInvalidValues.push({ fieldKey: sf.key, excelValue: val });
+                }
+            }
+        }
+
+        if (sf.isCustom && sf.originalField?.field_type === 'multiselect' && val) {
+            const rawOpts = sf.originalField.field_options || [];
+            const options = rawOpts.flatMap((opt: string) => typeof opt === "string" ? opt.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [opt]);
+            const selectedVals = typeof val === "string" ? val.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [String(val)];
+            const hasInvalid = selectedVals.some(v => !options.includes(v));
+            if (hasInvalid) {
                 const key = `${sf.key}::${val}`;
                 if (!uniqueInvalidMap.has(key)) {
                     uniqueInvalidMap.add(key);
@@ -408,6 +422,18 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                continue;
             }
 
+            // Validate birthdate if provided
+            let finalBirthdate: string | null = null;
+            if (birthdate) {
+                const parsedDate = new Date(birthdate);
+                if (isNaN(parsedDate.getTime()) || String(birthdate).length < 4 || !isNaN(Number(birthdate))) {
+                    errors.push({ rowIndex: i + 2, error: `قيمة تاريخ الميلاد غير صالحة: "${birthdate}". يجب أن تكون بصيغة تاريخ (مثل 1990-01-01) وليس رقماً للسن.` });
+                    continue;
+                }
+                // Ensure it's in YYYY-MM-DD format for postgres
+                finalBirthdate = parsedDate.toISOString().split('T')[0];
+            }
+
             const customData: Record<string, unknown> = {};
             customFields.forEach(cf => {
                 // Only save custom field if it belongs to the target mission's team
@@ -430,7 +456,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                 full_name: fullName,
                 gender: gender || null,
                 nationality: nationality || null,
-                birthdate: birthdate || null,
+                birthdate: finalBirthdate,
                 phone: phone || null,
                 }).eq('id', finalRegistryId);
             } else {
@@ -439,7 +465,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                 full_name: fullName,
                 gender: gender || null,
                 nationality: nationality || null,
-                birthdate: birthdate || null,
+                birthdate: finalBirthdate,
                 phone: phone || null,
                 first_registered_by: user.id,
                 first_team_id: targetMission.team_id,
@@ -451,7 +477,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                 full_name: fullName,
                 gender: gender || null,
                 nationality: nationality || null,
-                birthdate: birthdate || null,
+                birthdate: finalBirthdate,
                 phone: phone || null,
                 first_registered_by: user.id,
                 first_team_id: targetMission.team_id,
@@ -468,7 +494,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                 full_name: fullName,
                 gender: gender || null,
                 phone: phone || null,
-                birthdate: birthdate || null,
+                birthdate: finalBirthdate,
                 nationality: nationality || null,
                 service_type: serviceType || null,
                 service_quantity: parseInt(serviceQuantity) || 1,
@@ -661,7 +687,6 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                                 <>
                                   <SelectItem value="ذكر">ذكر</SelectItem>
                                   <SelectItem value="أنثى">أنثى</SelectItem>
-                                  {uploadType === "group" && <SelectItem value="مختلط">مختلط</SelectItem>}
                                 </>
                              )}
                              {inv.fieldKey === "ageCategory" && (

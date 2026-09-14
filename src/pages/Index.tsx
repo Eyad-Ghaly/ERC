@@ -17,6 +17,7 @@ const TILES = [
   { role: "branch_youth", title: "مسؤولي شباب الفروع", url: "/branch-youth", icon: Users2, desc: "تسجيل المتطوعين في القاعدة" },
   { role: "stakeholder", title: "الـ Dashboard", url: "/department-dashboard", icon: BarChart3, desc: "مؤشرات الأداء والخريطة التفاعلية" },
   { role: "stakeholder", title: "المهام الميدانية", url: "/dashboard", icon: Radio, desc: "متابعة المهام المفتوحة على الأرض" },
+  { role: "stakeholder", title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, desc: "عرض مستهدفات الأداء والمؤشرات" },
   { role: "data_manager", title: "إدارة البيانات", url: "/data-manager", icon: Database, desc: "رؤية مزدوجة وكاملة" },
   { role: "admin", title: "لوحة المدير", url: "/admin", icon: Settings, desc: "المستخدمون والقوائم" },
   { role: "department_entry", title: "متطوعو الفريق", url: "/team-volunteers", icon: Users2, desc: "سجل المتطوعين الخاص بالفريق" },

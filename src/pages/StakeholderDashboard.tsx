@@ -24,6 +24,8 @@ interface Mission {
   team_id: string;
   department_id: string | null;
   activity_type: string | null;
+  activity_classification: string | null;
+  is_emergency_mission: boolean | null;
 }
 
 export default function StakeholderDashboard() {
@@ -32,6 +34,7 @@ export default function StakeholderDashboard() {
   const [search, setSearch] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [emergencyOnly, setEmergencyOnly] = useState(false);
   const [date, setDate] = useState(""); // فاضي = كل المهمات
 
   useEffect(() => {
@@ -40,7 +43,7 @@ export default function StakeholderDashboard() {
       
       let q = supabase
         .from("missions")
-        .select("id, mission_code, mission_name, governorate, execution_place, activity_date, status, region, is_open_mission, is_canceled, team_id, department_id, activity_type")
+        .select("id, mission_code, mission_name, governorate, execution_place, activity_date, status, region, is_open_mission, is_canceled, team_id, department_id, activity_type, activity_classification, is_emergency_mission")
         .order("activity_date", { ascending: false })
         .limit(10000);
       if (selectedRegion !== "all") q = q.eq("region", selectedRegion as any);
@@ -57,6 +60,10 @@ export default function StakeholderDashboard() {
   const filtered = missions.filter((m) => {
     if (m.is_canceled === true || m.status === "canceled") return false;
     if (selectedStatus !== "all" && m.status !== selectedStatus) return false;
+    if (emergencyOnly) {
+      const isEmergency = m.is_emergency_mission || (m.activity_classification === 'اغاثة' && m.activity_type === 'طارئ');
+      if (!isEmergency) return false;
+    }
     if (search) {
       const s = search.toLowerCase();
       return (
@@ -148,18 +155,24 @@ export default function StakeholderDashboard() {
               />
             </div>
             <div className="flex gap-2 flex-wrap">
-              <FilterButton active={selectedStatus === "all"} onClick={() => setSelectedStatus("all")} label="كل الحالات" />
+              <FilterButton 
+                active={emergencyOnly} 
+                onClick={() => { setEmergencyOnly(!emergencyOnly); if (!emergencyOnly) setSelectedStatus("all"); }} 
+                label="🚨 مهام طارئة" 
+                activeColor="bg-destructive text-destructive-foreground border-destructive"
+              />
+              <FilterButton active={selectedStatus === "all" && !emergencyOnly} onClick={() => { setSelectedStatus("all"); setEmergencyOnly(false); }} label="كل الحالات" />
               {uniqueStatuses.map((s) => (
                 <FilterButton
                   key={s}
-                  active={selectedStatus === s}
-                  onClick={() => setSelectedStatus(selectedStatus === s ? "all" : s)}
+                  active={selectedStatus === s && !emergencyOnly}
+                  onClick={() => { setSelectedStatus(selectedStatus === s ? "all" : s); setEmergencyOnly(false); }}
                   label={STATUS_LABELS[s] ?? s}
                 />
               ))}
             </div>
-            {(selectedRegion !== "all" || selectedStatus !== "all" || search) && (
-              <button onClick={() => { setSelectedRegion("all"); setSelectedStatus("all"); setSearch(""); }}
+            {(selectedRegion !== "all" || selectedStatus !== "all" || search || emergencyOnly) && (
+              <button onClick={() => { setSelectedRegion("all"); setSelectedStatus("all"); setSearch(""); setEmergencyOnly(false); }}
                 className="text-xs text-muted-foreground hover:text-foreground underline">
                 مسح الفلاتر
               </button>
@@ -243,13 +256,13 @@ function KPICard({ icon: Icon, label, value, color }: { icon: any; label: string
   );
 }
 
-function FilterButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function FilterButton({ active, onClick, label, activeColor }: { active: boolean; onClick: () => void; label: string; activeColor?: string }) {
   return (
     <button
       onClick={onClick}
       className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
         active
-          ? "bg-primary text-primary-foreground border-primary"
+          ? activeColor || "bg-primary text-primary-foreground border-primary"
           : "bg-background border-border hover:border-primary/50 text-muted-foreground hover:text-foreground"
       }`}
     >

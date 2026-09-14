@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, Lock, Search, Download, Key, ShieldCheck, Upload, Save, Eye, Edit, UserPlus, Users } from "lucide-react";
+import { Loader2, Lock, Search, Download, Key, ShieldCheck, Upload, Save, Eye, Edit, UserPlus, Users, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 // Utility: SHA-256 hash
@@ -176,7 +176,7 @@ export default function TeamBeneficiaries() {
         nationality,
         gender,
         created_at,
-        missions!inner(team_id, mission_code, mission_name, activity_date, governorate, activity_details)
+        missions!inner(id, team_id, mission_code, mission_name, activity_date, governorate, activity_details)
       `)
       .eq('missions.team_id', teamId)
       .order('created_at', { ascending: false });
@@ -186,6 +186,7 @@ export default function TeamBeneficiaries() {
           return {
              ...r,
              decrypted_id: r.encrypted_id ? await decryptData(r.encrypted_id) : "",
+             mission_id: r.missions?.id || "",
              mission_name: r.missions?.mission_name || "",
              mission_code: r.missions?.mission_code || "",
              governorate: r.missions?.governorate || "",
@@ -209,7 +210,7 @@ export default function TeamBeneficiaries() {
         service_type,
         service_quantity,
         created_at,
-        missions!inner(team_id, mission_code, mission_name, activity_date, governorate, activity_details)
+        missions!inner(id, team_id, mission_code, mission_name, activity_date, governorate, activity_details)
       `)
       .eq('missions.team_id', teamId)
       .order('created_at', { ascending: false });
@@ -217,6 +218,7 @@ export default function TeamBeneficiaries() {
     if (grpData) {
       const formattedGrp = grpData.map((r: any) => ({
         ...r,
+        mission_id: r.missions?.id || "",
         mission_name: r.missions?.mission_name || "",
         mission_code: r.missions?.mission_code || "",
         governorate: r.missions?.governorate || "",
@@ -236,6 +238,44 @@ export default function TeamBeneficiaries() {
 
   const handleGroupChange = (id: string, field: string, value: string) => {
     setGroupBens(prev => prev.map(row => row.id === id ? { ...row, [field]: value } : row));
+  };
+
+  const handleDeleteIndiv = async (id: string) => {
+    if (!confirm("هل أنت متأكد من طلب حذف هذا المستفيد؟")) return;
+    setLoading(true);
+    const { error } = await supabase.from('edit_requests').insert({
+      record_id: id,
+      entity_type: 'beneficiary',
+      team_id: teamId,
+      requested_by: profile?.id,
+      changes: { _request_deletion: true, _type: 'individual', reason: 'تم طلب الحذف من واجهة الفريق' }
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("تم إرسال طلب الحذف للمراجعة");
+      // Optionally hide it from view, or let it stay until approved.
+      // We will let it stay but you could mark it locally if you had a flag.
+    }
+  };
+
+  const handleDeleteGroup = async (id: string) => {
+    if (!confirm("هل أنت متأكد من طلب حذف هذه البيانات؟")) return;
+    setLoading(true);
+    const { error } = await supabase.from('edit_requests').insert({
+      record_id: id,
+      entity_type: 'beneficiary',
+      team_id: teamId,
+      requested_by: profile?.id,
+      changes: { _request_deletion: true, _type: 'group', reason: 'تم طلب الحذف من واجهة الفريق' }
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("تم إرسال طلب الحذف للمراجعة");
+    }
   };
 
   const handleIndivPaste = (e: React.ClipboardEvent, startId: string, field: string) => {
@@ -516,12 +556,18 @@ export default function TeamBeneficiaries() {
                       <TableHead className="w-[100px]">الجنسية</TableHead>
                       <TableHead className="w-[120px]">نوع الخدمة</TableHead>
                       <TableHead className="w-[80px]">الكمية</TableHead>
+                      {isEditMode && <TableHead className="w-[50px]"></TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredIndiv.map((b) => (
                       <TableRow key={b.id} className="hover:bg-muted/30 transition-colors whitespace-nowrap">
-                        <TableCell className="text-xs font-bold text-primary">{b.mission_code}</TableCell>
+                        <TableCell 
+                          className="text-xs font-bold text-primary cursor-pointer hover:underline" 
+                          onClick={() => navigate(`/missions/${b.mission_id}`)}
+                        >
+                          {b.mission_code}
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {b.activity_date}<br/>{b.governorate}
                         </TableCell>
@@ -609,6 +655,18 @@ export default function TeamBeneficiaries() {
                             />
                           ) : (b.service_quantity || "1")}
                         </TableCell>
+                        {isEditMode && (
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-destructive" 
+                              onClick={() => handleDeleteIndiv(b.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                     {filteredIndiv.length === 0 && (
@@ -646,12 +704,18 @@ export default function TeamBeneficiaries() {
                       <TableHead className="w-[80px]">العدد</TableHead>
                       <TableHead className="w-[150px]">نوع الخدمة</TableHead>
                       <TableHead className="w-[100px]">كمية الخدمة</TableHead>
+                      {isEditMode && <TableHead className="w-[50px]"></TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredGroup.map((b) => (
                       <TableRow key={b.id} className="hover:bg-muted/30 transition-colors whitespace-nowrap">
-                        <TableCell className="text-xs font-bold text-primary">{b.mission_code}</TableCell>
+                        <TableCell 
+                          className="text-xs font-bold text-primary cursor-pointer hover:underline" 
+                          onClick={() => navigate(`/missions/${b.mission_id}`)}
+                        >
+                          {b.mission_code}
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {b.activity_date}<br/>{b.governorate}
                         </TableCell>
@@ -717,6 +781,18 @@ export default function TeamBeneficiaries() {
                             />
                           ) : (b.service_quantity || "1")}
                         </TableCell>
+                        {isEditMode && (
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-destructive" 
+                              onClick={() => handleDeleteGroup(b.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                     {filteredGroup.length === 0 && (

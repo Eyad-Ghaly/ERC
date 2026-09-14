@@ -129,10 +129,10 @@ export default function BeneficiariesRegistration() {
   const [groupNationality, setGroupNationality] = useState("");
   const [groupServiceType, setGroupServiceType] = useState("");
   const [groupServiceQuantity, setGroupServiceQuantity] = useState("1");
+  const [isGroupRepeated, setIsGroupRepeated] = useState(false);
   const [groupMatrix, setGroupMatrix] = useState<Record<string, Record<string, string>>>({
     "ذكر": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
     "أنثى": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
-    "مختلط": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
   });
   const [busy, setBusy] = useState(false);
 
@@ -606,6 +606,7 @@ export default function BeneficiariesRegistration() {
             count: count,
             service_type: groupServiceType || null,
             service_quantity: parseInt(groupServiceQuantity) || 1,
+            is_repeated: isGroupRepeated,
           });
         }
       });
@@ -626,7 +627,6 @@ export default function BeneficiariesRegistration() {
       setGroupMatrix({
         "ذكر": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
         "أنثى": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
-        "مختلط": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
       });
       fetchRegistered(target);
     }
@@ -832,6 +832,28 @@ export default function BeneficiariesRegistration() {
                                 ))}
                               </SelectContent>
                             </Select>
+                          ) : f.field_type === "multiselect" ? (
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {optionsList.map((opt: string, i: number) => {
+                                const currentSelected = customValues[f.field_key] ? customValues[f.field_key].split(', ') : [];
+                                const isSelected = currentSelected.includes(opt);
+                                return (
+                                  <Badge 
+                                    key={`${opt}-${i}`} 
+                                    variant={isSelected ? "default" : "outline"}
+                                    className="cursor-pointer select-none text-sm px-3 py-1"
+                                    onClick={() => {
+                                      const newSelected = isSelected 
+                                        ? currentSelected.filter((v: string) => v !== opt)
+                                        : [...currentSelected, opt];
+                                      setCustomValues(prev => ({ ...prev, [f.field_key]: newSelected.join(', ') }));
+                                    }}
+                                  >
+                                    {opt}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
                           ) : (
                             <Input type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"} value={customValues[f.field_key] ?? ""} onChange={(e) => setCustomValues(prev => ({ ...prev, [f.field_key]: e.target.value }))} />
                           )}
@@ -847,6 +869,21 @@ export default function BeneficiariesRegistration() {
               <TabsContent value="group">
                 <Card className="p-6 space-y-6 border-t-4 border-t-secondary shadow-md">
                   
+                  {/* Type of Beneficiaries */}
+                  <div className="bg-muted/30 p-4 rounded-lg border">
+                    <p className="font-semibold mb-3">نوع المستفيدين في هذه المجموعة:</p>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="manualGroupType" checked={!isGroupRepeated} onChange={() => setIsGroupRepeated(false)} className="w-4 h-4 text-primary" />
+                        <span>مستفيدون جدد (أول مرة)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="manualGroupType" checked={isGroupRepeated} onChange={() => setIsGroupRepeated(true)} className="w-4 h-4 text-primary" />
+                        <span>مستفيدون مكررون (إضافة كخدمات فقط، ولن يتم احتسابهم كمستفيدين جدد)</span>
+                      </label>
+                    </div>
+                  </div>
+
                   {/* Global Group Settings */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pb-6 border-b border-border/50">
                     <div className="space-y-1.5">
@@ -881,7 +918,7 @@ export default function BeneficiariesRegistration() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {["ذكر", "أنثى", "مختلط"].map((gender) => (
+                          {["ذكر", "أنثى"].map((gender) => (
                             <TableRow key={gender}>
                               <TableCell className="font-bold border-l bg-muted/20 text-center">{gender}</TableCell>
                               {["رضيع", "طفل", "بالغ", "كبار سن"].map((age) => (

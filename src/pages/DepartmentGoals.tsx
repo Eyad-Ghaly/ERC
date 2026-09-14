@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, Save, Target, LayoutList, CheckCircle2, AlertCircle, Edit } from "lucide-react";
+import { Plus, Trash2, Save, Target, LayoutList, CheckCircle2, AlertCircle, Edit, ChevronDown, ChevronUp } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export default function DepartmentGoals() {
@@ -18,11 +18,27 @@ export default function DepartmentGoals() {
   const [goals, setGoals] = useState<any[]>([]);
   const [progressView, setProgressView] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [activeDeptId, setActiveDeptId] = useState<string | null>(profile?.department_id || null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Multi-team selection for new/edit indicator
   const [newIndTeams, setNewIndTeams] = useState<string[]>([]);
   const [editIndTeams, setEditIndTeams] = useState<string[]>([]);
+
+  // Collapse states
+  const [collapsedGoals, setCollapsedGoals] = useState<Record<string, boolean>>({});
+  const [collapsedObjs, setCollapsedObjs] = useState<Record<string, boolean>>({});
+
+  const toggleGoal = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setCollapsedGoals(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleObj = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setCollapsedObjs(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // States for new items
   const [newGoal, setNewGoal] = useState({ code: "", title: "" });
@@ -38,19 +54,42 @@ export default function DepartmentGoals() {
   const [editInd, setEditInd] = useState<any>(null);
   
   const isDeptAdmin = hasRole('department_admin') || hasRole('admin') || true;
+  const isTopLevel = hasRole('admin') || hasRole('stakeholder');
 
   const loadData = async () => {
-    if (!profile?.department_id) return;
+    // If not selected yet, try to set to user's department or fetch departments if top level
+    if (!activeDeptId && !isTopLevel) {
+       if (profile?.department_id) setActiveDeptId(profile.department_id);
+       return;
+    }
+    
     setLoading(true);
 
-    const [goalsRes, progressRes, teamsRes] = await Promise.all([
-      supabase.from('department_goals')
-        .select('*, department_objectives(*, department_indicators(*, indicator_teams(team_id)))')
-        .eq('department_id', profile.department_id)
-        .order('created_at', { ascending: true }),
-      supabase.from('indicator_progress_view').select('*'),
-      supabase.from('teams').select('*').eq('department_id', profile.department_id)
-    ]);
+    const promises: any[] = [
+      supabase.from('indicator_progress_view').select('*')
+    ];
+
+    if (activeDeptId) {
+      promises.push(
+        supabase.from('department_goals')
+          .select('*, department_objectives(*, department_indicators(*, indicator_teams(team_id)))')
+          .eq('department_id', activeDeptId)
+          .order('created_at', { ascending: true })
+      );
+      promises.push(
+        supabase.from('teams').select('*').eq('department_id', activeDeptId)
+      );
+    } else {
+      promises.push(Promise.resolve({ data: [] }), Promise.resolve({ data: [] }));
+    }
+
+    if (isTopLevel) {
+      promises.push(supabase.from('departments').select('id, name, code').order('code'));
+    } else {
+      promises.push(Promise.resolve({ data: null }));
+    }
+
+    const [progressRes, goalsRes, teamsRes, deptsRes] = await Promise.all(promises);
 
     if (goalsRes.data) {
       const sortedGoals = goalsRes.data.map(g => ({
@@ -71,12 +110,19 @@ export default function DepartmentGoals() {
       setTeams(teamsRes.data);
     }
     
+    if (deptsRes.data) {
+      setDepartments(deptsRes.data);
+      if (!activeDeptId && deptsRes.data.length > 0) {
+        setActiveDeptId(deptsRes.data[0].id);
+      }
+    }
+    
     setLoading(false);
   };
 
   useEffect(() => {
     loadData();
-  }, [profile?.department_id]);
+  }, [profile?.department_id, activeDeptId]);
 
   // Helper to extract the highest number after a prefix
   const getMaxNumber = (items: any[], prefix: string, regex: RegExp) => {
@@ -110,9 +156,10 @@ export default function DepartmentGoals() {
   const addGoal = async () => {
     if (isSubmitting) return;
     if (!newGoal.title) return toast.error("أدخل اسم الهدف");
+    if (!activeDeptId) return toast.error("الرجاء اختيار الإدارة أولاً");
     setIsSubmitting(true);
     const { error } = await supabase.from('department_goals').insert({
-      department_id: profile?.department_id,
+      department_id: activeDeptId,
       code: nextGoalCode,
       title: newGoal.title
     });
@@ -255,12 +302,30 @@ export default function DepartmentGoals() {
     return p ? p.achieved_value : 0;
   };
 
-  if (loading) return <AppLayout><Card className="p-8 text-center">جاري التحميل...</Card></AppLayout>;
-  if (!profile?.department_id) return <AppLayout><Card className="p-8 text-center text-destructive font-bold">لا تنتمي لإدارة محددة، لا يمكنك عرض المستهدفات.</Card></AppLayout>;
+  if (loading && (!isTopLevel || departments.length === 0)) return <AppLayout><Card className="p-8 text-center">جاري التحميل...</Card></AppLayout>;
+  if (!activeDeptId && !isTopLevel) return <AppLayout><Card className="p-8 text-center text-destructive font-bold">لا تنتمي لإدارة محددة، لا يمكنك عرض المستهدفات.</Card></AppLayout>;
 
   return (
     <AppLayout title="مستهدفات الأداء والمؤشرات">
       <div className="space-y-6 max-w-7xl mx-auto">
+        {isTopLevel && departments.length > 0 && (
+          <Card className="p-4 bg-muted/30 flex items-center gap-4">
+            <Label className="font-bold shrink-0">اختر الإدارة:</Label>
+            <Select value={activeDeptId || ""} onValueChange={setActiveDeptId}>
+              <SelectTrigger className="w-full md:w-[350px] bg-background">
+                <SelectValue placeholder="اختر الإدارة لعرض مستهدفاتها..." />
+              </SelectTrigger>
+              <SelectContent>
+                {departments.map((dept) => (
+                  <SelectItem key={dept.id} value={dept.id}>
+                    {dept.code} - {dept.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Card>
+        )}
+
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold flex items-center gap-2 text-primary">
             <Target className="w-6 h-6" />
@@ -392,13 +457,17 @@ export default function DepartmentGoals() {
           <div className="space-y-8">
             {goals.map(goal => (
               <Card key={goal.id} className="overflow-hidden border-2 border-primary/20 shadow-md">
-                <div className="bg-primary text-primary-foreground p-4 flex items-center justify-between">
+                <div 
+                  className="bg-primary text-primary-foreground p-4 flex items-center justify-between cursor-pointer hover:bg-primary/90 transition-colors" 
+                  onClick={() => toggleGoal(goal.id)}
+                >
                   <div className="flex items-center gap-3">
+                    <ChevronDown className={`w-5 h-5 transition-transform ${collapsedGoals[goal.id] ? '' : 'rotate-180'}`} />
                     <span className="font-mono bg-white/20 px-2 py-1 rounded text-sm">{goal.code}</span>
                     <h2 className="text-lg font-bold">{goal.title}</h2>
                   </div>
                   {isDeptAdmin && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button size="sm" variant="secondary" className="text-xs" onClick={() => setNewObj({...newObj, goal_id: goal.id})}>
@@ -424,19 +493,23 @@ export default function DepartmentGoals() {
                   )}
                 </div>
 
-                <div className="p-4 space-y-6 bg-muted/10">
+                <div className={`p-4 space-y-6 bg-muted/10 transition-all ${collapsedGoals[goal.id] ? 'hidden' : 'block'}`}>
                   {goal.department_objectives?.length === 0 && (
                     <p className="text-sm text-muted-foreground text-center py-4">لا توجد أهداف فرعية</p>
                   )}
                   {goal.department_objectives?.map((obj: any) => (
                     <div key={obj.id} className="border border-border/50 bg-card rounded-lg overflow-hidden shadow-sm">
-                      <div className="bg-muted p-3 flex items-center justify-between border-b">
+                      <div 
+                        className="bg-muted p-3 flex items-center justify-between border-b cursor-pointer hover:bg-muted/80 transition-colors"
+                        onClick={() => toggleObj(obj.id)}
+                      >
                         <div className="flex items-center gap-2">
+                          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${collapsedObjs[obj.id] ? '' : 'rotate-180'}`} />
                           <span className="font-mono bg-background px-2 text-xs rounded border">{obj.code}</span>
                           <h3 className="font-bold text-sm">{obj.title}</h3>
                         </div>
                         {isDeptAdmin && (
-                          <div className="flex gap-2">
+                          <div className="flex gap-2" onClick={e => e.stopPropagation()}>
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setNewInd({...newInd, objective_id: obj.id})}>
@@ -509,7 +582,7 @@ export default function DepartmentGoals() {
                         )}
                       </div>
 
-                      <div className="p-0 overflow-x-auto">
+                      <div className={`p-0 overflow-x-auto transition-all ${collapsedObjs[obj.id] ? 'hidden' : 'block'}`}>
                         <table className="w-full text-sm text-right">
                           <thead className="bg-muted/30 border-b">
                             <tr>

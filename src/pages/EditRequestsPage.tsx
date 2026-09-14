@@ -220,7 +220,9 @@ export default function EditRequestsPage() {
         const { data } = await supabase.from("missions").select("*").eq("id", req.record_id).single();
         setOriginalData(data || {});
       } else {
-        const { data } = await supabase.from("beneficiaries").select("*").eq("id", req.record_id).single();
+        const isGroup = req.changes?._type === "group";
+        const table = isGroup ? "beneficiaries_group" : "beneficiaries_individual";
+        const { data } = await supabase.from(table).select("*").eq("id", req.record_id).single();
         setOriginalData(data || {});
       }
     } catch {
@@ -291,11 +293,22 @@ export default function EditRequestsPage() {
         }
       } else {
         // Beneficiary changes
-        const { error } = await supabase
-          .from("beneficiaries")
-          .update(changes)
-          .eq("id", selectedRequest.record_id);
-        if (error) throw error;
+        const isGroup = changes._type === "group";
+        const table = isGroup ? "beneficiaries_group" : "beneficiaries_individual";
+        
+        if (changes._request_deletion) {
+          const { error } = await supabase.from(table).delete().eq("id", selectedRequest.record_id);
+          if (error) throw error;
+        } else {
+          const { _type, ...updateData } = changes;
+          if (Object.keys(updateData).length > 0) {
+            const { error } = await supabase
+              .from(table)
+              .update(updateData)
+              .eq("id", selectedRequest.record_id);
+            if (error) throw error;
+          }
+        }
       }
 
       // Update edit request status

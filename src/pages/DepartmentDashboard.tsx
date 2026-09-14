@@ -58,7 +58,9 @@ export default function DepartmentDashboard() {
 
   const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin") || hasRole("stakeholder");
 
-  // Department teams state
+  // Department & Teams state
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [selectedDeptId, setSelectedDeptId] = useState<string>("all");
   const [departmentTeams, setDepartmentTeams] = useState<any[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("all");
 
@@ -91,6 +93,11 @@ export default function DepartmentDashboard() {
   // Supply requests state
   const [supplyRequests, setSupplyRequests] = useState<any[]>([]);
 
+  const filteredTeams = useMemo(() => {
+    if (selectedDeptId === "all") return departmentTeams;
+    return departmentTeams.filter(t => t.department_id === selectedDeptId);
+  }, [departmentTeams, selectedDeptId]);
+
   const activeTeam = useMemo(() => {
     if (selectedTeamId && selectedTeamId !== "all") {
       return departmentTeams.find(t => t.id === selectedTeamId) || null;
@@ -101,7 +108,7 @@ export default function DepartmentDashboard() {
   const activeTeamId = activeTeam?.id || (selectedTeamId !== "all" ? selectedTeamId : profile?.team_id);
   const activeTeamCode = activeTeam?.code || profile?.team_code;
 
-  const loadMissions = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
+  const loadMissions = async (targetTeamId = selectedTeamId, currentDeptTeams = filteredTeams) => {
     if (!user) return;
     setLoading(true);
     let allMissions: any[] = [];
@@ -160,7 +167,7 @@ export default function DepartmentDashboard() {
     setLoading(false);
   };
 
-  const loadVolunteers = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
+  const loadVolunteers = async (targetTeamId = selectedTeamId, currentDeptTeams = filteredTeams) => {
     setLoadingVols(true);
 
     // Non-admin users with a team_id: ALWAYS lock to their own team, no exceptions
@@ -224,7 +231,7 @@ export default function DepartmentDashboard() {
   };
 
 
-  const loadTargets = async (targetTeamId = selectedTeamId, currentDeptTeams = departmentTeams) => {
+  const loadTargets = async (targetTeamId = selectedTeamId, currentDeptTeams = filteredTeams) => {
     let kpiQuery = supabase.from("team_kpi_targets").select("*");
     let customKpisQuery = supabase.from("team_custom_kpis").select("*");
     let supplyQuery = supabase.from("volunteer_supply_requests").select("*").order("created_at", { ascending: false });
@@ -262,8 +269,15 @@ export default function DepartmentDashboard() {
     if (!user) return;
     const initData = async () => {
       let deptTeams: any[] = [];
+      let isTop = roles.includes("admin") || roles.includes("stakeholder");
+
+      if (isTop) {
+        const { data: dData } = await supabase.from("departments").select("id, name, code").order("code");
+        if (dData) setDepartments(dData);
+      }
+
       let query = supabase.from("teams").select("*, department:departments(code, name)").order("code");
-      if (!roles.includes("admin") && !roles.includes("stakeholder") && profile?.department_id) {
+      if (!isTop && profile?.department_id) {
         query = query.eq("department_id", profile.department_id);
       }
       const { data } = await query;
@@ -294,9 +308,18 @@ export default function DepartmentDashboard() {
 
   const handleTeamChange = (teamId: string) => {
     setSelectedTeamId(teamId);
-    loadMissions(teamId, departmentTeams);
-    loadVolunteers(teamId, departmentTeams);
-    loadTargets(teamId, departmentTeams);
+    loadMissions(teamId, filteredTeams);
+    loadVolunteers(teamId, filteredTeams);
+    loadTargets(teamId, filteredTeams);
+  };
+
+  const handleDeptChange = (deptId: string) => {
+    setSelectedDeptId(deptId);
+    setSelectedTeamId("all");
+    const newFiltered = deptId === "all" ? departmentTeams : departmentTeams.filter(t => t.department_id === deptId);
+    loadMissions("all", newFiltered);
+    loadVolunteers("all", newFiltered);
+    loadTargets("all", newFiltered);
   };
 
   const handleDeleteMission = async (id: string) => {
@@ -508,6 +531,94 @@ export default function DepartmentDashboard() {
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [activeMissionsFiltered]);
 
+  // Age Groups Breakdown
+  const ageData = useMemo(() => {
+    const counts: Record<string, number> = {
+      "رضيع": 0,
+      "طفل": 0,
+      "بالغ": 0,
+      "كبار سن": 0,
+      "غير محدد": 0
+    };
+
+    const calculateNativeAgeCategory = (birthdate: string) => {
+      if (!birthdate) return "غير محدد";
+      const birth = new Date(birthdate);
+      if (isNaN(birth.getTime())) return "غير محدد";
+      const age = new Date().getFullYear() - birth.getFullYear();
+      if (age <= 2) return "رضيع";
+      if (age <= 17) return "طفل";
+      if (age <= 59) return "بالغ";
+      return "كبار سن";
+    };
+
+    const calculateAgeFromNumber = (age: number) => {
+      if (isNaN(age) || age < 0) return "غير محدد";
+      if (age <= 2) return "رضيع";
+      if (age <= 17) return "طفل";
+      if (age <= 59) return "بالغ";
+      return "كبار سن";
+    };
+
+    activeMissionsFiltered.forEach(m => {
+      // Find the team's config
+      const team = departmentTeams.find(t => t.id === m.team_id);
+      const config = team?.age_calculation_config || [{ method: "birthdate_native" }];
+
+      (m.beneficiaries_individual || []).forEach((b: any) => {
+        let finalCat = "غير محدد";
+        
+        // Try each method in the config order
+        for (const rule of config) {
+          if (rule.method === "birthdate_native") {
+            if (b.birthdate) {
+              finalCat = calculateNativeAgeCategory(b.birthdate);
+              break;
+            }
+          } else if (rule.method === "birthdate_custom" && rule.field_key) {
+            const val = b.custom_metadata?.[rule.field_key];
+            if (val) {
+              finalCat = calculateNativeAgeCategory(val);
+              break;
+            }
+          } else if (rule.method === "custom_age" && rule.field_key) {
+            const val = b.custom_metadata?.[rule.field_key];
+            if (val !== undefined && val !== null) {
+              finalCat = calculateAgeFromNumber(Number(val));
+              break;
+            }
+          } else if (rule.method === "custom_category" && rule.field_key) {
+            const val = b.custom_metadata?.[rule.field_key];
+            if (val) {
+              finalCat = val.trim();
+              if (!counts.hasOwnProperty(finalCat)) counts[finalCat] = 0;
+              break;
+            }
+          }
+        }
+
+        if (finalCat === "غير محدد") {
+            // fallback if all rules failed but we have a native birthdate
+            if (b.birthdate) {
+                finalCat = calculateNativeAgeCategory(b.birthdate);
+            }
+        }
+
+        counts[finalCat] = (counts[finalCat] || 0) + (b.service_quantity || 1);
+      });
+      
+      (m.beneficiaries_group || []).forEach((g: any) => {
+        const cat = g.age_category || "غير محدد";
+        counts[cat] = (counts[cat] || 0) + (g.count || 0);
+      });
+    });
+
+    return Object.entries(counts)
+      .filter(([_, value]) => value > 0)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [activeMissionsFiltered]);
+
   const aggregatedTargets = useMemo(() => {
     if (!targets.length) return null;
     
@@ -684,19 +795,37 @@ export default function DepartmentDashboard() {
             </div>
             <div>
               <h2 className="font-bold text-base text-foreground">تحديد الفريق المستهدف للإدارة</h2>
-              <p className="text-xs text-muted-foreground">
-                {profile?.department_code ? `كود الإدارة: ${profile.department_code}` : "استعراض وتعديل فرق الإدارة"}
-              </p>
+              {!hasRole("stakeholder") && (
+                <p className="text-xs text-muted-foreground">
+                  {profile?.department_code ? `كود الإدارة: ${profile.department_code}` : "استعراض وتعديل فرق الإدارة"}
+                </p>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2 min-w-[260px]">
+          <div className="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[260px]">
+            {(hasRole("admin") || hasRole("stakeholder")) && departments.length > 0 && (
+              <Select value={selectedDeptId} onValueChange={handleDeptChange}>
+                <SelectTrigger className="w-[200px] font-bold bg-background shadow-sm">
+                  <SelectValue placeholder="اختر الإدارة" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="font-bold">✨ جميع الإدارات</SelectItem>
+                  {departments.map((d: any) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.code} - {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             <Select value={selectedTeamId} onValueChange={handleTeamChange}>
-              <SelectTrigger className="w-full font-bold bg-background shadow-sm">
+              <SelectTrigger className="w-[220px] font-bold bg-background shadow-sm">
                 <SelectValue placeholder="اختر الفريق" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" className="font-bold">✨ جميع الفرق التابعة للإدارة ({departmentTeams.length})</SelectItem>
-                {departmentTeams.map((t: any) => (
+                <SelectItem value="all" className="font-bold">✨ جميع الفرق ({filteredTeams.length})</SelectItem>
+                {filteredTeams.map((t: any) => (
                   <SelectItem key={t.id} value={t.id}>
                     فريق {t.code} {t.name ? `- ${t.name}` : ""}
                   </SelectItem>
@@ -708,18 +837,20 @@ export default function DepartmentDashboard() {
       )}
 
       <Tabs defaultValue="missions" className="w-full space-y-6">
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="missions" className="px-6"><ListTodo className="w-4 h-4 ml-2" /> مهام الفريق</TabsTrigger>
-          </TabsList>
-          <div className="flex items-center gap-2">
-            {(activeTeamCode || profile?.team_code) && (
-              <Badge variant="outline" className="hidden md:inline-flex">
-                {selectedTeamId === "all" ? `عدد الفرق: ${departmentTeams.length}` : `كود الفريق المحدد: ${activeTeamCode}`}
-              </Badge>
-            )}
+        {!hasRole("stakeholder") && (
+          <div className="flex items-center justify-between">
+            <TabsList>
+              <TabsTrigger value="missions" className="px-6"><ListTodo className="w-4 h-4 ml-2" /> مهام الفريق</TabsTrigger>
+            </TabsList>
+            <div className="flex items-center gap-2">
+              {(activeTeamCode || profile?.team_code) && (
+                <Badge variant="outline" className="hidden md:inline-flex">
+                  {selectedTeamId === "all" ? `عدد الفرق: ${departmentTeams.length}` : `كود الفريق المحدد: ${activeTeamCode}`}
+                </Badge>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <TabsContent value="missions" className="space-y-6 mt-0">
           <Card className="p-4 border-primary/20 bg-card/50 flex flex-wrap items-end gap-4">
@@ -1079,31 +1210,133 @@ export default function DepartmentDashboard() {
             </Card>
           </div>
 
-          <Card className="p-4 border-dashed border-primary/40 bg-primary/5 flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3 text-primary">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <FileUp className="w-5 h-5" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Demographic 1: Gender */}
+            <Card className="p-6 card-elevated border-primary/20">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-primary">تقسيمة النوع (ذكور وإناث)</h3>
               </div>
-              <div>
-                <p className="font-bold">إدخال سريع من إكسيل</p>
-                <p className="text-xs text-muted-foreground">يمكنك رفع ملف إكسيل لتعبئة البيانات تلقائياً</p>
+              <div className="h-[250px] w-full">
+                {genderData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie 
+                        data={genderData} 
+                        cx="50%" 
+                        cy="50%" 
+                        innerRadius={60} 
+                        outerRadius={80} 
+                        paddingAngle={5} 
+                        dataKey="value"
+                      >
+                        {genderData.map((e, i) => (
+                          <Cell 
+                            key={i} 
+                            fill={e.name === 'ذكر' ? '#3b82f6' : e.name === 'أنثى' ? '#ec4899' : '#888'} 
+                            stroke="none"
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-full flex items-center justify-center text-muted-foreground">لا توجد بيانات</div>}
               </div>
-            </div>
-            <div className="flex gap-2">
-              <SmartExcelUploader 
-                onSuccess={loadMissions} 
-                trigger={
-                  <Button
-                    disabled={busy}
-                    className="gradient-primary shadow-lg shadow-primary/20"
-                  >
-                    <Plus className="w-4 h-4 ms-2" />
-                    تحميل البيانات الآن (رفع ذكي)
-                  </Button>
-                }
-              />
-            </div>
-          </Card>
+            </Card>
+
+            {/* Demographic 2: Age Groups */}
+            <Card className="p-6 card-elevated border-primary/20">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-primary">الفئات العمرية</h3>
+              </div>
+              <div className="h-[250px] w-full">
+                {ageData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={ageData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                      <XAxis dataKey="name" stroke="#888" tick={{ fill: '#888', fontSize: 12 }} />
+                      <YAxis stroke="#888" />
+                      <Tooltip cursor={{ fill: '#ffffff10' }} contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
+                      <Bar 
+                        dataKey="value" 
+                        name="العدد" 
+                        radius={[4, 4, 0, 0]} 
+                        maxBarSize={40}
+                      >
+                        {ageData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={COLORS[(index + 4) % COLORS.length]} 
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-full flex items-center justify-center text-muted-foreground">لا توجد بيانات</div>}
+              </div>
+            </Card>
+
+            {/* Demographic 3: Nationality */}
+            <Card className="p-6 card-elevated border-primary/20">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-primary">جنسيات المستفيدين</h3>
+              </div>
+              <div className="h-[250px] w-full">
+                {nationalityData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie 
+                        data={nationalityData} 
+                        cx="50%" 
+                        cy="50%" 
+                        outerRadius={80} 
+                        dataKey="value"
+                      >
+                        {nationalityData.map((e, i) => (
+                          <Cell 
+                            key={i} 
+                            fill={COLORS[i % COLORS.length]} 
+                            stroke="none"
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <div className="h-full flex items-center justify-center text-muted-foreground">لا توجد بيانات</div>}
+              </div>
+            </Card>
+          </div>
+
+          {!hasRole("stakeholder") && (
+            <Card className="p-4 border-dashed border-primary/40 bg-primary/5 flex flex-wrap items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3 text-primary">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <FileUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="font-bold">إدخال سريع من إكسيل</p>
+                  <p className="text-xs text-muted-foreground">يمكنك رفع ملف إكسيل لتعبئة البيانات تلقائياً</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <SmartExcelUploader 
+                  onSuccess={loadMissions} 
+                  trigger={
+                    <Button
+                      disabled={busy}
+                      className="gradient-primary shadow-lg shadow-primary/20"
+                    >
+                      <Plus className="w-4 h-4 ms-2" />
+                      تحميل البيانات الآن (رفع ذكي)
+                    </Button>
+                  }
+                />
+              </div>
+            </Card>
+          )}
 
           {supplyRequests.length > 0 && (
             <div className="space-y-4">
@@ -1136,43 +1369,45 @@ export default function DepartmentDashboard() {
             </div>
           )}
 
-          <Card className="p-4 card-elevated border-primary/20 overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-primary">مهامي السابقة</h3>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => navigate("/team-beneficiaries")} className="bg-primary/5 border-primary/20"><Database className="w-4 h-4 ms-2" /> قاعدة بيانات المستفيدين</Button>
-                <Button size="sm" onClick={() => navigate("/department-entry")}><Edit2 className="w-4 h-4 ms-2" /> مهمة جديدة</Button>
+          {!hasRole("stakeholder") && (
+            <Card className="p-4 card-elevated border-primary/20 overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-primary">مهامي السابقة</h3>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => navigate("/team-beneficiaries")} className="bg-primary/5 border-primary/20"><Database className="w-4 h-4 ms-2" /> قاعدة بيانات المستفيدين</Button>
+                  <Button size="sm" onClick={() => navigate("/department-entry")}><Edit2 className="w-4 h-4 ms-2" /> مهمة جديدة</Button>
+                </div>
               </div>
-            </div>
-            <div className="overflow-x-auto flex-1">
-              <Table>
-                <TableHeader><TableRow><TableHead>الكود</TableHead><TableHead>الاسم</TableHead><TableHead>التاريخ</TableHead><TableHead>الحالة</TableHead><TableHead>إجراءات</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {loading ? <TableRow><TableCell colSpan={5} className="text-center py-8">جاري التحميل...</TableCell></TableRow>
-                    : filteredMissions.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8">لا توجد مهام</TableCell></TableRow>
-                      : filteredMissions.map((m) => (
-                        <TableRow key={m.id}>
-                          <TableCell><code className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{m.mission_code}</code></TableCell>
-                          <TableCell className="font-medium max-w-[200px] truncate" title={m.mission_name}>{m.mission_name}</TableCell>
-                          <TableCell className="text-muted-foreground text-sm">{m.activity_date}</TableCell>
-                          <TableCell><StatusBadge status={m.is_canceled ? "canceled" : m.status} /></TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/missions/${m.id}`)}><Eye className="w-4 h-4 text-info" /></Button>
-                              {(m.status === 'planned' || m.status === 'coded') && (
-                                <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/department-entry/${m.id}`)}><Edit2 className="w-4 h-4 text-warning" /></Button>
-                              )}
-                              {m.status === 'planned' && (
-                                <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => handleDeleteMission(m.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                </TableBody>
-              </Table>
-            </div>
-          </Card>
+              <div className="overflow-x-auto flex-1">
+                <Table>
+                  <TableHeader><TableRow><TableHead>الكود</TableHead><TableHead>الاسم</TableHead><TableHead>التاريخ</TableHead><TableHead>الحالة</TableHead><TableHead>إجراءات</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {loading ? <TableRow><TableCell colSpan={5} className="text-center py-8">جاري التحميل...</TableCell></TableRow>
+                      : filteredMissions.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8">لا توجد مهام</TableCell></TableRow>
+                        : filteredMissions.map((m) => (
+                          <TableRow key={m.id}>
+                            <TableCell><code className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{m.mission_code}</code></TableCell>
+                            <TableCell className="font-medium max-w-[200px] truncate" title={m.mission_name}>{m.mission_name}</TableCell>
+                            <TableCell className="text-muted-foreground text-sm">{m.activity_date}</TableCell>
+                            <TableCell><StatusBadge status={m.is_canceled ? "canceled" : m.status} /></TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/missions/${m.id}`)}><Eye className="w-4 h-4 text-info" /></Button>
+                                {(m.status === 'planned' || m.status === 'coded' || m.status === 'entered') && (
+                                  <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/department-entry/${m.id}`)}><Edit2 className="w-4 h-4 text-warning" /></Button>
+                                )}
+                                {m.status === 'planned' && (
+                                  <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => handleDeleteMission(m.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
     </AppLayout>

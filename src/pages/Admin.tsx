@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ROLES, DROPDOWN_FIELD_LABELS, type AppRole } from "@/lib/constants";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Trash2, Plus, Check, Pencil, Loader2, ChevronsUpDown } from "lucide-react";
+import { Trash2, Plus, Check, Pencil, Loader2, ChevronsUpDown, Save } from "lucide-react";
 import { toast } from "sonner";
 
 interface ProfileRow {
@@ -34,7 +34,7 @@ export default function Admin() {
         <TabsList className="flex-wrap h-auto gap-1">
           <TabsTrigger value="users">المستخدمون والصلاحيات</TabsTrigger>
           <TabsTrigger value="dropdowns">القوائم المنسدلة</TabsTrigger>
-          <TabsTrigger value="restrictions">قيود لكل مستخدم</TabsTrigger>
+          <TabsTrigger value="team_age_settings">إعدادات الأعمار للفرق</TabsTrigger>
           <TabsTrigger value="custom_fields">حقول مخصصة للفرق</TabsTrigger>
           <TabsTrigger value="team_kpis">مؤشرات مخصصة</TabsTrigger>
           <TabsTrigger value="feedback_questions">أسئلة تقييم الفريق</TabsTrigger>
@@ -44,7 +44,7 @@ export default function Admin() {
         </TabsList>
         <TabsContent value="users"><UsersTab /></TabsContent>
         <TabsContent value="dropdowns"><DropdownsTab /></TabsContent>
-        <TabsContent value="restrictions"><RestrictionsTab /></TabsContent>
+        <TabsContent value="team_age_settings"><TeamAgeSettingsTab /></TabsContent>
         <TabsContent value="custom_fields"><CustomFieldsTab /></TabsContent>
         <TabsContent value="team_kpis"><TeamCustomKpisTab /></TabsContent>
         <TabsContent value="feedback_questions"><FeedbackQuestionsTab /></TabsContent>
@@ -474,67 +474,125 @@ function DropdownsTab() {
   );
 }
 
-function RestrictionsTab() {
-  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string>("");
-  const [allOptions, setAllOptions] = useState<OptionRow[]>([]);
-  const [allowed, setAllowed] = useState<Set<string>>(new Set());
+function TeamAgeSettingsTab() {
+  const [teams, setTeams] = useState<any[]>([]);
+  const [customFields, setCustomFields] = useState<any[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [config, setConfig] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const loadData = async () => {
+    const [{ data: ts }, { data: cf }] = await Promise.all([
+      supabase.from("teams").select("*").order("code"),
+      supabase.from("team_custom_fields").select("*")
+    ]);
+    setTeams(ts || []);
+    setCustomFields(cf || []);
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   useEffect(() => {
-    supabase.from("profiles").select("*").order("email").then(({ data }) => setProfiles((data ?? []) as ProfileRow[]));
-    supabase.from("dropdown_options").select("*").eq("active", true).order("field_key").then(({ data }) => setAllOptions((data ?? []) as OptionRow[]));
-  }, []);
-
-  useEffect(() => {
-    if (!selectedUser) return;
-    supabase.from("user_dropdown_options").select("option_id").eq("user_id", selectedUser).then(({ data }) => {
-      setAllowed(new Set((data ?? []).map((r: any) => r.option_id)));
-    });
-  }, [selectedUser]);
-
-  const toggle = async (optId: string) => {
-    if (!selectedUser) return;
-    if (allowed.has(optId)) {
-      await supabase.from("user_dropdown_options").delete().eq("user_id", selectedUser).eq("option_id", optId);
-      setAllowed((s) => { const n = new Set(s); n.delete(optId); return n; });
+    if (selectedTeamId) {
+      const t = teams.find(t => t.id === selectedTeamId);
+      // Default to native birthdate if no config exists
+      setConfig(t?.age_calculation_config || [{ method: "birthdate_native" }]);
     } else {
-      await supabase.from("user_dropdown_options").insert({ user_id: selectedUser, option_id: optId });
-      setAllowed((s) => new Set(s).add(optId));
+      setConfig([]);
+    }
+  }, [selectedTeamId, teams]);
+
+  const handleSave = async () => {
+    if (!selectedTeamId) return;
+    setSaving(true);
+    const { error } = await supabase.from("teams").update({ age_calculation_config: config }).eq("id", selectedTeamId);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("تم الحفظ بنجاح");
+      loadData();
     }
   };
 
-  const grouped: Record<string, OptionRow[]> = {};
-  allOptions.forEach((o) => { (grouped[o.field_key] ??= []).push(o); });
+  const addRule = () => setConfig([...config, { method: "birthdate_native" }]);
+  const removeRule = (i: number) => setConfig(config.filter((_, idx) => idx !== i));
+  const updateRule = (i: number, key: string, val: string) => {
+    const newConfig = [...config];
+    newConfig[i] = { ...newConfig[i], [key]: val };
+    if (key === 'method' && val === 'birthdate_native') delete newConfig[i].field_key;
+    setConfig(newConfig);
+  };
+
+  const teamFields = customFields.filter(f => f.team_id === selectedTeamId);
 
   return (
     <Card className="card-elevated p-4 space-y-4">
       <div className="space-y-1.5 max-w-md">
-        <Label>اختر المستخدم</Label>
-        <Select value={selectedUser} onValueChange={setSelectedUser}>
+        <Label>اختر الفريق</Label>
+        <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
           <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-          <SelectContent>{profiles.map((p) => <SelectItem key={p.user_id} value={p.user_id}>{p.email}</SelectItem>)}</SelectContent>
+          <SelectContent>
+            {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.code}</SelectItem>)}
+          </SelectContent>
         </Select>
       </div>
 
-      {selectedUser && (
-        <>
-          <p className="text-sm text-muted-foreground">حدد الخيارات المسموح بها لهذا المستخدم. إذا لم تحدد أي خيار في حقل ما، سيرى جميع الخيارات النشطة.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(grouped).map(([field, options]) => (
-              <Card key={field} className="p-3">
-                <div className="font-bold text-sm mb-2">{DROPDOWN_FIELD_LABELS[field] ?? field}</div>
-                <div className="space-y-1.5">
-                  {options.map((o) => (
-                    <label key={o.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <Checkbox checked={allowed.has(o.id)} onCheckedChange={() => toggle(o.id)} />
-                      <span>{o.label}</span>
-                    </label>
-                  ))}
+      {selectedTeamId && (
+        <div className="space-y-4 mt-4">
+          <div className="bg-primary/5 p-4 rounded-md border border-primary/20 space-y-2">
+            <h3 className="font-bold text-lg">طرق حساب الفئة العمرية (بالترتيب)</h3>
+            <p className="text-sm text-muted-foreground">
+              يمكنك إضافة أكثر من طريقة. سيقوم النظام بمحاولة الحساب بالطريقة الأولى، وإذا لم يجد البيانات سينتقل للطريقة التالية.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {config.map((rule, idx) => (
+              <div key={idx} className="flex flex-col md:flex-row gap-3 items-end p-3 border rounded-md bg-card">
+                <div className="flex-1 space-y-1.5 w-full md:w-auto">
+                  <Label>الطريقة {idx + 1}</Label>
+                  <Select value={rule.method} onValueChange={(v) => updateRule(idx, "method", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="birthdate_native">تاريخ الميلاد (الأساسي)</SelectItem>
+                      <SelectItem value="birthdate_custom">تاريخ الميلاد (حقل مخصص)</SelectItem>
+                      <SelectItem value="custom_age">السن كرقم (حقل مخصص)</SelectItem>
+                      <SelectItem value="custom_category">الفئة العمرية مباشرة (حقل مخصص)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </Card>
+                
+                {rule.method !== "birthdate_native" && (
+                  <div className="flex-1 space-y-1.5 w-full md:w-auto">
+                    <Label>الحقل المخصص</Label>
+                    <Select value={rule.field_key || ""} onValueChange={(v) => updateRule(idx, "field_key", v)}>
+                      <SelectTrigger><SelectValue placeholder="اختر الحقل" /></SelectTrigger>
+                      <SelectContent>
+                        {teamFields.map(f => (
+                          <SelectItem key={f.field_key} value={f.field_key}>{f.field_label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                
+                <Button variant="destructive" size="icon" onClick={() => removeRule(idx)} disabled={config.length === 1}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
             ))}
           </div>
-        </>
+
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={addRule}>
+              <Plus className="w-4 h-4 ml-2" /> إضافة طريقة بديلة
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 ml-2 animate-spin" /> : <Save className="w-4 h-4 ml-2" />} حفظ التغييرات
+            </Button>
+          </div>
+        </div>
       )}
     </Card>
   );
@@ -581,7 +639,7 @@ function CustomFieldsTab() {
     try {
       const selectedTeam = teams.find(t => t.id === teamId);
       const sanitizedKey = newKey.trim().toLowerCase().replace(/[\s-]+/g, "_");
-      const optionsArr = newType === "select"
+      const optionsArr = (newType === "select" || newType === "multiselect")
         ? newOptions.split(/[,،\n]+/).map((o: string) => o.trim()).filter(Boolean)
         : [];
 
@@ -662,7 +720,7 @@ function CustomFieldsTab() {
     setIsSavingEdit(true);
     try {
       const sanitizedKey = editKey.trim().toLowerCase().replace(/[\s-]+/g, "_");
-      const optionsArr = editType === "select"
+      const optionsArr = (editType === "select" || editType === "multiselect")
         ? editOptions.split(/[,،\n]+/).map((o: string) => o.trim()).filter(Boolean)
         : [];
 
@@ -741,11 +799,12 @@ function CustomFieldsTab() {
                     <SelectItem value="text">نص حر (Text)</SelectItem>
                     <SelectItem value="number">رقم (Number)</SelectItem>
                     <SelectItem value="select">قائمة منسدلة (Select)</SelectItem>
+                    <SelectItem value="multiselect">متعدد الاختيارات (Multi-Select)</SelectItem>
                     <SelectItem value="date">تاريخ (Date)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {newType === "select" && (
+              {(newType === "select" || newType === "multiselect") && (
                 <div className="space-y-1.5 md:col-span-2">
                   <Label>خيارات القائمة (افصلها بفاصلة ",")</Label>
                   <Input value={newOptions} onChange={e => setNewOptions(e.target.value)} placeholder="باطنة, عظام, أطفال" />
@@ -850,11 +909,12 @@ function CustomFieldsTab() {
                   <SelectItem value="text">نص حر (Text)</SelectItem>
                   <SelectItem value="number">رقم (Number)</SelectItem>
                   <SelectItem value="select">قائمة منسدلة (Select)</SelectItem>
+                  <SelectItem value="multiselect">متعدد الاختيارات (Multi-Select)</SelectItem>
                   <SelectItem value="date">تاريخ (Date)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {editType === "select" && (
+            {(editType === "select" || editType === "multiselect") && (
               <div className="space-y-1.5">
                 <Label>خيارات القائمة (افصلها بفاصلة ",")</Label>
                 <Input value={editOptions} onChange={e => setEditOptions(e.target.value)} placeholder="باطنة، عظام، أطفال" />
