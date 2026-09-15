@@ -88,8 +88,18 @@ export function useDropdownOptions(fieldKey: string) {
         }
       }
 
+      // Deduplicate options by value to prevent repetitive dropdown choices
+      const uniqueOptions: DropdownOption[] = [];
+      const seenValues = new Set<string>();
+      for (const opt of filtered) {
+        if (!seenValues.has(opt.value)) {
+          seenValues.add(opt.value);
+          uniqueOptions.push(opt);
+        }
+      }
+
       if (active) {
-        setOptions(filtered);
+        setOptions(uniqueOptions);
         setLoading(false);
       }
     })();
