@@ -74,7 +74,7 @@ const App = () => (
             <Route path="/data-manager" element={<ProtectedRoute roles={["data_manager"]}><DataManager /></ProtectedRoute>} />
             <Route path="/data-manager-operations" element={<ProtectedRoute roles={["data_manager", "admin"]}><DataManagerOperations /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><Admin /></ProtectedRoute>} />
-            <Route path="/team-beneficiaries" element={<ProtectedRoute roles={["department_entry"]}><TeamBeneficiaries /></ProtectedRoute>} />
+            <Route path="/team-beneficiaries" element={<ProtectedRoute roles={["department_entry", "data_manager", "admin", "management"]}><TeamBeneficiaries /></ProtectedRoute>} />
             <Route path="/team-volunteers" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><TeamVolunteers /></ProtectedRoute>} />
             <Route path="/volunteer-supply-request/new" element={<ProtectedRoute roles={["department_entry", "management"]}><VolunteerSupplyRequestNew /></ProtectedRoute>} />
             <Route path="/missions/:id" element={<ProtectedRoute><MissionDetail /></ProtectedRoute>} />

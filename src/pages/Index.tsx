@@ -19,6 +19,7 @@ const TILES = [
   { role: "stakeholder", title: "المهام الميدانية", url: "/dashboard", icon: Radio, desc: "متابعة المهام المفتوحة على الأرض" },
   { role: "stakeholder", title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, desc: "عرض مستهدفات الأداء والمؤشرات" },
   { role: "data_manager", title: "إدارة البيانات", url: "/data-manager", icon: Database, desc: "رؤية مزدوجة وكاملة" },
+  { role: "data_manager", title: "قاعدة بيانات المستفيدين", url: "/team-beneficiaries", icon: Database, desc: "استعراض وتعديل المستفيدين لجميع الفرق" },
   { role: "admin", title: "لوحة المدير", url: "/admin", icon: Settings, desc: "المستخدمون والقوائم" },
   { role: "department_entry", title: "متطوعو الفريق", url: "/team-volunteers", icon: Users2, desc: "سجل المتطوعين الخاص بالفريق" },
   { role: "department_entry", title: "قاعدة بيانات المستفيدين", url: "/team-beneficiaries", icon: Database, desc: "سجل المستفيدين الخاص بالفريق" },
