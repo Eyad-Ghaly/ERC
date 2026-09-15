@@ -24,7 +24,7 @@ const items: NavItem[] = [
   { title: "تقييم وتوثيق المهام", url: "/mission-feedback", icon: Star, roles: ["department_entry", "admin"] },
   { title: "متابعة المهام (العمليات)", url: "/data-manager-operations", icon: Radio, roles: ["data_manager", "admin"] },
   { title: "إدخال مهمة جديدة", url: "/department-entry", icon: FilePlus, roles: ["department_entry", "admin"] },
-  { title: "الشبكة الذكية للمهام (مسودات)", url: "/smart-missions-grid", icon: FilePlus, roles: ["department_entry", "admin"] },
+  { title: "الشبكة الذكية للمهام (مسودات)", url: "/smart-missions-grid", icon: FilePlus, roles: ["department_entry", "admin", "data_manager", "management"] },
   { title: "متطوعو الفريق", url: "/team-volunteers", icon: UserPlus, roles: ["department_entry", "management", "department_admin", "admin"] },
   { title: "تسجيل المستفيدين", url: "/beneficiaries-registration", icon: UserPlus, roles: ["department_entry", "admin"] },
   { title: "طلب إمداد بالمتطوعين", url: "/volunteer-supply-request/new", icon: UserPlus, roles: ["department_entry", "management", "admin"] },

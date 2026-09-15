@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,8 +42,11 @@ const COLUMNS = [
 ];
 
 export default function SmartMissionsGrid() {
-  const { profile, user } = useAuth();
+  const { profile, user, hasRole } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const dashboardFilters = location.state?.filters;
+
   const [missions, setMissions] = useState<MissionRow[]>([]);
   const [originalMissions, setOriginalMissions] = useState<MissionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,16 +80,43 @@ export default function SmartMissionsGrid() {
   };
 
   const loadMissions = async () => {
-    if (!profile?.team_id) return;
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("missions")
       .select("*")
-      .eq("team_id", profile.team_id)
-      .in("status", ["planned", "coded"])
-      .order("created_at", { ascending: false });
+      .in("status", ["planned", "coded", "open_active"])
+      .order("created_at", { ascending: false })
+      .limit(1000);
 
+    if (dashboardFilters) {
+      if (dashboardFilters.targetTeamId && dashboardFilters.targetTeamId !== "all") {
+        query = query.eq("team_id", dashboardFilters.targetTeamId);
+      } else if (dashboardFilters.targetTeamId === "all" && dashboardFilters.currentDeptTeams?.length > 0) {
+        query = query.in("team_id", dashboardFilters.currentDeptTeams.map((t: any) => t.id));
+      } else if (profile?.team_id && !(hasRole("admin") || hasRole("data_manager") || hasRole("management"))) {
+        query = query.eq("team_id", profile.team_id);
+      }
+      
+      if (dashboardFilters.startDate) query = query.gte("activity_date", dashboardFilters.startDate);
+      if (dashboardFilters.endDate) query = query.lte("activity_date", dashboardFilters.endDate);
+      if (dashboardFilters.selectedGovernorate) query = query.eq("governorate", dashboardFilters.selectedGovernorate);
+      if (dashboardFilters.selectedClassification) query = query.eq("classification_name", dashboardFilters.selectedClassification);
+      if (dashboardFilters.selectedActivityType) query = query.eq("activity_type", dashboardFilters.selectedActivityType);
+      if (dashboardFilters.selectedActivityDetail) query = query.eq("activity_details", dashboardFilters.selectedActivityDetail);
+    } else {
+      const isGlobalAdmin = hasRole("admin") || hasRole("data_manager") || hasRole("management");
+      if (!profile?.team_id && !isGlobalAdmin) {
+        setLoading(false);
+        return;
+      }
+      if (profile?.team_id && !isGlobalAdmin) {
+        query = query.eq("team_id", profile.team_id);
+      }
+    }
+
+    const { data, error } = await query;
     if (error) {
+      console.error("Error loading smart missions:", error);
       toast.error("حدث خطأ أثناء جلب المهام");
     } else if (data) {
       const formatted = data.map((d: any) => ({
@@ -226,7 +256,8 @@ export default function SmartMissionsGrid() {
     }
 
     for (const row of modifiedRows) {
-      if (row.status === "planned") {
+      const isGlobalAdmin = hasRole("admin") || hasRole("data_manager") || hasRole("management");
+      if (row.status === "planned" || isGlobalAdmin) {
         const { error } = await supabase
           .from("missions")
           .update({
@@ -332,7 +363,8 @@ export default function SmartMissionsGrid() {
   const handleDeleteMission = async (row: MissionRow) => {
     if (!confirm("هل أنت متأكد من رغبتك في مسح هذه المهمة؟")) return;
 
-    if (row.status === "planned") {
+    const isGlobalAdmin = hasRole("admin") || hasRole("data_manager") || hasRole("management");
+    if (row.status === "planned" || isGlobalAdmin) {
       const { error } = await supabase.from("missions").delete().eq("id", row.id);
       if (error) {
         toast.error("حدث خطأ أثناء المسح");

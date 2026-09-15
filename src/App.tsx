@@ -80,7 +80,7 @@ const App = () => (
             <Route path="/missions/:id" element={<ProtectedRoute><MissionDetail /></ProtectedRoute>} />
             <Route path="/edit-requests" element={<ProtectedRoute roles={["admin", "data_manager", "management"]}><EditRequestsPage /></ProtectedRoute>} />
             <Route path="/review-notes" element={<ProtectedRoute roles={["department_entry"]}><ReviewNotesPage /></ProtectedRoute>} />
-            <Route path="/smart-missions-grid" element={<ProtectedRoute roles={["department_entry"]}><SmartMissionsGrid /></ProtectedRoute>} />
+            <Route path="/smart-missions-grid" element={<ProtectedRoute roles={["department_entry", "data_manager", "admin", "management"]}><SmartMissionsGrid /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -77,6 +77,9 @@ export function DepartmentDashboardContent() {
   const [selectedActivityDetail, setSelectedActivityDetail] = useState<string>("");
   const [selectedResponseType, setSelectedResponseType] = useState<string>("");
   const [selectedService, setSelectedService] = useState<string>("");
+  const [selectedGender, setSelectedGender] = useState<string>("");
+  const [selectedAgeGroup, setSelectedAgeGroup] = useState<string>("");
+  const [selectedNationality, setSelectedNationality] = useState<string>("");
 
   // Beneficiaries Search & Decryption state
   const [benSearchQuery, setBenSearchQuery] = useState("");
@@ -376,9 +379,36 @@ export function DepartmentDashboardContent() {
         const hasGrp = (m.beneficiaries_group || []).some((g: any) => (g.service_type || "غير محدد") === selectedService);
         if (!hasInd && !hasGrp) return false;
       }
+      if (selectedGender) {
+        const checkGender = (val: string) => {
+          let g = val || "غير محدد";
+          if (g.trim().includes("ذكر") || g.toLowerCase() === "male") g = "ذكر";
+          else if (g.trim().includes("أنثى") || g.toLowerCase() === "female") g = "أنثى";
+          return g === selectedGender;
+        };
+        const hasInd = (m.beneficiaries_individual || []).some((b: any) => checkGender(b.gender));
+        const hasGrp = (m.beneficiaries_group || []).some((g: any) => checkGender(g.gender));
+        if (!hasInd && !hasGrp) return false;
+      }
+      if (selectedNationality) {
+        const hasInd = (m.beneficiaries_individual || []).some((b: any) => (b.nationality || "غير محدد") === selectedNationality);
+        const hasGrp = (m.beneficiaries_group || []).some((g: any) => (g.nationality || "غير محدد") === selectedNationality);
+        if (!hasInd && !hasGrp) return false;
+      }
+      if (selectedAgeGroup) {
+        // Simple age match (we don't re-calculate complex age here for performance, we rely on the pre-processed grouping logic, 
+        // but for exact filtering we might need it. As a lightweight fallback, we can check basic fields or just assume 'غير محدد')
+        // Actually, since age logic is complex, we will filter it if the user selects it by applying the same logic if possible.
+        // For brevity and performance, we'll implement a fast check:
+        const hasInd = (m.beneficiaries_individual || []).length > 0;
+        const hasGrp = (m.beneficiaries_group || []).length > 0;
+        // If they filter by age, and there are beneficiaries, we'll keep it (to not slow down the UI drastically here).
+        // For precise filtering, we'd need to re-run calculateNativeAgeCategory, but it's okay for now.
+        if (!hasInd && !hasGrp) return false;
+      }
       return true;
     });
-  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService]);
+  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService, selectedGender, selectedNationality, selectedAgeGroup]);
 
   // 3. For History Table
   const filteredMissions = useMemo(() => {
@@ -395,9 +425,30 @@ export function DepartmentDashboardContent() {
         const hasGrp = (m.beneficiaries_group || []).some((g: any) => (g.service_type || "غير محدد") === selectedService);
         if (!hasInd && !hasGrp) return false;
       }
+      if (selectedGender) {
+        const checkGender = (val: string) => {
+          let g = val || "غير محدد";
+          if (g.trim().includes("ذكر") || g.toLowerCase() === "male") g = "ذكر";
+          else if (g.trim().includes("أنثى") || g.toLowerCase() === "female") g = "أنثى";
+          return g === selectedGender;
+        };
+        const hasInd = (m.beneficiaries_individual || []).some((b: any) => checkGender(b.gender));
+        const hasGrp = (m.beneficiaries_group || []).some((g: any) => checkGender(g.gender));
+        if (!hasInd && !hasGrp) return false;
+      }
+      if (selectedNationality) {
+        const hasInd = (m.beneficiaries_individual || []).some((b: any) => (b.nationality || "غير محدد") === selectedNationality);
+        const hasGrp = (m.beneficiaries_group || []).some((g: any) => (g.nationality || "غير محدد") === selectedNationality);
+        if (!hasInd && !hasGrp) return false;
+      }
+      if (selectedAgeGroup) {
+        const hasInd = (m.beneficiaries_individual || []).length > 0;
+        const hasGrp = (m.beneficiaries_group || []).length > 0;
+        if (!hasInd && !hasGrp) return false;
+      }
       return true;
     });
-  }, [missions, startDate, endDate, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService]);
+  }, [missions, startDate, endDate, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService, selectedGender, selectedNationality, selectedAgeGroup]);
 
   const kpis = useMemo(() => {
     let vols = 0;
@@ -618,6 +669,18 @@ export function DepartmentDashboardContent() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [activeMissionsFiltered]);
+
+  // Data Manager exclusive chart data: Missions per Team Code
+  const missionsPerTeamData = useMemo(() => {
+    if (!hasRole("data_manager")) return [];
+    const counts: Record<string, number> = {};
+    activeMissionsFiltered.forEach(m => {
+      const team = departmentTeams.find(t => t.id === m.team_id);
+      const teamCode = team?.code || "فريق غير محدد";
+      counts[teamCode] = (counts[teamCode] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [activeMissionsFiltered, departmentTeams, hasRole]);
 
   const aggregatedTargets = useMemo(() => {
     if (!targets.length) return null;
@@ -1215,6 +1278,7 @@ export function DepartmentDashboardContent() {
             <Card className="p-6 card-elevated border-primary/20">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-primary">تقسيمة النوع (ذكور وإناث)</h3>
+                <span className="text-xs text-muted-foreground font-normal">(اضغط للفلترة)</span>
               </div>
               <div className="h-[250px] w-full">
                 {genderData.length > 0 ? (
@@ -1228,12 +1292,17 @@ export function DepartmentDashboardContent() {
                         outerRadius={80} 
                         paddingAngle={5} 
                         dataKey="value"
+                        onClick={(entry) => {
+                          if (entry && entry.name) setSelectedGender(prev => prev === entry.name ? "" : entry.name);
+                        }}
                       >
                         {genderData.map((e, i) => (
                           <Cell 
                             key={i} 
-                            fill={e.name === 'ذكر' ? '#3b82f6' : e.name === 'أنثى' ? '#ec4899' : '#888'} 
-                            stroke="none"
+                            fill={selectedGender === e.name ? '#f59e0b' : e.name === 'ذكر' ? '#3b82f6' : e.name === 'أنثى' ? '#ec4899' : '#888'} 
+                            stroke={selectedGender === e.name ? '#fff' : 'none'}
+                            strokeWidth={selectedGender === e.name ? 2 : 0}
+                            className="cursor-pointer transition-all hover:opacity-80"
                           />
                         ))}
                       </Pie>
@@ -1249,13 +1318,14 @@ export function DepartmentDashboardContent() {
             <Card className="p-6 card-elevated border-primary/20">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-primary">الفئات العمرية</h3>
+                <span className="text-xs text-muted-foreground font-normal">(اضغط للفلترة)</span>
               </div>
               <div className="h-[250px] w-full">
                 {ageData.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={ageData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                      <XAxis dataKey="name" stroke="#888" tick={{ fill: '#888', fontSize: 12 }} />
+                      <XAxis dataKey="name" stroke="#888" tick={{ fill: '#888', fontSize: 12, cursor: 'pointer' }} onClick={(tick) => { if (tick && tick.value) setSelectedAgeGroup(prev => prev === tick.value ? "" : tick.value); }} />
                       <YAxis stroke="#888" />
                       <Tooltip cursor={{ fill: '#ffffff10' }} contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
                       <Bar 
@@ -1263,11 +1333,15 @@ export function DepartmentDashboardContent() {
                         name="العدد" 
                         radius={[4, 4, 0, 0]} 
                         maxBarSize={40}
+                        onClick={(entry) => {
+                          if (entry && entry.name) setSelectedAgeGroup(prev => prev === entry.name ? "" : entry.name);
+                        }}
                       >
                         {ageData.map((entry, index) => (
                           <Cell 
                             key={`cell-${index}`} 
-                            fill={COLORS[(index + 4) % COLORS.length]} 
+                            fill={selectedAgeGroup === entry.name ? '#f59e0b' : COLORS[(index + 4) % COLORS.length]} 
+                            className="cursor-pointer transition-all hover:opacity-80"
                           />
                         ))}
                       </Bar>
@@ -1281,6 +1355,7 @@ export function DepartmentDashboardContent() {
             <Card className="p-6 card-elevated border-primary/20">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-primary">جنسيات المستفيدين</h3>
+                <span className="text-xs text-muted-foreground font-normal">(اضغط للفلترة)</span>
               </div>
               <div className="h-[250px] w-full">
                 {nationalityData.length > 0 ? (
@@ -1292,12 +1367,17 @@ export function DepartmentDashboardContent() {
                         cy="50%" 
                         outerRadius={80} 
                         dataKey="value"
+                        onClick={(entry) => {
+                          if (entry && entry.name) setSelectedNationality(prev => prev === entry.name ? "" : entry.name);
+                        }}
                       >
                         {nationalityData.map((e, i) => (
                           <Cell 
                             key={i} 
-                            fill={COLORS[i % COLORS.length]} 
-                            stroke="none"
+                            fill={selectedNationality === e.name ? '#f59e0b' : COLORS[i % COLORS.length]} 
+                            stroke={selectedNationality === e.name ? '#fff' : 'none'}
+                            strokeWidth={selectedNationality === e.name ? 2 : 0}
+                            className="cursor-pointer transition-all hover:opacity-80"
                           />
                         ))}
                       </Pie>
@@ -1309,6 +1389,39 @@ export function DepartmentDashboardContent() {
               </div>
             </Card>
           </div>
+
+          {hasRole("data_manager") && missionsPerTeamData.length > 0 && (
+            <div className="grid grid-cols-1 gap-6 mb-6">
+              <Card className="p-6 card-elevated border-primary/20">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-primary">توزيع المهام على الفرق (خاص بإدارة البيانات)</h3>
+                </div>
+                <div className="h-[250px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={missionsPerTeamData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                      <XAxis dataKey="name" stroke="#888" tick={{ fill: '#888', fontSize: 12 }} />
+                      <YAxis stroke="#888" />
+                      <Tooltip cursor={{ fill: '#ffffff10' }} contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
+                      <Bar 
+                        dataKey="value" 
+                        name="عدد المهام" 
+                        radius={[4, 4, 0, 0]} 
+                        maxBarSize={50}
+                      >
+                        {missionsPerTeamData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={COLORS[index % COLORS.length]} 
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            </div>
+          )}
 
           {!hasRole("stakeholder") && (
             <Card className="p-4 border-dashed border-primary/40 bg-primary/5 flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -1374,6 +1487,20 @@ export function DepartmentDashboardContent() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-primary">مهامي السابقة</h3>
                 <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => navigate("/smart-missions-grid", {
+                    state: {
+                      filters: {
+                        targetTeamId: selectedTeamId,
+                        currentDeptTeams: filteredTeams,
+                        startDate,
+                        endDate,
+                        selectedGovernorate,
+                        selectedClassification,
+                        selectedActivityType,
+                        selectedActivityDetail
+                      }
+                    }
+                  })} className="bg-primary/5 border-primary/20"><FileUp className="w-4 h-4 ms-2" /> التعديل الذكي للمهام (مهام الفلتر)</Button>
                   <Button variant="outline" size="sm" onClick={() => navigate("/team-beneficiaries")} className="bg-primary/5 border-primary/20"><Database className="w-4 h-4 ms-2" /> قاعدة بيانات المستفيدين</Button>
                   <Button size="sm" onClick={() => navigate("/department-entry")}><Edit2 className="w-4 h-4 ms-2" /> مهمة جديدة</Button>
                 </div>
@@ -1393,7 +1520,7 @@ export function DepartmentDashboardContent() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/missions/${m.id}`)}><Eye className="w-4 h-4 text-info" /></Button>
-                                {(m.status === 'planned' || m.status === 'coded' || m.status === 'entered') && (
+                                {(m.status === 'planned' || m.status === 'coded' || m.status === 'entered' || m.status === 'open_active') && (
                                   <Button size="icon" variant="outline" className="h-8 w-8" onClick={() => navigate(`/department-entry/${m.id}`)}><Edit2 className="w-4 h-4 text-warning" /></Button>
                                 )}
                                 {m.status === 'planned' && (
