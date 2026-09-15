@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { toast } from "sonner";
-import { Loader2, Save, Send, Edit, RefreshCw, AlertCircle, Trash2 } from "lucide-react";
+import { Loader2, Save, Send, Edit, RefreshCw, AlertCircle, Trash2, Filter } from "lucide-react";
 
 interface MissionRow {
   id: string;
@@ -49,6 +49,21 @@ export default function SmartMissionsGrid() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+
+  // Column filters state
+  const [filters, setFilters] = useState<Record<string, string>>({});
+
+  // Multi-cell selection and range state for Excel-like experience
+  const [selectedCell, setSelectedCell] = useState<{ row: number; col: number } | null>(null);
+  const [selectionRange, setSelectionRange] = useState<{ startRow: number; startCol: number; endRow: number; endCol: number } | null>(null);
+  const [isMouseDown, setIsMouseDown] = useState(false);
+
+  // Refs to access latest state inside global event listeners
+  const missionsRef = React.useRef(missions);
+  const filteredRef = React.useRef<MissionRow[]>([]);
+  const selectionRef = React.useRef(selectionRange);
+  React.useEffect(() => { missionsRef.current = missions; }, [missions]);
+  React.useEffect(() => { selectionRef.current = selectionRange; }, [selectionRange]);
 
   // Fetch options for selects
   const govOptions = useDropdownOptions("governorate").options;
@@ -100,9 +115,8 @@ export default function SmartMissionsGrid() {
     loadMissions();
   }, [profile?.team_id]);
 
-  const handleChange = (rowIndex: number, key: string, value: string) => {
-    const updated = [...missions];
-    updated[rowIndex][key] = value;
+  const handleChange = (id: string, key: string, value: string) => {
+    const updated = missions.map(m => m.id === id ? { ...m, [key]: value } : m);
     setMissions(updated);
   };
 
@@ -110,35 +124,100 @@ export default function SmartMissionsGrid() {
     e.preventDefault();
     const pasteData = e.clipboardData.getData("text");
     if (!pasteData) return;
+    applyPaste(pasteData, startRowIndex, startColIndex);
+  };
 
+  // Filtered missions based on column filters
+  const filteredMissions = missions.filter(row => {
+    return COLUMNS.every(col => {
+      const filterVal = filters[col.key];
+      if (!filterVal) return true;
+      const cellVal = String(row[col.key] || "").toLowerCase();
+      return cellVal.includes(filterVal.toLowerCase());
+    });
+  });
+
+  // Keep filteredRef in sync for global paste listener
+  React.useEffect(() => { filteredRef.current = filteredMissions; });
+
+  const applyPaste = (pasteData: string, startRowIndex: number, startColIndex: number) => {
+    const range = selectionRef.current;
+    const updatedMissions = [...missionsRef.current];
+    const filtered = filteredRef.current;
+
+    // If multi-row or multi-col selection, fill every selected cell with the first value
+    if (range) {
+      const minR = Math.min(range.startRow, range.endRow);
+      const maxR = Math.max(range.startRow, range.endRow);
+      const minC = Math.min(range.startCol, range.endCol);
+      const maxC = Math.max(range.startCol, range.endCol);
+      const isMultiCell = maxR > minR || maxC > minC;
+
+      if (isMultiCell) {
+        const firstValue = pasteData.split("\n")[0].split("\t")[0].trim();
+        for (let r = minR; r <= maxR; r++) {
+          const targetRow = filtered[r];
+          if (!targetRow) continue;
+          const idx = updatedMissions.findIndex(m => m.id === targetRow.id);
+          if (idx === -1) continue;
+          for (let c = minC; c <= maxC; c++) {
+            const colKey = COLUMNS[c]?.key;
+            if (colKey) updatedMissions[idx][colKey] = firstValue;
+          }
+        }
+        setMissions(updatedMissions);
+        toast.success(`تم لصق القيمة في ${(maxR - minR + 1) * (maxC - minC + 1)} خلية، لا تنس الحفظ!`);
+        return;
+      }
+    }
+
+    // Single-cell or normal paste: fill from anchor downwards (Excel-like)
     const rows = pasteData.split("\n").map(r => r.split("\t"));
-    const updatedMissions = [...missions];
-
     for (let r = 0; r < rows.length; r++) {
-      const targetRowIndex = startRowIndex + r;
-      if (targetRowIndex >= updatedMissions.length) break;
+      const targetFilteredRowIndex = startRowIndex + r;
+      if (targetFilteredRowIndex >= filtered.length) break;
+      const targetRow = filtered[targetFilteredRowIndex];
+      const actualRowIndex = updatedMissions.findIndex(m => m.id === targetRow.id);
+      if (actualRowIndex === -1) continue;
 
       for (let c = 0; c < rows[r].length; c++) {
         const targetColIndex = startColIndex + c;
         if (targetColIndex >= COLUMNS.length) break;
-
         const colKey = COLUMNS[targetColIndex].key;
-        let value = rows[r][c].trim();
-        if (value) {
-           updatedMissions[targetRowIndex][colKey] = value;
-        }
+        const value = rows[r][c].trim();
+        if (value) updatedMissions[actualRowIndex][colKey] = value;
       }
     }
     setMissions(updatedMissions);
     toast.success("تم لصق البيانات بنجاح، لا تنس الحفظ!");
   };
 
+  // Global paste listener so Ctrl+V works on selection even if no input is focused
+  React.useEffect(() => {
+    const onGlobalPaste = (e: ClipboardEvent) => {
+      const range = selectionRef.current;
+      if (!range) return;
+      const minR = Math.min(range.startRow, range.endRow);
+      const minC = Math.min(range.startCol, range.endCol);
+      const isMultiCell =
+        Math.max(range.startRow, range.endRow) > minR ||
+        Math.max(range.startCol, range.endCol) > minC;
+      if (!isMultiCell) return; // Let the input's own onPaste handle single-cell
+      e.preventDefault();
+      const pasteData = e.clipboardData?.getData("text") || "";
+      if (!pasteData) return;
+      applyPaste(pasteData, minR, minC);
+    };
+    document.addEventListener("paste", onGlobalPaste);
+    return () => document.removeEventListener("paste", onGlobalPaste);
+  }, []);
+
   const saveChanges = async () => {
     setSaving(true);
     let successCount = 0;
     
     // Find modified rows
-    const modifiedRows = missions.filter((m, i) => JSON.stringify(m) !== JSON.stringify(originalMissions[i]));
+    const modifiedRows = missions.filter((m, i) => JSON.stringify(m) !== JSON.stringify(originalMissions.find(om => om.id === m.id)));
     
     if (modifiedRows.length === 0) {
       toast("لا توجد تعديلات لحفظها");
@@ -290,7 +369,7 @@ export default function SmartMissionsGrid() {
               تعديل المهام
             </h2>
             <p className="text-sm text-muted-foreground">
-              يمكنك تعديل المسودات أو المهام المرسلة عبر النسخ واللصق من Excel، ثم حفظ التعديلات وإرسال المهمة.
+              يمكنك تعديل المسودات أو المهام المرسلة عبر النسخ واللصق من Excel، مع فلترة الأعمدة وحفظ التعديلات والإرسال.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -317,48 +396,95 @@ export default function SmartMissionsGrid() {
               <Table className="min-w-max">
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    {COLUMNS.map(col => (
-                      <TableHead key={col.key} className="font-bold text-right border-x border-border/50 px-2 min-w-[150px]">
-                        {col.label}
-                      </TableHead>
-                    ))}
-                    <TableHead className="font-bold text-center border-r border-border/50 bg-muted/90 w-[180px]">إجراءات</TableHead>
+                    {COLUMNS.map(col => {
+                      // Build unique values for this column from all missions
+                      const uniqueVals = Array.from(
+                        new Set(missions.map(m => String(m[col.key] || "")).filter(v => v))
+                      ).sort();
+                      return (
+                        <TableHead key={col.key} className="font-bold text-right border-x border-border/50 px-2 min-w-[150px]">
+                          <div className="flex flex-col gap-1.5 py-1">
+                            <span>{col.label}</span>
+                            <select
+                              value={filters[col.key] || ""}
+                              onChange={(e) => setFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
+                              className="h-7 text-xs bg-background border border-border/60 rounded px-1 w-full cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                              style={{ direction: 'rtl' }}
+                            >
+                              <option value="">⬦ الكل ({missions.filter(m => !Object.entries(filters).filter(([k]) => k !== col.key).every(([k,v]) => !v || String(m[k]||'').includes(v))).length === 0 ? uniqueVals.length : uniqueVals.length})</option>
+                              {uniqueVals.map(val => (
+                                <option key={val} value={val}>{val || "(فارغ)"}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </TableHead>
+                      );
+                    })}
+                    <TableHead className="font-bold text-center border-r border-border/50 bg-muted/90 w-[180px] align-middle">إجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {missions.map((row, rowIndex) => (
+                  {filteredMissions.map((row, rowIndex) => (
                     <TableRow key={row.id} className="hover:bg-muted/30">
-                      {COLUMNS.map((col, colIndex) => (
-                        <TableCell key={col.key} className="p-1 border-x border-border/50">
-                          {col.type === "select" ? (
-                            <Input
-                              value={row[col.key]}
-                              onChange={(e) => handleChange(rowIndex, col.key, e.target.value)}
-                              onPaste={(e) => handlePaste(e, rowIndex, colIndex)}
-                              className="h-9 border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary rounded-none shadow-none text-sm w-full"
-                              placeholder={col.label}
-                              list={`datalist-${col.key}`}
-                            />
-                          ) : (
-                            <Input
-                              type={col.type === "date" ? "date" : "text"}
-                              value={row[col.key]}
-                              onChange={(e) => handleChange(rowIndex, col.key, e.target.value)}
-                              onPaste={(e) => handlePaste(e, rowIndex, colIndex)}
-                              className="h-9 border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary rounded-none shadow-none text-sm w-full"
-                              placeholder={col.label}
-                            />
-                          )}
-                          {col.type === "select" && (
-                            <datalist id={`datalist-${col.key}`}>
-                              {optionsMap[col.optionsKey!]?.map((opt: any) => (
-                                <option key={opt.id} value={opt.value} />
-                              ))}
-                            </datalist>
-                          )}
-                        </TableCell>
-                      ))}
-                      <TableCell className="p-1.5 border-r border-border/50 bg-card w-[200px]">
+                      {COLUMNS.map((col, colIndex) => {
+                        const isSelected = selectedCell?.row === rowIndex && selectedCell?.col === colIndex;
+                        const isInRange = selectionRange && 
+                          rowIndex >= Math.min(selectionRange.startRow, selectionRange.endRow) &&
+                          rowIndex <= Math.max(selectionRange.startRow, selectionRange.endRow) &&
+                          colIndex >= Math.min(selectionRange.startCol, selectionRange.endCol) &&
+                          colIndex <= Math.max(selectionRange.startCol, selectionRange.endCol);
+
+                        return (
+                          <TableCell 
+                            key={col.key} 
+                            className={`p-1 border-x border-border/50 ${isSelected ? 'ring-2 ring-primary bg-primary/5' : isInRange ? 'bg-primary/5' : ''}`}
+                            onMouseDown={() => {
+                              setSelectedCell({ row: rowIndex, col: colIndex });
+                              setSelectionRange({ startRow: rowIndex, startCol: colIndex, endRow: rowIndex, endCol: colIndex });
+                              setIsMouseDown(true);
+                            }}
+                            onMouseEnter={() => {
+                              if (isMouseDown && selectedCell) {
+                                setSelectionRange({
+                                  startRow: selectedCell.row,
+                                  startCol: selectedCell.col,
+                                  endRow: rowIndex,
+                                  endCol: colIndex
+                                });
+                              }
+                            }}
+                            onMouseUp={() => setIsMouseDown(false)}
+                          >
+                            {col.type === "select" ? (
+                              <Input
+                                value={row[col.key]}
+                                onChange={(e) => handleChange(row.id, col.key, e.target.value)}
+                                onPaste={(e) => handlePaste(e, rowIndex, colIndex)}
+                                className="h-9 border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary rounded-none shadow-none text-sm w-full"
+                                placeholder={col.label}
+                                list={`datalist-${col.key}`}
+                              />
+                            ) : (
+                              <Input
+                                type={col.type === "date" ? "date" : "text"}
+                                value={row[col.key]}
+                                onChange={(e) => handleChange(row.id, col.key, e.target.value)}
+                                onPaste={(e) => handlePaste(e, rowIndex, colIndex)}
+                                className="h-9 border-0 bg-transparent focus-visible:ring-1 focus-visible:ring-primary rounded-none shadow-none text-sm w-full"
+                                placeholder={col.label}
+                              />
+                            )}
+                            {col.type === "select" && (
+                              <datalist id={`datalist-${col.key}`}>
+                                {optionsMap[col.optionsKey!]?.map((opt: any) => (
+                                  <option key={opt.id} value={opt.value} />
+                                ))}
+                              </datalist>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="p-1.5 border-r border-border/50 bg-card w-[200px] align-middle">
                         <div className="flex items-center justify-center gap-1.5">
                           <Button 
                             size="sm" 

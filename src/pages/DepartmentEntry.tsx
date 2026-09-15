@@ -102,13 +102,15 @@ function TeamVolunteerCombobox({
 }
 
 export default function DepartmentEntry() {
-  const { user, profile } = useAuth();
+  const { user, profile, hasRole } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const { options: projectCodeTeams } = useDropdownOptions("project_code_teams");
+  const { options: activityDetailsOptions } = useDropdownOptions("activity_details");
 
   const teamCode = profile?.team_code || "";
   const [teamId, setTeamId] = useState(profile?.team_id ?? "");
+  const [departmentId, setDepartmentId] = useState(profile?.department_id ?? "");
   const [projectCode, setProjectCode] = useState("");
   const [governorate, setGovernorate] = useState("");
   const [activityClassification, setActivityClassification] = useState("");
@@ -139,13 +141,16 @@ export default function DepartmentEntry() {
 
   // Track if the mission being edited is already submitted (coded or beyond)
   const [originalMissionStatus, setOriginalMissionStatus] = useState<string | null>(null);
-  const isEditRequest = !!id && !!originalMissionStatus && originalMissionStatus !== "planned";
+  
+  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin") || hasRole("stakeholder") || hasRole("data_manager");
+  // Admins/Data Managers bypass edit requests and edit directly
+  const isEditRequest = !!id && !!originalMissionStatus && originalMissionStatus !== "planned" && !isManagementOrAdmin;
 
   const today = new Date().toISOString().split('T')[0];
   const isLateSubmission = activityDate ? activityDate < today : false;
 
   useEffect(() => {
-    const tid = profile?.team_id;
+    const tid = teamId;
     if (tid) {
       const fetchTeamVolunteers = async () => {
         const { data, error } = await supabase
@@ -164,12 +169,13 @@ export default function DepartmentEntry() {
       };
       fetchTeamVolunteers();
     }
-  }, [profile?.team_id]);
+  }, [teamId]);
 
   useEffect(() => {
     if (profile?.team_id && !id) setTeamId(profile.team_id);
+    if (profile?.department_id && !id) setDepartmentId(profile.department_id);
     
-    if (profile?.department_id) {
+    if (departmentId) {
       const fetchIndicators = async () => {
         const { data } = await supabase.from('department_goals')
           .select('*, department_objectives(*, department_indicators(*, indicator_teams(team_id)))')
@@ -187,7 +193,7 @@ export default function DepartmentEntry() {
             if (ind.target_type === 'service_type') return false; // never show in mission entry
             const assignedTeams = ind.indicator_teams?.map((it: any) => it.team_id) || [];
             if (assignedTeams.length === 0) return true; // no restriction, show to all
-            return profile?.team_id && assignedTeams.includes(profile.team_id); // only show if team is assigned
+            return teamId && assignedTeams.includes(teamId); // only show if team is assigned
           });
 
           const uniqueIndicators: any[] = [];
@@ -205,7 +211,7 @@ export default function DepartmentEntry() {
       };
       fetchIndicators();
     }
-  }, [profile, id]);
+  }, [departmentId, teamId, id, profile]);
 
   useEffect(() => {
     if (id) {
@@ -215,6 +221,7 @@ export default function DepartmentEntry() {
         if (mission) {
           setOriginalMissionStatus(mission.status || null);
           setTeamId(mission.team_id || "");
+          setDepartmentId(mission.department_id || "");
           setProjectCode(mission.project_code || "");
           setGovernorate(mission.governorate || "");
           setActivityClassification(mission.activity_classification || "");
@@ -484,7 +491,7 @@ export default function DepartmentEntry() {
         )}
 
 
-        {!profile?.team_id && (
+        {!profile?.team_id && !id && (
           <Card className="p-4 border-warning/50 bg-warning/10 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
             <div className="text-sm">
@@ -514,8 +521,13 @@ export default function DepartmentEntry() {
               <Select value={indicatorId || activityDetails} onValueChange={(val) => {
                 if (indicators.some(i => i.id === val)) {
                   setIndicatorId(val);
+                } else if (activityDetailsOptions.some(o => o.id === val || o.value === val)) {
+                  const opt = activityDetailsOptions.find(o => o.id === val || o.value === val);
+                  setActivityDetails(opt?.value || val);
+                  setIndicatorId(""); // Clear indicator ID if a generic option is chosen
                 } else {
                   setActivityDetails(val); // fallback for legacy strings
+                  setIndicatorId("");
                 }
               }}>
                 <SelectTrigger><SelectValue placeholder="اختر تفاصيل النشاط" /></SelectTrigger>
@@ -523,9 +535,12 @@ export default function DepartmentEntry() {
                   {indicators.map(ind => (
                     <SelectItem key={ind.id} value={ind.id}>{ind.title}</SelectItem>
                   ))}
-                  {indicators.length === 0 && <div className="p-2 text-sm text-muted-foreground">لا توجد مؤشرات للإدارة. تواصل مع مدير الإدارة.</div>}
+                  {activityDetailsOptions.filter(opt => !indicators.some(ind => ind.id === opt.id || ind.title === opt.value)).map(opt => (
+                    <SelectItem key={opt.id} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                  {indicators.length === 0 && activityDetailsOptions.length === 0 && <div className="p-2 text-sm text-muted-foreground">لا توجد تفاصيل للإدارة. تواصل مع مدير الإدارة.</div>}
                   {/* Fallback for old missions that have text details not in the DB */}
-                  {activityDetails && !indicators.some(i => i.id === activityDetails) && !indicators.some(i => i.title === activityDetails) && (
+                  {activityDetails && !indicators.some(i => i.id === activityDetails) && !indicators.some(i => i.title === activityDetails) && !activityDetailsOptions.some(o => o.value === activityDetails) && (
                     <SelectItem value={activityDetails}>{activityDetails}</SelectItem>
                   )}
                 </SelectContent>

@@ -85,6 +85,8 @@ export default function DepartmentGoals() {
 
     if (isTopLevel) {
       promises.push(supabase.from('departments').select('id, name, code').order('code'));
+    } else if (activeDeptId) {
+      promises.push(supabase.from('departments').select('id, name, code').eq('id', activeDeptId));
     } else {
       promises.push(Promise.resolve({ data: null }));
     }
@@ -137,7 +139,9 @@ export default function DepartmentGoals() {
     return max;
   };
 
-  const nextGoalCode = `G${getMaxNumber(goals, 'G', /^G(\d+)$/) + 1}`;
+  const activeDept = departments.find(d => d.id === activeDeptId);
+  const deptCodePrefix = activeDept?.code ? `${activeDept.code}-` : '';
+  const nextGoalCode = `${deptCodePrefix}G${getMaxNumber(goals, 'G', /G(\d+)$/) + 1}`;
   
   const currentGoalForObj = goals.find(g => g.id === newObj.goal_id);
   const nextObjCode = currentGoalForObj 
@@ -207,7 +211,8 @@ export default function DepartmentGoals() {
       start_date: newInd.start_date || null,
       end_date: newInd.end_date || null,
       source_of_fund: newInd.source_of_fund || null,
-      team_id: newInd.target_type === 'service_type' ? (newIndTeams[0] || null) : null
+      team_id: newInd.target_type === 'service_type' ? (newIndTeams[0] || null) : null,
+      manual_progress: newInd.target_type === 'manual' ? (newInd.manual_progress || 0) : 0
     };
 
     const { data: indData, error } = await supabase.from('department_indicators').insert(insertData).select().single();
@@ -224,7 +229,7 @@ export default function DepartmentGoals() {
       );
     }
 
-    setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" });
+    setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, manual_progress: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" });
     setNewIndTeams([]);
     await loadData();
     setIsSubmitting(false);
@@ -266,6 +271,7 @@ export default function DepartmentGoals() {
       end_date: editInd.end_date || null,
       source_of_fund: editInd.source_of_fund || null,
       team_id: editInd.target_type === 'service_type' ? (editIndTeams[0] || null) : null,
+      manual_progress: editInd.target_type === 'manual' ? (editInd.manual_progress || 0) : 0,
       notes: editInd.notes || null,
     };
 
@@ -396,6 +402,7 @@ export default function DepartmentGoals() {
                     <SelectItem value="beneficiaries">حساب بعدد المستفيدين</SelectItem>
                     <SelectItem value="missions">حساب بعدد الأنشطة/المهمات</SelectItem>
                     <SelectItem value="service_type">حساب بنوع الخدمة</SelectItem>
+                    <SelectItem value="manual">مؤشر يدوي</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -428,6 +435,11 @@ export default function DepartmentGoals() {
 
               <div className="space-y-2"><Label>وحدة القياس</Label><Input value={editInd?.unit || ''} onChange={e => setEditInd({ ...editInd, unit: e.target.value })} /></div>
               <div className="space-y-2"><Label>العدد المستهدف (Target)</Label><Input type="number" min="1" value={editInd?.target_value || 0} onChange={e => setEditInd({ ...editInd, target_value: parseInt(e.target.value) || 0 })} /></div>
+              
+              {editInd?.target_type === 'manual' && (
+                <div className="space-y-2"><Label>التم تحقيقه (للمؤشر اليدوي)</Label><Input type="number" min="0" value={editInd?.manual_progress || 0} onChange={e => setEditInd({ ...editInd, manual_progress: parseInt(e.target.value) || 0 })} /></div>
+              )}
+
               <div className="space-y-2"><Label>جهة التمويل</Label><Input value={editInd?.source_of_fund || ''} onChange={e => setEditInd({ ...editInd, source_of_fund: e.target.value })} /></div>
               
               <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="date" value={editInd?.start_date || ''} onChange={e => setEditInd({ ...editInd, start_date: e.target.value })} /></div>
@@ -530,6 +542,7 @@ export default function DepartmentGoals() {
                                         <SelectItem value="beneficiaries">حساب بعدد المستفيدين</SelectItem>
                                         <SelectItem value="missions">حساب بعدد الأنشطة/المهمات</SelectItem>
                                         <SelectItem value="service_type">حساب بنوع الخدمة</SelectItem>
+                                        <SelectItem value="manual">مؤشر يدوي</SelectItem>
                                       </SelectContent>
                                     </Select>
                                   </div>
@@ -563,6 +576,11 @@ export default function DepartmentGoals() {
                                   <div className="space-y-2"><Label>وحدة القياس</Label><Input value={newInd.unit} onChange={e => setNewInd({...newInd, unit: e.target.value})} placeholder="فرد، جلسة، حملة..." /></div>
                                   
                                   <div className="space-y-2"><Label>العدد المستهدف (Target)</Label><Input type="number" min="1" value={newInd.target_value} onChange={e => setNewInd({...newInd, target_value: parseInt(e.target.value) || 0})} /></div>
+                                  
+                                  {newInd.target_type === 'manual' && (
+                                    <div className="space-y-2"><Label>التم تحقيقه (للمؤشر اليدوي)</Label><Input type="number" min="0" value={newInd.manual_progress || 0} onChange={e => setNewInd({...newInd, manual_progress: parseInt(e.target.value) || 0})} /></div>
+                                  )}
+
                                   <div className="space-y-2"><Label>جهة التمويل</Label><Input value={newInd.source_of_fund} onChange={e => setNewInd({...newInd, source_of_fund: e.target.value})} /></div>
                                   
                                   <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="date" value={newInd.start_date} onChange={e => setNewInd({...newInd, start_date: e.target.value})} /></div>

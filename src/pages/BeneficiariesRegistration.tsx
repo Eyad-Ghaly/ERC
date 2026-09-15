@@ -108,6 +108,7 @@ export default function BeneficiariesRegistration() {
   // Custom fields for this team
   const [customFieldDefs, setCustomFieldDefs] = useState<any[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const [groupCustomValues, setGroupCustomValues] = useState<Record<string, string>>({});
 
   // Registry lookup
   const [registryMatch, setRegistryMatch] = useState<any | null>(null);
@@ -438,10 +439,12 @@ export default function BeneficiariesRegistration() {
         .then(({ data }) => {
           setCustomFieldDefs(data ?? []);
           setCustomValues({});
+          setGroupCustomValues({});
         });
     } else {
       setCustomFieldDefs([]);
       setCustomValues({});
+      setGroupCustomValues({});
     }
   }, [selectedTargetId, targets]);
 
@@ -607,6 +610,7 @@ export default function BeneficiariesRegistration() {
             service_type: groupServiceType || null,
             service_quantity: parseInt(groupServiceQuantity) || 1,
             is_repeated: isGroupRepeated,
+            custom_metadata: Object.keys(groupCustomValues).length > 0 ? groupCustomValues : null,
           });
         }
       });
@@ -628,6 +632,7 @@ export default function BeneficiariesRegistration() {
         "ذكر": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
         "أنثى": { "رضيع": "", "طفل": "", "بالغ": "", "كبار سن": "" },
       });
+      setGroupCustomValues({});
       fetchRegistered(target);
     }
   };
@@ -816,7 +821,7 @@ export default function BeneficiariesRegistration() {
                     </div>
                   )}
 
-                  {customFieldDefs.map(f => {
+                  {customFieldDefs.filter((f: any) => f.show_in === 'individual' || f.show_in === 'both' || !f.show_in).map(f => {
                       const optionsList = (f.field_options || []).flatMap((opt: string) => 
                         typeof opt === "string" ? opt.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [opt]
                       );
@@ -945,6 +950,58 @@ export default function BeneficiariesRegistration() {
                     </div>
                     <p className="text-xs text-muted-foreground">أدخل العدد في الخلية المناسبة. سيتم تجاهل الخلايا الفارغة أو التي تحتوي على صفر.</p>
                   </div>
+
+                  {customFieldDefs.filter((f: any) => f.show_in === 'group' || f.show_in === 'both').length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-border/50">
+                      <h3 className="font-bold text-primary mb-2">معلومات إضافية للمجموعة</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        {customFieldDefs.filter((f: any) => f.show_in === 'group' || f.show_in === 'both').map(f => {
+                          const optionsList = (f.field_options || []).flatMap((opt: string) => 
+                            typeof opt === "string" ? opt.split(/[,،\n]+/).map(s => s.trim()).filter(Boolean) : [opt]
+                          );
+                          return (
+                            <div key={f.field_key} className="space-y-1.5">
+                              <Label>{f.field_label}{f.is_required && "*"}</Label>
+                              {f.field_type === "select" ? (
+                                <Select value={groupCustomValues[f.field_key] ?? ""} onValueChange={(v) => setGroupCustomValues(prev => ({ ...prev, [f.field_key]: v }))}>
+                                  <SelectTrigger><SelectValue placeholder="اختر..." /></SelectTrigger>
+                                  <SelectContent>
+                                    {optionsList.map((opt: string, i: number) => (
+                                      <SelectItem key={`${opt}-${i}`} value={opt}>{opt}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : f.field_type === "multiselect" ? (
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                  {optionsList.map((opt: string, i: number) => {
+                                    const currentSelected = groupCustomValues[f.field_key] ? groupCustomValues[f.field_key].split(', ') : [];
+                                    const isSelected = currentSelected.includes(opt);
+                                    return (
+                                      <Badge 
+                                        key={`${opt}-${i}`} 
+                                        variant={isSelected ? "default" : "outline"}
+                                        className="cursor-pointer select-none text-sm px-3 py-1"
+                                        onClick={() => {
+                                          const newSelected = isSelected 
+                                            ? currentSelected.filter((v: string) => v !== opt)
+                                            : [...currentSelected, opt];
+                                          setGroupCustomValues(prev => ({ ...prev, [f.field_key]: newSelected.join(', ') }));
+                                        }}
+                                      >
+                                        {opt}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <Input type={f.field_type === "number" ? "number" : f.field_type === "date" ? "date" : "text"} value={groupCustomValues[f.field_key] ?? ""} onChange={(e) => setGroupCustomValues(prev => ({ ...prev, [f.field_key]: e.target.value }))} />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <Button onClick={submitGroup} disabled={busy} className="w-full md:w-auto mt-4" variant="secondary">
                     <Users className="w-4 h-4 ml-2"/> حفظ المجموعة

@@ -609,6 +609,7 @@ function CustomFieldsTab() {
   const [newType, setNewType] = useState("text");
   const [newOptions, setNewOptions] = useState("");
   const [newRequired, setNewRequired] = useState(false);
+  const [newShowIn, setNewShowIn] = useState("individual");
 
   useEffect(() => { supabase.from("teams").select("id, code").then(({ data }) => setTeams(data ?? [])); }, []);
   
@@ -651,6 +652,7 @@ function CustomFieldsTab() {
         field_type: newType,
         field_options: optionsArr,
         is_required: newRequired,
+        show_in: newShowIn,
         sort_order: fields.length,
       };
 
@@ -667,7 +669,7 @@ function CustomFieldsTab() {
       }
 
       toast.success("تم إضافة الحقل بنجاح");
-      setNewLabel(""); setNewKey(""); setNewType("text"); setNewOptions(""); setNewRequired(false);
+      setNewLabel(""); setNewKey(""); setNewType("text"); setNewOptions(""); setNewRequired(false); setNewShowIn("individual");
       loadFields(teamId);
     } catch (err: any) {
       console.error("addField error:", err);
@@ -697,6 +699,7 @@ function CustomFieldsTab() {
   const [editType, setEditType] = useState("text");
   const [editOptions, setEditOptions] = useState("");
   const [editRequired, setEditRequired] = useState(false);
+  const [editShowIn, setEditShowIn] = useState("individual");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const openEditModal = (f: any) => {
@@ -710,6 +713,7 @@ function CustomFieldsTab() {
     );
     setEditOptions(parsedOpts.join("، "));
     setEditRequired(!!f.is_required);
+    setEditShowIn(f.show_in || "individual");
   };
 
   const handleSaveEdit = async () => {
@@ -732,6 +736,7 @@ function CustomFieldsTab() {
         field_type: editType,
         field_options: optionsArr,
         is_required: editRequired,
+        show_in: editShowIn,
       } : f));
 
       const { error } = await supabase
@@ -742,6 +747,7 @@ function CustomFieldsTab() {
           field_type: editType,
           field_options: optionsArr,
           is_required: editRequired,
+          show_in: editShowIn,
         })
         .eq("id", editingField.id);
 
@@ -810,6 +816,17 @@ function CustomFieldsTab() {
                   <Input value={newOptions} onChange={e => setNewOptions(e.target.value)} placeholder="باطنة, عظام, أطفال" />
                 </div>
               )}
+              <div className="space-y-1.5">
+                <Label>يظهر في</Label>
+                <Select value={newShowIn} onValueChange={setNewShowIn}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="individual">التسجيل الفردي</SelectItem>
+                    <SelectItem value="group">التسجيل الجماعي</SelectItem>
+                    <SelectItem value="both">كلاهما</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex items-center gap-3 pt-5">
                 <Checkbox id="new_required" checked={newRequired} onCheckedChange={(v: any) => setNewRequired(!!v)} />
                 <label htmlFor="new_required" className="text-sm cursor-pointer">حقل إجباري</label>
@@ -841,6 +858,7 @@ function CustomFieldsTab() {
                     <TableHead>النوع</TableHead>
                     <TableHead>الخيارات</TableHead>
                     <TableHead>إجباري</TableHead>
+                    <TableHead>يظهر في</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -866,6 +884,11 @@ function CustomFieldsTab() {
                         {f.is_required
                           ? <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">إجباري</Badge>
                           : <span className="text-muted-foreground text-xs">اختياري</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {f.show_in === 'group' ? 'الجماعي' : f.show_in === 'both' ? 'كلاهما' : 'الفردي'}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -920,6 +943,17 @@ function CustomFieldsTab() {
                 <Input value={editOptions} onChange={e => setEditOptions(e.target.value)} placeholder="باطنة، عظام، أطفال" />
               </div>
             )}
+            <div className="space-y-1.5">
+              <Label>يظهر في</Label>
+              <Select value={editShowIn} onValueChange={setEditShowIn}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="individual">التسجيل الفردي</SelectItem>
+                  <SelectItem value="group">التسجيل الجماعي</SelectItem>
+                  <SelectItem value="both">كلاهما</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-3 pt-2">
               <Checkbox id="edit_required" checked={editRequired} onCheckedChange={(v: any) => setEditRequired(!!v)} />
               <label htmlFor="edit_required" className="text-sm cursor-pointer">حقل إجباري</label>

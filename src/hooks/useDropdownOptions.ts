@@ -31,7 +31,11 @@ export function useDropdownOptions(fieldKey: string) {
         .eq("field_key", fieldKey)
         .eq("active", true);
 
-      if (profile?.team_id) {
+      const isGlobalAdmin = hasRole("admin") || hasRole("data_manager");
+
+      if (isGlobalAdmin) {
+        // Global admins see everything, no team filter
+      } else if (profile?.team_id) {
         query = query.or(`team_id.is.null,team_id.eq.${profile.team_id}`);
       } else {
         query = query.is("team_id", null);
@@ -41,7 +45,7 @@ export function useDropdownOptions(fieldKey: string) {
 
       let filtered = (all ?? []) as DropdownOption[];
 
-      if (user && !hasRole("admin")) {
+      if (user && !isGlobalAdmin) {
         const { data: restrictions } = await supabase
           .from("user_dropdown_options")
           .select("option_id")
@@ -67,7 +71,7 @@ export function useDropdownOptions(fieldKey: string) {
           indQuery = indQuery.neq("target_type", "service_type");
         }
 
-        if (profile?.team_id) {
+        if (profile?.team_id && !isGlobalAdmin) {
           indQuery = indQuery.eq("team_id", profile.team_id);
         }
 

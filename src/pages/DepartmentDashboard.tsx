@@ -51,12 +51,12 @@ async function decryptData(encryptedBase64: string): Promise<string> {
   }
 }
 
-export default function DepartmentDashboard() {
+export function DepartmentDashboardContent() {
   const { user, profile, roles, hasRole } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
 
-  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin") || hasRole("stakeholder");
+  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin") || hasRole("stakeholder") || hasRole("data_manager");
 
   // Department & Teams state
   const [departments, setDepartments] = useState<any[]>([]);
@@ -126,7 +126,7 @@ export default function DepartmentDashboard() {
       if (targetTeamId && targetTeamId !== "all") {
         query = query.eq("team_id", targetTeamId);
       } else if (targetTeamId === "all") {
-        if (!roles.includes("admin") && !roles.includes("management") && !roles.includes("department_admin") && !roles.includes("stakeholder")) {
+        if (!isManagementOrAdmin) {
           // For entry users, show everything in their active team
           if (profile?.team_id) {
              query = query.eq("team_id", profile.team_id);
@@ -269,7 +269,7 @@ export default function DepartmentDashboard() {
     if (!user) return;
     const initData = async () => {
       let deptTeams: any[] = [];
-      let isTop = roles.includes("admin") || roles.includes("stakeholder");
+      let isTop = roles.includes("admin") || roles.includes("stakeholder") || roles.includes("data_manager");
 
       if (isTop) {
         const { data: dData } = await supabase.from("departments").select("id, name, code").order("code");
@@ -786,7 +786,7 @@ export default function DepartmentDashboard() {
   };
 
   return (
-    <AppLayout title={isManagementOrAdmin ? "لوحة معلومات الفرق والإدارة" : "لوحة معلومات فريقي"}>
+    <>
       {isManagementOrAdmin && (
         <Card className="p-4 card-elevated border-primary/30 gradient-soft flex flex-wrap items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
@@ -803,7 +803,7 @@ export default function DepartmentDashboard() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[260px]">
-            {(hasRole("admin") || hasRole("stakeholder")) && departments.length > 0 && (
+            {(hasRole("admin") || hasRole("stakeholder") || hasRole("data_manager")) && departments.length > 0 && (
               <Select value={selectedDeptId} onValueChange={handleDeptChange}>
                 <SelectTrigger className="w-[200px] font-bold bg-background shadow-sm">
                   <SelectValue placeholder="اختر الإدارة" />
@@ -1410,6 +1410,16 @@ export default function DepartmentDashboard() {
           )}
         </TabsContent>
       </Tabs>
+    </>
+  );
+}
+
+export default function DepartmentDashboard() {
+  const { hasRole } = useAuth();
+  const isManagementOrAdmin = hasRole("management") || hasRole("department_admin") || hasRole("admin") || hasRole("stakeholder") || hasRole("data_manager");
+  return (
+    <AppLayout title={isManagementOrAdmin ? "لوحة معلومات الفرق والإدارة" : "لوحة معلومات فريقي"}>
+      <DepartmentDashboardContent />
     </AppLayout>
   );
 }

@@ -19,6 +19,7 @@ import Supervisor from "./pages/Supervisor.tsx";
 import Youth from "./pages/Youth.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import DataManager from "./pages/DataManager.tsx";
+import DataManagerOperations from "./pages/DataManagerOperations.tsx";
 import Admin from "./pages/Admin.tsx";
 import MissionDetail from "./pages/MissionDetail.tsx";
 import BeneficiariesRegistration from "./pages/BeneficiariesRegistration.tsx";
@@ -52,8 +53,8 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
 
             <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><DepartmentDashboard /></ProtectedRoute>} />
-            <Route path="/department-entry" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
-            <Route path="/department-entry/:id" element={<ProtectedRoute roles={["department_entry"]}><DepartmentEntry /></ProtectedRoute>} />
+            <Route path="/department-entry" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><DepartmentEntry /></ProtectedRoute>} />
+            <Route path="/department-entry/:id" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><DepartmentEntry /></ProtectedRoute>} />
             <Route path="/department-goals" element={<ProtectedRoute roles={["department_entry", "department_admin", "admin", "stakeholder"]}><DepartmentGoals /></ProtectedRoute>} />
             <Route path="/team-targets" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><TeamTargets /></ProtectedRoute>} />
             <Route path="/mission-feedback" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><MissionFeedback /></ProtectedRoute>} />
@@ -71,6 +72,7 @@ const App = () => (
             <Route path="/branch-youth" element={<ProtectedRoute roles={["branch_youth"]}><BranchYouthDashboard /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute roles={["stakeholder", "admin"]}><StakeholderDashboard /></ProtectedRoute>} />
             <Route path="/data-manager" element={<ProtectedRoute roles={["data_manager"]}><DataManager /></ProtectedRoute>} />
+            <Route path="/data-manager-operations" element={<ProtectedRoute roles={["data_manager", "admin"]}><DataManagerOperations /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><Admin /></ProtectedRoute>} />
             <Route path="/team-beneficiaries" element={<ProtectedRoute roles={["department_entry"]}><TeamBeneficiaries /></ProtectedRoute>} />
             <Route path="/team-volunteers" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><TeamVolunteers /></ProtectedRoute>} />
