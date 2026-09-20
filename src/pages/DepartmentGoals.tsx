@@ -58,7 +58,7 @@ export default function DepartmentGoals() {
   const [editInd, setEditInd] = useState<any>(null);
   
   const isDeptAdmin = hasRole('department_admin') || hasRole('admin') || true;
-  const isTopLevel = hasRole('admin') || hasRole('stakeholder');
+  const isTopLevel = hasRole('admin') || hasRole('stakeholder') || hasRole('data_manager');
 
   const loadData = async () => {
     // If not selected yet, try to set to user's department or fetch departments if top level

@@ -56,7 +56,7 @@ const App = () => (
             <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><DepartmentDashboard /></ProtectedRoute>} />
             <Route path="/department-entry" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><DepartmentEntry /></ProtectedRoute>} />
             <Route path="/department-entry/:id" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><DepartmentEntry /></ProtectedRoute>} />
-            <Route path="/department-goals" element={<ProtectedRoute roles={["department_entry", "department_admin", "admin", "stakeholder"]}><DepartmentGoals /></ProtectedRoute>} />
+            <Route path="/department-goals" element={<ProtectedRoute roles={["department_entry", "department_admin", "admin", "stakeholder", "data_manager"]}><DepartmentGoals /></ProtectedRoute>} />
             <Route path="/team-targets" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><TeamTargets /></ProtectedRoute>} />
             <Route path="/mission-feedback" element={<ProtectedRoute roles={["department_entry", "data_manager"]}><MissionFeedback /></ProtectedRoute>} />
             <Route path="/beneficiaries-registration" element={<ProtectedRoute roles={["department_entry"]}><BeneficiariesRegistration /></ProtectedRoute>} />

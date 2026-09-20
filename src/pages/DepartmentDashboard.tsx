@@ -80,6 +80,7 @@ export function DepartmentDashboardContent() {
   const [selectedGender, setSelectedGender] = useState<string>("");
   const [selectedAgeGroup, setSelectedAgeGroup] = useState<string>("");
   const [selectedNationality, setSelectedNationality] = useState<string>("");
+  const [selectedClassificationName, setSelectedClassificationName] = useState<string>("");
 
   // Beneficiaries Search & Decryption state
   const [benSearchQuery, setBenSearchQuery] = useState("");
@@ -417,9 +418,11 @@ export function DepartmentDashboardContent() {
         // For precise filtering, we'd need to re-run calculateNativeAgeCategory, but it's okay for now.
         if (!hasInd && !hasGrp) return false;
       }
+      if (selectedClassificationName && ((m as any).classification_name || "غير محدد") !== selectedClassificationName) return false;
       return true;
     });
-  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService, selectedGender, selectedNationality, selectedAgeGroup]);
+  }, [activeMissionsAll, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService, selectedGender, selectedNationality, selectedAgeGroup, selectedClassificationName]);
+
 
   // 3. For History Table
   const filteredMissions = useMemo(() => {
@@ -457,9 +460,10 @@ export function DepartmentDashboardContent() {
         const hasGrp = (m.beneficiaries_group || []).length > 0;
         if (!hasInd && !hasGrp) return false;
       }
+      if (selectedClassificationName && ((m as any).classification_name || "غير محدد") !== selectedClassificationName) return false;
       return true;
     });
-  }, [missions, startDate, endDate, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService, selectedGender, selectedNationality, selectedAgeGroup]);
+  }, [missions, startDate, endDate, selectedGovernorate, selectedClassification, selectedActivityType, selectedResponseType, selectedActivityDetail, selectedService, selectedGender, selectedNationality, selectedAgeGroup, selectedClassificationName]);
 
   const kpis = useMemo(() => {
     let vols = 0;
@@ -692,6 +696,16 @@ export function DepartmentDashboardContent() {
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [activeMissionsFiltered, departmentTeams, hasRole]);
+
+  const missionsPerClassificationData = useMemo(() => {
+    if (!hasRole("data_manager")) return [];
+    const counts: Record<string, number> = {};
+    activeMissionsFiltered.forEach(m => {
+      const cls = (m as any).classification_name || "غير محدد";
+      counts[cls] = (counts[cls] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [activeMissionsFiltered, hasRole]);
 
   const aggregatedTargets = useMemo(() => {
     if (!targets.length) return null;
@@ -948,7 +962,7 @@ export function DepartmentDashboardContent() {
             </Button>
           </Card>
 
-          {(selectedGovernorate || selectedClassification || selectedActivityType || selectedResponseType || selectedActivityDetail || selectedService) && (
+          {(selectedGovernorate || selectedClassification || selectedActivityType || selectedResponseType || selectedActivityDetail || selectedService || selectedClassificationName) && (
             <div className="flex flex-wrap items-center gap-2 bg-primary/10 p-3.5 rounded-xl border border-primary/30 animate-in fade-in duration-200">
               <span className="text-sm font-bold text-primary flex items-center gap-1.5">
                 <Filter className="w-4 h-4" />
@@ -990,6 +1004,12 @@ export function DepartmentDashboardContent() {
                   <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedService("")} />
                 </Badge>
               )}
+              {selectedClassificationName && (
+                <Badge variant="default" className="gap-1.5 bg-amber-500 text-white py-1 px-3 text-xs font-bold">
+                  اسم التصنيف: {selectedClassificationName}
+                  <X className="w-3.5 h-3.5 cursor-pointer hover:text-amber-200" onClick={() => setSelectedClassificationName("")} />
+                </Badge>
+              )}
               <Button 
                 variant="ghost" 
                 size="sm" 
@@ -1001,6 +1021,7 @@ export function DepartmentDashboardContent() {
                   setSelectedResponseType("");
                   setSelectedActivityDetail("");
                   setSelectedService("");
+                  setSelectedClassificationName("");
                 }}
               >
                 إلغاء تصفية الرسم البياني
@@ -1424,6 +1445,45 @@ export function DepartmentDashboardContent() {
                           <Cell 
                             key={`cell-${index}`} 
                             fill={COLORS[index % COLORS.length]} 
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {hasRole("data_manager") && missionsPerClassificationData.length > 0 && (
+            <div className="grid grid-cols-1 gap-6 mb-6">
+              <Card className="p-6 card-elevated border-primary/20">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-primary">توزيع المهام حسب اسم التصنيف</h3>
+                  <div className="flex items-center gap-3">
+                    {selectedClassificationName && (
+                      <button onClick={() => setSelectedClassificationName("")} className="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1">
+                        <X className="w-3 h-3" /> إلغاء الفلتر
+                      </button>
+                    )}
+                    <span className="text-xs text-muted-foreground">{activeMissionsFiltered.length} مهمة إجمالاً · (اضغط للفلترة)</span>
+                  </div>
+                </div>
+                <div className="h-[250px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={missionsPerClassificationData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                      <XAxis dataKey="name" stroke="#888" tick={{ fill: '#888', fontSize: 11, cursor: 'pointer' }} onClick={(tick) => { if (tick?.value) setSelectedClassificationName(prev => prev === tick.value ? "" : tick.value); }} />
+                      <YAxis stroke="#888" />
+                      <Tooltip cursor={{ fill: '#ffffff10' }} contentStyle={{ backgroundColor: '#1e1e2d', borderColor: '#333', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
+                      <Bar dataKey="value" name="عدد المهام" radius={[4, 4, 0, 0]} maxBarSize={50}
+                        onClick={(entry) => { if (entry?.name) setSelectedClassificationName(prev => prev === entry.name ? "" : entry.name); }}
+                      >
+                        {missionsPerClassificationData.map((entry, index) => (
+                          <Cell
+                            key={`cls-cell-${index}`}
+                            fill={selectedClassificationName === entry.name ? '#f59e0b' : COLORS[index % COLORS.length]}
+                            className="cursor-pointer transition-all hover:opacity-80"
                           />
                         ))}
                       </Bar>

@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 import { toast } from "sonner";
-import { Loader2, Save, Send, Edit, RefreshCw, AlertCircle, Trash2, Filter } from "lucide-react";
+import { Loader2, Save, Send, Edit, RefreshCw, AlertCircle, Trash2 } from "lucide-react";
 
 interface MissionRow {
   id: string;
@@ -22,6 +22,7 @@ interface MissionRow {
   follow_up_responsible: string;
   follow_up_phone: string;
   activity_details: string;
+  classification_name: string;
   project_code?: string;
   team_id?: string;
   status?: string;
@@ -33,6 +34,7 @@ const COLUMNS = [
   { key: "mission_name", label: "اسم المهمة", type: "text" },
   { key: "activity_date", label: "التاريخ", type: "date" },
   { key: "governorate", label: "المحافظة", type: "select", optionsKey: "governorate" },
+  { key: "classification_name", label: "اسم التصنيف", type: "select", optionsKey: "classification_name" },
   { key: "activity_classification", label: "تصنيف النشاط", type: "select", optionsKey: "activity_classification" },
   { key: "activity_type", label: "نوع النشاط", type: "select", optionsKey: "activity_type" },
   { key: "activity_details", label: "تفاصيل النشاط", type: "text" },
@@ -72,11 +74,13 @@ export default function SmartMissionsGrid() {
   const govOptions = useDropdownOptions("governorate").options;
   const classOptions = useDropdownOptions("activity_classification").options;
   const typeOptions = useDropdownOptions("activity_type").options;
+  const classNameOptions = useDropdownOptions("classification_name").options;
 
   const optionsMap: Record<string, any[]> = {
     governorate: govOptions,
     activity_classification: classOptions,
     activity_type: typeOptions,
+    classification_name: classNameOptions,
   };
 
   const loadMissions = async () => {
@@ -101,7 +105,7 @@ export default function SmartMissionsGrid() {
       } else if (profile?.team_id && !(hasRole("admin") || hasRole("data_manager") || hasRole("management"))) {
         query = query.eq("team_id", profile.team_id);
       }
-      
+
       if (dashboardFilters.startDate) query = query.gte("activity_date", dashboardFilters.startDate);
       if (dashboardFilters.endDate) query = query.lte("activity_date", dashboardFilters.endDate);
       if (dashboardFilters.selectedGovernorate) query = query.eq("governorate", dashboardFilters.selectedGovernorate);
@@ -131,6 +135,7 @@ export default function SmartMissionsGrid() {
         governorate: d.governorate || "",
         activity_classification: d.activity_classification || "",
         activity_type: d.activity_type || "",
+        classification_name: d.classification_name || "",
         activity_details: d.activity_details || "",
         execution_place: d.execution_place || "",
         follow_up_responsible: d.follow_up_responsible || "",
@@ -250,10 +255,10 @@ export default function SmartMissionsGrid() {
   const saveChanges = async () => {
     setSaving(true);
     let successCount = 0;
-    
+
     // Find modified rows
     const modifiedRows = missions.filter((m, i) => JSON.stringify(m) !== JSON.stringify(originalMissions.find(om => om.id === m.id)));
-    
+
     if (modifiedRows.length === 0) {
       toast("لا توجد تعديلات لحفظها");
       setSaving(false);
@@ -290,6 +295,7 @@ export default function SmartMissionsGrid() {
             mission_name: row.mission_name,
             activity_date: row.activity_date,
             governorate: row.governorate,
+            classification_name: row.classification_name,
             activity_classification: row.activity_classification,
             activity_type: row.activity_type,
             activity_details: row.activity_details,
@@ -299,7 +305,7 @@ export default function SmartMissionsGrid() {
           },
           status: "pending",
         });
-        
+
         if (!error) successCount++;
       }
     }
@@ -327,7 +333,7 @@ export default function SmartMissionsGrid() {
     try {
       // 1. Generate code
       const { data: generatedCode, error: codeErr } = await supabase.rpc("generate_mission_code", {
-        _project_code: row.project_code || profile?.team_code || "", 
+        _project_code: row.project_code || profile?.team_code || "",
         _team_code: profile?.team_code || "",
       });
       if (codeErr) throw codeErr;
@@ -342,6 +348,7 @@ export default function SmartMissionsGrid() {
           mission_name: row.mission_name,
           activity_date: row.activity_date,
           governorate: row.governorate,
+          classification_name: row.classification_name,
           activity_classification: row.activity_classification,
           activity_type: row.activity_type,
           activity_details: row.activity_details,
@@ -374,7 +381,7 @@ export default function SmartMissionsGrid() {
         .from("missions")
         .delete({ count: "exact" })
         .eq("id", row.id);
-      
+
       if (error) {
         toast.error("حدث خطأ أثناء المسح");
       } else if (count === 0) {
@@ -454,7 +461,7 @@ export default function SmartMissionsGrid() {
                               className="h-7 text-xs bg-background border border-border/60 rounded px-1 w-full cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
                               style={{ direction: 'rtl' }}
                             >
-                              <option value="">⬦ الكل ({missions.filter(m => !Object.entries(filters).filter(([k]) => k !== col.key).every(([k,v]) => !v || String(m[k]||'').includes(v))).length === 0 ? uniqueVals.length : uniqueVals.length})</option>
+                              <option value="">⬦ الكل ({uniqueVals.length})</option>
                               {uniqueVals.map(val => (
                                 <option key={val} value={val}>{val || "(فارغ)"}</option>
                               ))}
@@ -471,15 +478,15 @@ export default function SmartMissionsGrid() {
                     <TableRow key={row.id} className="hover:bg-muted/30">
                       {COLUMNS.map((col, colIndex) => {
                         const isSelected = selectedCell?.row === rowIndex && selectedCell?.col === colIndex;
-                        const isInRange = selectionRange && 
+                        const isInRange = selectionRange &&
                           rowIndex >= Math.min(selectionRange.startRow, selectionRange.endRow) &&
                           rowIndex <= Math.max(selectionRange.startRow, selectionRange.endRow) &&
                           colIndex >= Math.min(selectionRange.startCol, selectionRange.endCol) &&
                           colIndex <= Math.max(selectionRange.startCol, selectionRange.endCol);
 
                         return (
-                          <TableCell 
-                            key={col.key} 
+                          <TableCell
+                            key={col.key}
                             className={`p-1 border-x border-border/50 ${isSelected ? 'ring-2 ring-primary bg-primary/5' : isInRange ? 'bg-primary/5' : ''}`}
                             onMouseDown={() => {
                               setSelectedCell({ row: rowIndex, col: colIndex });
@@ -529,9 +536,9 @@ export default function SmartMissionsGrid() {
                       })}
                       <TableCell className="p-1.5 border-r border-border/50 bg-card w-[200px] align-middle">
                         <div className="flex items-center justify-center gap-1.5">
-                          <Button 
-                            size="sm" 
-                            variant="secondary" 
+                          <Button
+                            size="sm"
+                            variant="secondary"
                             onClick={() => navigate(`/department-entry/${row.id}`)}
                             title="تعديل تفاصيل المهمة (متطوعين وغيره)"
                             className="h-8 px-2 text-xs"
@@ -540,9 +547,9 @@ export default function SmartMissionsGrid() {
                             دخول
                           </Button>
                           {row.status === "planned" ? (
-                            <Button 
-                              size="sm" 
-                              onClick={() => submitMission(row)} 
+                            <Button
+                              size="sm"
+                              onClick={() => submitMission(row)}
                               disabled={submittingId === row.id}
                               className="h-8 gap-1 text-xs"
                             >
@@ -554,9 +561,9 @@ export default function SmartMissionsGrid() {
                               {row.mission_code || "مرسلة"}
                             </div>
                           )}
-                          <Button 
-                            size="sm" 
-                            variant="destructive" 
+                          <Button
+                            size="sm"
+                            variant="destructive"
                             onClick={() => handleDeleteMission(row)}
                             title="مسح المهمة"
                             className="h-8 px-2 text-xs"
