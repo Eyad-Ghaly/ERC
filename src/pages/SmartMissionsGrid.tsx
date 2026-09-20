@@ -84,9 +84,14 @@ export default function SmartMissionsGrid() {
     let query = supabase
       .from("missions")
       .select("*")
-      .in("status", ["planned", "coded", "open_active"])
       .order("created_at", { ascending: false })
       .limit(1000);
+
+    // When coming from dashboard with filters, show all statuses for those filtered missions.
+    // Otherwise restrict to editable statuses only.
+    if (!dashboardFilters) {
+      query = query.in("status", ["planned", "coded", "open_active"]);
+    }
 
     if (dashboardFilters) {
       if (dashboardFilters.targetTeamId && dashboardFilters.targetTeamId !== "all") {
@@ -100,7 +105,7 @@ export default function SmartMissionsGrid() {
       if (dashboardFilters.startDate) query = query.gte("activity_date", dashboardFilters.startDate);
       if (dashboardFilters.endDate) query = query.lte("activity_date", dashboardFilters.endDate);
       if (dashboardFilters.selectedGovernorate) query = query.eq("governorate", dashboardFilters.selectedGovernorate);
-      if (dashboardFilters.selectedClassification) query = query.eq("classification_name", dashboardFilters.selectedClassification);
+      if (dashboardFilters.selectedClassification) query = query.eq("activity_classification", dashboardFilters.selectedClassification);
       if (dashboardFilters.selectedActivityType) query = query.eq("activity_type", dashboardFilters.selectedActivityType);
       if (dashboardFilters.selectedActivityDetail) query = query.eq("activity_details", dashboardFilters.selectedActivityDetail);
     } else {
