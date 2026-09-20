@@ -38,6 +38,7 @@ import EditRequestsPage from "./pages/EditRequestsPage.tsx";
 import ReviewNotesPage from "./pages/ReviewNotesPage.tsx";
 import StakeholderDashboard from "./pages/StakeholderDashboard.tsx";
 import SmartMissionsGrid from "./pages/SmartMissionsGrid.tsx";
+import CEODashboard from "./pages/CEODashboard.tsx";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ const App = () => (
             <Route path="/edit-requests" element={<ProtectedRoute roles={["admin", "data_manager", "management"]}><EditRequestsPage /></ProtectedRoute>} />
             <Route path="/review-notes" element={<ProtectedRoute roles={["department_entry"]}><ReviewNotesPage /></ProtectedRoute>} />
             <Route path="/smart-missions-grid" element={<ProtectedRoute roles={["department_entry", "data_manager", "admin", "management"]}><SmartMissionsGrid /></ProtectedRoute>} />
+            <Route path="/ceo-dashboard" element={<ProtectedRoute roles={["admin", "stakeholder"]}><CEODashboard /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

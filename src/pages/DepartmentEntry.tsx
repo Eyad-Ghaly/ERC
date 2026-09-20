@@ -138,6 +138,9 @@ export default function DepartmentEntry() {
   const [teamVolunteers, setTeamVolunteers] = useState<any[]>([]);
   const [nonVolunteers, setNonVolunteers] = useState<{ full_name: string; role: string; }[]>([]);
   const [busy, setBusy] = useState(false);
+  // useRef guard ensures concurrent rapid clicks can't both pass the busy check
+  // (setState is async so two clicks before re-render both see the old false value)
+  const busyRef = useRef(false);
 
   // Track if the mission being edited is already submitted (coded or beyond)
   const [originalMissionStatus, setOriginalMissionStatus] = useState<string | null>(null);
@@ -299,11 +302,13 @@ export default function DepartmentEntry() {
   // Submit an edit request instead of direct update (for submitted missions)
   const submitEditRequest = async () => {
     if (!user || !id) return;
+    if (busyRef.current) return;
     if (!missionName.trim()) { toast.error("أدخل اسم المهمة"); return; }
     if (!activityDate) { toast.error("أدخل تاريخ النشاط"); return; }
     if (!followUpResponsible.trim()) { toast.error("أدخل مسؤول المتابعة"); return; }
     if (!/^\d{11}$/.test(followUpPhone.trim())) { toast.error("رقم تليفون مسؤول المتابعة يجب أن يكون 11 رقماً"); return; }
 
+    busyRef.current = true;
     setBusy(true);
     try {
       const changes: Record<string, any> = {
@@ -352,18 +357,24 @@ export default function DepartmentEntry() {
     } catch (e: any) {
       toast.error(e.message || "فشل إرسال طلب التعديل");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
 
   const submit = async (sendNow: boolean) => {
     if (!user) return;
+    // Synchronous guard: prevents double-submit from rapid clicks before re-render
+    if (busyRef.current) return;
+
+    // Validate first (before setting busy) so we don't lock on validation errors
     if (!teamId) { toast.error("لا يوجد فريق مرتبط بحسابك. تواصل مع المدير."); return; }
     if (!missionName.trim()) { toast.error("أدخل اسم المهمة"); return; }
     if (!activityDate) { toast.error("أدخل تاريخ النشاط"); return; }
     if (!followUpResponsible.trim()) { toast.error("أدخل مسؤول المتابعة"); return; }
     if (!/^\d{11}$/.test(followUpPhone.trim())) { toast.error("رقم تليفون مسؤول المتابعة يجب أن يكون 11 رقماً"); return; }
 
+    busyRef.current = true;
     setBusy(true);
     try {
       let currentMissionId = id;
@@ -473,6 +484,7 @@ export default function DepartmentEntry() {
     } catch (e: any) {
       toast.error(e.message || "فشل الحفظ");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };

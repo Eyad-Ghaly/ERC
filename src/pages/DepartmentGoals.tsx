@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2, Save, Target, LayoutList, CheckCircle2, AlertCircle, Edit, ChevronDown, ChevronUp } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useDropdownOptions } from "@/hooks/useDropdownOptions";
 
 export default function DepartmentGoals() {
   const { profile, hasRole } = useAuth();
@@ -22,6 +23,9 @@ export default function DepartmentGoals() {
   const [activeDeptId, setActiveDeptId] = useState<string | null>(profile?.department_id || null);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { options: activityClassificationOptions } = useDropdownOptions("activity_classification", true);
+  const { options: sourceOfFundOptions } = useDropdownOptions("source_of_fund", true);
+  
   // Multi-team selection for new/edit indicator
   const [newIndTeams, setNewIndTeams] = useState<string[]>([]);
   const [editIndTeams, setEditIndTeams] = useState<string[]>([]);
@@ -45,7 +49,7 @@ export default function DepartmentGoals() {
   const [newObj, setNewObj] = useState({ goal_id: "", code: "", title: "" });
   const [newInd, setNewInd] = useState({ 
     objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", 
-    target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" 
+    target_value: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "", sector: "" 
   });
   
   // States for editing items
@@ -211,6 +215,7 @@ export default function DepartmentGoals() {
       start_date: newInd.start_date || null,
       end_date: newInd.end_date || null,
       source_of_fund: newInd.source_of_fund || null,
+      sector: newInd.sector || null,
       team_id: newInd.target_type === 'service_type' ? (newIndTeams[0] || null) : null,
       manual_progress: newInd.target_type === 'manual' ? (newInd.manual_progress || 0) : 0
     };
@@ -229,7 +234,7 @@ export default function DepartmentGoals() {
       );
     }
 
-    setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, manual_progress: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "" });
+    setNewInd({ objective_id: "", code: "", title: "", unit: "فرد", target_type: "beneficiaries", target_value: 0, manual_progress: 0, start_date: "", end_date: "", source_of_fund: "", team_id: "", sector: "" });
     setNewIndTeams([]);
     await loadData();
     setIsSubmitting(false);
@@ -263,13 +268,14 @@ export default function DepartmentGoals() {
     if (editInd.target_type === 'service_type' && editIndTeams.length === 0) return toast.error("يجب تحديد فريق واحد على الأقل لحساب بنوع الخدمة");
 
     const updateData: any = {
-      title: editInd.title,
-      unit: editInd.unit || "فرد",
+      title: editInd.title.trim(),
+      unit: editInd.unit,
       target_type: editInd.target_type,
       target_value: editInd.target_value,
       start_date: editInd.start_date || null,
       end_date: editInd.end_date || null,
       source_of_fund: editInd.source_of_fund || null,
+      sector: editInd.sector || null,
       team_id: editInd.target_type === 'service_type' ? (editIndTeams[0] || null) : null,
       manual_progress: editInd.target_type === 'manual' ? (editInd.manual_progress || 0) : 0,
       notes: editInd.notes || null,
@@ -440,7 +446,31 @@ export default function DepartmentGoals() {
                 <div className="space-y-2"><Label>التم تحقيقه (للمؤشر اليدوي)</Label><Input type="number" min="0" value={editInd?.manual_progress || 0} onChange={e => setEditInd({ ...editInd, manual_progress: parseInt(e.target.value) || 0 })} /></div>
               )}
 
-              <div className="space-y-2"><Label>جهة التمويل</Label><Input value={editInd?.source_of_fund || ''} onChange={e => setEditInd({ ...editInd, source_of_fund: e.target.value })} /></div>
+              <div className="space-y-2">
+                <Label>القطاع (تصنيف النشاط)</Label>
+                <Select value={editInd?.sector || "none"} onValueChange={v => setEditInd({...editInd, sector: v === "none" ? "" : v})}>
+                  <SelectTrigger><SelectValue placeholder="اختر القطاع (اختياري)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بدون قطاع</SelectItem>
+                    {activityClassificationOptions.map(opt => (
+                      <SelectItem key={opt.id} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>جهة التمويل (المشروع)</Label>
+                <Select value={editInd?.source_of_fund || "none"} onValueChange={v => setEditInd({...editInd, source_of_fund: v === "none" ? "" : v})}>
+                  <SelectTrigger><SelectValue placeholder="اختر جهة التمويل (اختياري)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">بدون جهة تمويل</SelectItem>
+                    {sourceOfFundOptions.map(opt => (
+                      <SelectItem key={opt.id} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               
               <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="date" value={editInd?.start_date || ''} onChange={e => setEditInd({ ...editInd, start_date: e.target.value })} /></div>
               <div className="space-y-2"><Label>تاريخ النهاية</Label><Input type="date" value={editInd?.end_date || ''} onChange={e => setEditInd({ ...editInd, end_date: e.target.value })} /></div>
@@ -581,7 +611,31 @@ export default function DepartmentGoals() {
                                     <div className="space-y-2"><Label>التم تحقيقه (للمؤشر اليدوي)</Label><Input type="number" min="0" value={newInd.manual_progress || 0} onChange={e => setNewInd({...newInd, manual_progress: parseInt(e.target.value) || 0})} /></div>
                                   )}
 
-                                  <div className="space-y-2"><Label>جهة التمويل</Label><Input value={newInd.source_of_fund} onChange={e => setNewInd({...newInd, source_of_fund: e.target.value})} /></div>
+                                  <div className="space-y-2">
+                                    <Label>القطاع (تصنيف النشاط)</Label>
+                                    <Select value={newInd.sector || "none"} onValueChange={v => setNewInd({...newInd, sector: v === "none" ? "" : v})}>
+                                      <SelectTrigger><SelectValue placeholder="اختر القطاع (اختياري)" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">بدون قطاع</SelectItem>
+                                        {activityClassificationOptions.map(opt => (
+                                          <SelectItem key={opt.id} value={opt.value}>{opt.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label>جهة التمويل (المشروع)</Label>
+                                    <Select value={newInd.source_of_fund || "none"} onValueChange={v => setNewInd({...newInd, source_of_fund: v === "none" ? "" : v})}>
+                                      <SelectTrigger><SelectValue placeholder="اختر جهة التمويل (اختياري)" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="none">بدون جهة تمويل</SelectItem>
+                                        {sourceOfFundOptions.map(opt => (
+                                          <SelectItem key={opt.id} value={opt.value}>{opt.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                   
                                   <div className="space-y-2"><Label>تاريخ البداية</Label><Input type="date" value={newInd.start_date} onChange={e => setNewInd({...newInd, start_date: e.target.value})} /></div>
                                   <div className="space-y-2"><Label>تاريخ النهاية</Label><Input type="date" value={newInd.end_date} onChange={e => setNewInd({...newInd, end_date: e.target.value})} /></div>

@@ -365,9 +365,15 @@ export default function SmartMissionsGrid() {
 
     const isGlobalAdmin = hasRole("admin") || hasRole("data_manager") || hasRole("management");
     if (row.status === "planned" || isGlobalAdmin) {
-      const { error } = await supabase.from("missions").delete().eq("id", row.id);
+      const { error, count } = await supabase
+        .from("missions")
+        .delete({ count: "exact" })
+        .eq("id", row.id);
+      
       if (error) {
         toast.error("حدث خطأ أثناء المسح");
+      } else if (count === 0) {
+        toast.error("لا يمكن حذف هذه المهمة. تأكد من أن المهمة في حالة 'مخططة' وأنك صاحبها، أو تواصل مع المدير.");
       } else {
         toast.success("تم مسح المهمة بنجاح");
         setMissions(prev => prev.filter(m => m.id !== row.id));

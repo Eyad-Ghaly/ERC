@@ -84,4 +84,5 @@ export const DROPDOWN_FIELD_LABELS: Record<string, string> = {
   classification: "التصنيف",
   classification_name: "اسم التصنيف",
   project_code_teams: "الفرق المسموح لها بإدخال كود المشروع",
+  source_of_fund: "جهة التمويل",
 };

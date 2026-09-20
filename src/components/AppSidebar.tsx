@@ -39,6 +39,7 @@ const items: NavItem[] = [
   { title: "طلبات التعديل", url: "/edit-requests", icon: GitPullRequest, roles: ["admin", "data_manager", "management"] },
   { title: "ملاحظات المراجعة", url: "/review-notes", icon: MessageSquare, roles: ["department_entry"] },
   { title: "المهام الميدانية", url: "/dashboard", icon: Activity, roles: ["stakeholder", "admin"] },
+  { title: "لوحة المدير التنفيذي", url: "/ceo-dashboard", icon: TrendingUp, roles: ["admin", "stakeholder"] },
   { title: "لوحة المدير", url: "/admin", icon: Settings, roles: ["admin"] },
 ];
 

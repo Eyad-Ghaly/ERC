@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { ROLES } from "@/lib/constants";
-import { FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, Target, Star, UserPlus, MessageSquare } from "lucide-react";
+import { FilePlus, Radio, Sparkles, ShieldCheck, Users2, BarChart3, Database, Settings, Target, Star, UserPlus, MessageSquare, TrendingUp } from "lucide-react";
 
 const TILES = [
   { role: "department_entry", title: "لوحة معلومات فريقي", url: "/department-dashboard", icon: BarChart3, desc: "إحصائيات ومهام مسجلة" },
@@ -18,6 +18,7 @@ const TILES = [
   { role: "stakeholder", title: "الـ Dashboard", url: "/department-dashboard", icon: BarChart3, desc: "مؤشرات الأداء والخريطة التفاعلية" },
   { role: "stakeholder", title: "المهام الميدانية", url: "/dashboard", icon: Radio, desc: "متابعة المهام المفتوحة على الأرض" },
   { role: "stakeholder", title: "مستهدفات الإدارة", url: "/department-goals", icon: Target, desc: "عرض مستهدفات الأداء والمؤشرات" },
+  { role: "stakeholder", title: "لوحة المدير التنفيذي", url: "/ceo-dashboard", icon: TrendingUp, desc: "نظرة عامة على أداء الخطة الاستراتيجية والإنجاز" },
   { role: "data_manager", title: "إدارة البيانات", url: "/data-manager", icon: Database, desc: "رؤية مزدوجة وكاملة" },
   { role: "data_manager", title: "قاعدة بيانات المستفيدين", url: "/team-beneficiaries", icon: Database, desc: "استعراض وتعديل المستفيدين لجميع الفرق" },
   { role: "admin", title: "لوحة المدير", url: "/admin", icon: Settings, desc: "المستخدمون والقوائم" },

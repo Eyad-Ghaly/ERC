@@ -327,9 +327,20 @@ export function DepartmentDashboardContent() {
 
   const handleDeleteMission = async (id: string) => {
     if (!confirm("هل أنت متأكد من حذف هذه المهمة نهائياً؟")) return;
-    const { error } = await supabase.from("missions").delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else { toast.success("تم الحذف بنجاح"); loadMissions(); }
+    const { error, count } = await supabase
+      .from("missions")
+      .delete({ count: "exact" })
+      .eq("id", id);
+    if (error) {
+      toast.error(error.message);
+    } else if (count === 0) {
+      // RLS silently blocked the delete (no permission or mission already deleted)
+      toast.error("لا يمكن حذف هذه المهمة. تأكد من أن المهمة في حالة 'مخططة' وأنك صاحبها، أو تواصل مع المدير.");
+    } else {
+      toast.success("تم الحذف بنجاح");
+      // Remove instantly from local state (no need to reload all data)
+      setMissions(prev => prev.filter(m => m.id !== id));
+    }
   };
 
   const approveSupplyRequest = async (id: string) => {

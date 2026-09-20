@@ -15,7 +15,7 @@ export interface DropdownOption {
  * user's allowed options if any restrictions are set, otherwise returns ALL active options.
  * Admins always see everything.
  */
-export function useDropdownOptions(fieldKey: string) {
+export function useDropdownOptions(fieldKey: string, ignoreTeamFilter = false) {
   const { user, profile, hasRole } = useAuth();
   const [options, setOptions] = useState<DropdownOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +33,7 @@ export function useDropdownOptions(fieldKey: string) {
 
       const isGlobalAdmin = hasRole("admin") || hasRole("data_manager");
 
-      if (isGlobalAdmin) {
+      if (isGlobalAdmin || ignoreTeamFilter) {
         // Global admins see everything, no team filter
       } else if (profile?.team_id) {
         query = query.or(`team_id.is.null,team_id.eq.${profile.team_id}`);
@@ -45,7 +45,7 @@ export function useDropdownOptions(fieldKey: string) {
 
       let filtered = (all ?? []) as DropdownOption[];
 
-      if (user && !isGlobalAdmin) {
+      if (user && !isGlobalAdmin && !ignoreTeamFilter) {
         const { data: restrictions } = await supabase
           .from("user_dropdown_options")
           .select("option_id")
@@ -71,7 +71,7 @@ export function useDropdownOptions(fieldKey: string) {
           indQuery = indQuery.neq("target_type", "service_type");
         }
 
-        if (profile?.team_id && !isGlobalAdmin) {
+        if (profile?.team_id && !isGlobalAdmin && !ignoreTeamFilter) {
           indQuery = indQuery.eq("team_id", profile.team_id);
         }
 
