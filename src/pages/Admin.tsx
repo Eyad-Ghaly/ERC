@@ -1293,6 +1293,12 @@ function TeamsDeptsTab() {
     if (error) toast.error("لا يمكن الحذف"); else load();
   };
 
+  const toggleContinuous = async (id: string, current: boolean) => {
+    const { error } = await supabase.from("teams").update({ has_continuous_programs: !current }).eq("id", id);
+    if (error) toast.error(error.message);
+    else load();
+  };
+
   return (
     <div className="grid lg:grid-cols-2 gap-4">
       <Card className="card-elevated p-4 space-y-4">
@@ -1332,13 +1338,16 @@ function TeamsDeptsTab() {
           <Button onClick={addTeam}><Plus className="w-4 h-4 ms-1" /> إضافة</Button>
         </div>
         <Table>
-          <TableHeader><TableRow><TableHead>الكود</TableHead><TableHead>الاسم</TableHead><TableHead>الإدارة</TableHead><TableHead></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>الكود</TableHead><TableHead>الاسم</TableHead><TableHead>الإدارة</TableHead><TableHead>برامج ممتدة</TableHead><TableHead></TableHead></TableRow></TableHeader>
           <TableBody>
             {teams.map(t => (
               <TableRow key={t.id}>
                 <TableCell className="font-mono">{t.code}</TableCell>
                 <TableCell>{t.name}</TableCell>
                 <TableCell>{t.department?.name || t.department?.code}</TableCell>
+                <TableCell>
+                  <Switch checked={!!t.has_continuous_programs} onCheckedChange={() => toggleContinuous(t.id, !!t.has_continuous_programs)} />
+                </TableCell>
                 <TableCell><Button size="icon" variant="ghost" onClick={() => delTeam(t.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button></TableCell>
               </TableRow>
             ))}

@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { SmartBeneficiariesUploader } from "@/components/SmartBeneficiariesUploader";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { ContinuousProgramsTab } from "@/components/ContinuousProgramsTab";
 
 // Utility: SHA-256 hash of a string (browser native)
 async function sha256(text: string): Promise<string> {
@@ -294,7 +295,7 @@ export default function BeneficiariesRegistration() {
     setLoading(true);
     let query = supabase
       .from("missions")
-      .select("id, mission_code, mission_name, execution_place, activity_date, team_id, team:teams(code), is_open_mission, beneficiaries_status")
+      .select("id, mission_code, mission_name, execution_place, activity_date, team_id, team:teams(code, has_continuous_programs), is_open_mission, beneficiaries_status")
       .eq("has_beneficiaries", true)
       .neq("is_canceled", true)
       .limit(10000);
@@ -311,7 +312,8 @@ export default function BeneficiariesRegistration() {
 
     const { data: drData } = await supabase
       .from("mission_daily_reports")
-      .select("id, mission_id, day_number, report_date, beneficiaries_status");
+      .select("id, mission_id, day_number, report_date, date, place, is_completed, beneficiaries_status, mission:missions(mission_code, mission_name, team_id, team:teams(code, has_continuous_programs))")
+      .order("date", { ascending: false });
 
     // Fetch sets of mission_ids and daily_report_ids that have registered beneficiaries
     const [{ data: indivMissions }, { data: groupMissions }] = await Promise.all([
@@ -353,6 +355,7 @@ export default function BeneficiariesRegistration() {
         mission_code: m.mission_code,
         mission_name: m.mission_name,
         team_id: m.team_id,
+        team: m.team,
         date: m.activity_date,
         place: m.execution_place,
         display_name: `${m.mission_code} - ${m.mission_name}`,
@@ -364,17 +367,18 @@ export default function BeneficiariesRegistration() {
         return statusFilter === 'completed' ? completed : !completed;
       })
       .map((dr) => {
-        const m = mData.find((x) => x.id === dr.mission_id);
+        const m = dr.mission;
         if (!m) return null;
         return {
           id: dr.id,
-          mission_id: m.id,
+          mission_id: dr.mission_id,
           daily_report_id: dr.id,
           mission_code: `${m.mission_code}-${dr.day_number}`,
-          mission_name: m.mission_name,
-          team_id: m.team_id,
-          date: dr.report_date,
-          place: m.execution_place,
+          mission_name: dr.mission?.mission_name,
+          team_id: dr.mission?.team_id,
+          team: dr.mission?.team,
+          date: dr.date || dr.report_date,
+          place: dr.place || m.execution_place,
           display_name: `${m.mission_code}-${dr.day_number} (${dr.report_date}) - ${m.mission_name}`,
         };
       })
@@ -712,9 +716,12 @@ export default function BeneficiariesRegistration() {
         {selectedTargetId && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <Tabs defaultValue="individual" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsList className="w-full grid grid-cols-2 lg:grid-cols-3 mb-6 bg-secondary/30 border">
                 <TabsTrigger value="individual" className="py-3"><UserPlus className="w-4 h-4 ml-2" /> تسجيل فردي</TabsTrigger>
                 <TabsTrigger value="group" className="py-3"><Users className="w-4 h-4 ml-2" /> تسجيل جماعي</TabsTrigger>
+                {targets.find(t => t.id === selectedTargetId)?.team?.has_continuous_programs && (
+                   <TabsTrigger value="continuous" className="py-3"><ListTodo className="w-4 h-4 ml-2" /> البرامج الممتدة</TabsTrigger>
+                )}
               </TabsList>
 
               <TabsContent value="individual">
@@ -1008,6 +1015,15 @@ export default function BeneficiariesRegistration() {
                   </Button>
                 </Card>
               </TabsContent>
+              
+              {targets.find(t => t.id === selectedTargetId)?.team?.has_continuous_programs && (
+                <TabsContent value="continuous">
+                  <ContinuousProgramsTab 
+                    target={targets.find(t => t.id === selectedTargetId)} 
+                    teamCode={targets.find(t => t.id === selectedTargetId)?.team?.code || profile?.team_code || ''} 
+                  />
+                </TabsContent>
+              )}
             </Tabs>
 
             {statusFilter === 'pending' && (
