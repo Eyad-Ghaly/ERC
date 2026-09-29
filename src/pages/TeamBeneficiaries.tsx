@@ -250,7 +250,9 @@ export default function TeamBeneficiaries() {
   const handleSetPassword = async () => {
     if (password.length < 4) return toast.error("كلمة المرور يجب أن تكون 4 أرقام أو حروف على الأقل");
     setBusy(true);
-    const hash = await sha256(password);
+    // Normalize Arabic numerals to English before setting
+    const normalizedPass = password.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    const hash = await sha256(normalizedPass);
     const { error } = await supabase.from('team_settings').upsert({
       team_id: teamId,
       pin_hash: hash
@@ -270,7 +272,15 @@ export default function TeamBeneficiaries() {
   const handleLogin = async () => {
     if (!password) return toast.error("برجاء إدخال كلمة المرور");
     setBusy(true);
-    const hash = await sha256(password);
+    
+    // Check multiple variants: exact, forced English, forced Arabic
+    const toEnglish = password.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    const toArabic = password.replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]);
+    
+    const hashExact = await sha256(password);
+    const hashEnglish = await sha256(toEnglish);
+    const hashArabic = await sha256(toArabic);
+
     const { data } = await supabase
       .from('team_settings')
       .select('pin_hash')
@@ -278,7 +288,7 @@ export default function TeamBeneficiaries() {
       .maybeSingle();
     setBusy(false);
 
-    if (data && data.pin_hash === hash) {
+    if (data && (data.pin_hash === hashExact || data.pin_hash === hashEnglish || data.pin_hash === hashArabic)) {
       setIsAuthenticated(true);
       fetchBeneficiaries();
     } else {

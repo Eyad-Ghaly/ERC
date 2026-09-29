@@ -108,10 +108,39 @@ export default function SmartMissionsGrid() {
 
       if (dashboardFilters.startDate) query = query.gte("activity_date", dashboardFilters.startDate);
       if (dashboardFilters.endDate) query = query.lte("activity_date", dashboardFilters.endDate);
-      if (dashboardFilters.selectedGovernorate) query = query.eq("governorate", dashboardFilters.selectedGovernorate);
-      if (dashboardFilters.selectedClassification) query = query.eq("activity_classification", dashboardFilters.selectedClassification);
-      if (dashboardFilters.selectedActivityType) query = query.eq("activity_type", dashboardFilters.selectedActivityType);
-      if (dashboardFilters.selectedActivityDetail) query = query.eq("activity_details", dashboardFilters.selectedActivityDetail);
+
+      // Governorate: "غير محدد" in the chart means null/empty in the DB
+      if (dashboardFilters.selectedGovernorate) {
+        if (dashboardFilters.selectedGovernorate === "غير محدد") {
+          query = query.or("governorate.is.null,governorate.eq.");
+        } else {
+          query = query.eq("governorate", dashboardFilters.selectedGovernorate);
+        }
+      }
+
+      if (dashboardFilters.selectedClassification) {
+        if (dashboardFilters.selectedClassification === "غير مصنف") {
+          query = query.or("activity_classification.is.null,activity_classification.eq.");
+        } else {
+          query = query.eq("activity_classification", dashboardFilters.selectedClassification);
+        }
+      }
+
+      if (dashboardFilters.selectedActivityType) {
+        if (dashboardFilters.selectedActivityType === "عام") {
+          query = query.or("activity_type.is.null,activity_type.eq.");
+        } else {
+          query = query.eq("activity_type", dashboardFilters.selectedActivityType);
+        }
+      }
+
+      if (dashboardFilters.selectedActivityDetail) {
+        if (dashboardFilters.selectedActivityDetail === "غير محدد") {
+          query = query.or("activity_details.is.null,activity_details.eq.");
+        } else {
+          query = query.eq("activity_details", dashboardFilters.selectedActivityDetail);
+        }
+      }
     } else {
       const isGlobalAdmin = hasRole("admin") || hasRole("data_manager") || hasRole("management");
       if (!profile?.team_id && !isGlobalAdmin) {
