@@ -31,7 +31,7 @@ export default function PublicSupplyForm() {
     const loadForm = async () => {
       const { data: frm, error } = await supabase
         .from('supply_request_forms')
-        .select('*, volunteer_supply_requests(*, departments(name))')
+        .select('*, volunteer_supply_requests(*, departments:departments!department_id(name))')
         .eq('public_link_uuid', public_link_uuid)
         .eq('is_active', true)
         .single();

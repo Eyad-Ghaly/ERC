@@ -46,7 +46,7 @@ export default function YouthSupplyRequests() {
     setLoading(true);
     const { data: reqs, error: reqErr } = await supabase
       .from('volunteer_supply_requests')
-      .select('*, teams(name), departments(name)')
+      .select('*, teams(name), departments:departments!department_id(name)')
       .in('status', ['pending_youth', 'form_created', 'sent_to_team', 'closed'])
       .order('created_at', { ascending: false });
       

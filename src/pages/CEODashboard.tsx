@@ -9,7 +9,7 @@ import {
 import {
   Target, TrendingUp, Building2, Activity, ExternalLink,
   AlertCircle, CheckCircle2, Zap, ChevronRight, Award,
-  BarChart3, Layers,
+  BarChart3, Layers, Calendar
 } from "lucide-react";
 
 // ── Colour Palette ─────────────────────────────────────────────────────────────
@@ -63,6 +63,14 @@ function pctColor(v: number) {
   return "#e63946";
 }
 
+function getMonthsDiff(start?: string, end?: string) {
+  if (!start || !end) return 1; // Default to 1 if no dates are set, meaning no proration
+  const s = new Date(start);
+  const e = new Date(end);
+  const m = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
+  return Math.max(1, m);
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function CEODashboard() {
   const [loading, setLoading] = useState(true);
@@ -70,21 +78,29 @@ export default function CEODashboard() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [allGoals, setAllGoals] = useState<any[]>([]);
   const [unlinkedMissions, setUnlinkedMissions] = useState<any[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [debugMonths, setDebugMonths] = useState<any[]>([]);
+  const [rpcError, setRpcError] = useState<string>("");
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setRpcError("");
+      const progressPromise = selectedMonth
+        ? supabase.rpc("get_monthly_indicator_progress", { p_month_year: selectedMonth })
+        : supabase.from("indicator_progress_view").select("*");
+
       const [
-        { data: progress },
+        progressRes,
         { data: depts },
         { data: goals },
         { data: missions },
       ] = await Promise.all([
-        supabase.from("indicator_progress_view").select("*"),
+        progressPromise,
         supabase.from("departments").select("id, name, code").order("code"),
         supabase
           .from("department_goals")
-          .select("id, code, title, department_id, department_objectives(id, code, title, department_indicators(id, code, title, target_value, unit, target_type, sector, source_of_fund))")
+          .select("id, code, title, department_id, department_objectives(id, code, title, department_indicators(id, code, title, target_value, unit, target_type, sector, source_of_fund, start_date, end_date))")
           .order("created_at", { ascending: true }),
         supabase
           .from("missions")
@@ -95,13 +111,19 @@ export default function CEODashboard() {
           .order("activity_date", { ascending: false })
           .limit(200),
       ]);
-      setProgressView(progress ?? []);
+      
+      if (progressRes.error) {
+        console.error("RPC ERROR:", progressRes.error);
+        setRpcError(progressRes.error.message);
+      }
+      
+      setProgressView(progressRes.data ?? []);
       setDepartments(depts ?? []);
       setAllGoals(goals ?? []);
       setUnlinkedMissions(missions ?? []);
       setLoading(false);
     })();
-  }, []);
+  }, [selectedMonth]);
 
   // achieved map
   const achieved = useMemo(() => {
@@ -127,38 +149,56 @@ export default function CEODashboard() {
   const overallStats = useMemo(() => {
     let totalTarget = 0, totalAchieved = 0;
     allIndicators.forEach((ind) => {
-      totalTarget += Number(ind.target_value ?? 0);
+      let target = Number(ind.target_value ?? 0);
+      if (selectedMonth && ind.start_date && ind.end_date) {
+        // Prorate target if month filter is applied
+        const months = getMonthsDiff(ind.start_date, ind.end_date);
+        target = target / months;
+      }
+      totalTarget += target;
       totalAchieved += achieved[ind.id] ?? 0;
     });
     return {
-      target: totalTarget, achieved: totalAchieved,
+      target: Math.round(totalTarget), achieved: totalAchieved,
       pct: pct(totalAchieved, totalTarget),
       indicatorsCount: allIndicators.length,
       goalsCount: allGoals.length,
     };
-  }, [allIndicators, allGoals, achieved]);
+  }, [allIndicators, allGoals, achieved, selectedMonth]);
 
   // 2. Per dept
   const deptStats = useMemo(() => {
     return departments.map((dept, idx) => {
       const inds = allIndicators.filter((i) => i.deptId === dept.id);
-      const target = inds.reduce((s, i) => s + Number(i.target_value ?? 0), 0);
+      const target = inds.reduce((s, i) => {
+        let t = Number(i.target_value ?? 0);
+        if (selectedMonth && i.start_date && i.end_date) {
+          t = t / getMonthsDiff(i.start_date, i.end_date);
+        }
+        return s + t;
+      }, 0);
       const ach = inds.reduce((s, i) => s + (achieved[i.id] ?? 0), 0);
       const goalsCount = allGoals.filter((g) => g.department_id === dept.id).length;
-      return { id: dept.id, name: dept.name, code: dept.code, target, achieved: ach, pct: pct(ach, target), color: getColor(idx), goalsCount, indicatorsCount: inds.length };
+      return { id: dept.id, name: dept.name, code: dept.code, target: Math.round(target), achieved: ach, pct: pct(ach, target), color: getColor(idx), goalsCount, indicatorsCount: inds.length };
     }).filter((d) => d.indicatorsCount > 0).sort((a, b) => b.pct - a.pct);
-  }, [departments, allIndicators, achieved, allGoals]);
+  }, [departments, allIndicators, achieved, allGoals, selectedMonth]);
 
   // 3. Per goal
   const goalStats = useMemo(() => {
     return allGoals.map((g: any, idx: number) => {
       const inds = allIndicators.filter((i) => i.goalId === g.id);
-      const target = inds.reduce((s, i) => s + Number(i.target_value ?? 0), 0);
+      const target = inds.reduce((s, i) => {
+        let t = Number(i.target_value ?? 0);
+        if (selectedMonth && i.start_date && i.end_date) {
+          t = t / getMonthsDiff(i.start_date, i.end_date);
+        }
+        return s + t;
+      }, 0);
       const ach = inds.reduce((s, i) => s + (achieved[i.id] ?? 0), 0);
       const deptName = departments.find((d) => d.id === g.department_id)?.name ?? "";
-      return { id: g.id, code: g.code, title: g.title, deptName, target, achieved: ach, pct: pct(ach, target), color: getColor(idx), indicatorsCount: inds.length };
-    }).filter((g) => g.indicatorsCount > 0);
-  }, [allGoals, allIndicators, achieved, departments]);
+      return { id: g.id, code: g.code, title: g.title, deptName, target: Math.round(target), achieved: ach, pct: pct(ach, target), color: getColor(idx), indicatorsCount: inds.length };
+    }).filter((g) => g.indicatorsCount > 0).sort((a, b) => b.pct - a.pct);
+  }, [allGoals, allIndicators, achieved, departments, selectedMonth]);
 
   // 4. Per sector
   const sectorStats = useMemo(() => {
@@ -170,7 +210,11 @@ export default function CEODashboard() {
         sectorsMap.set(sector, { target: 0, achieved: 0, count: 0 });
       }
       const data = sectorsMap.get(sector)!;
-      data.target += Number(ind.target_value ?? 0);
+      let target = Number(ind.target_value ?? 0);
+      if (selectedMonth && ind.start_date && ind.end_date) {
+        target = target / getMonthsDiff(ind.start_date, ind.end_date);
+      }
+      data.target += target;
       data.achieved += (achieved[ind.id] ?? 0);
       data.count += 1;
     });
@@ -178,14 +222,14 @@ export default function CEODashboard() {
     return Array.from(sectorsMap.entries()).map(([name, data], idx) => {
       return { 
         name, 
-        target: data.target, 
+        target: Math.round(data.target), 
         achieved: data.achieved, 
         pct: pct(data.achieved, data.target), 
         color: getColor(idx + 3), // Offset colors
         indicatorsCount: data.count 
       };
     }).sort((a, b) => b.pct - a.pct);
-  }, [allIndicators, achieved]);
+  }, [allIndicators, achieved, selectedMonth]);
 
   // 5. Per Funder/Project
   const funderStats = useMemo(() => {
@@ -197,7 +241,11 @@ export default function CEODashboard() {
         map.set(funder, { target: 0, achieved: 0, count: 0 });
       }
       const data = map.get(funder)!;
-      data.target += Number(ind.target_value ?? 0);
+      let target = Number(ind.target_value ?? 0);
+      if (selectedMonth && ind.start_date && ind.end_date) {
+        target = target / getMonthsDiff(ind.start_date, ind.end_date);
+      }
+      data.target += target;
       data.achieved += (achieved[ind.id] ?? 0);
       data.count += 1;
     });
@@ -205,14 +253,14 @@ export default function CEODashboard() {
     return Array.from(map.entries()).map(([name, data], idx) => {
       return { 
         name, 
-        target: data.target, 
+        target: Math.round(data.target), 
         achieved: data.achieved, 
         pct: pct(data.achieved, data.target), 
         color: getColor(idx + 7), // Offset colors
         indicatorsCount: data.count 
       };
     }).sort((a, b) => b.pct - a.pct);
-  }, [allIndicators, achieved]);
+  }, [allIndicators, achieved, selectedMonth]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
@@ -247,15 +295,40 @@ export default function CEODashboard() {
                 <p className="text-white/70 text-sm mt-1">نظرة عامة على أداء الخطة الاستراتيجية</p>
               </div>
             </div>
-            <Link to="/department-dashboard"
-              className="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all border border-white/20 shrink-0">
-              عرض التفاصيل الكاملة
-              <ExternalLink className="w-4 h-4" />
-            </Link>
+            <div className="flex items-center gap-4 flex-col md:flex-row">
+              <div className="relative z-10 flex items-center gap-3 bg-white/10 p-2 px-3 rounded-xl backdrop-blur-sm border border-white/20">
+                <Calendar className="w-5 h-5 text-white" />
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-transparent text-white font-medium border-none focus:ring-0 cursor-pointer [&::-webkit-calendar-picker-indicator]:filter [&::-webkit-calendar-picker-indicator]:invert outline-none"
+                  title="تصفية حسب الشهر"
+                />
+                {selectedMonth && (
+                  <button 
+                    onClick={() => setSelectedMonth("")}
+                    className="text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded-md transition-colors"
+                  >
+                    إلغاء الفلتر
+                  </button>
+                )}
+              </div>
+              <Link to="/ceo-dashboard-full"
+                className="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all border border-white/20 shrink-0">
+                عرض التفاصيل الكاملة
+                <ExternalLink className="w-4 h-4" />
+              </Link>
+            </div>
           </div>
         </div>
 
         {/* ── Section 1: Overall ──────────────────────────────────────────── */}
+        {rpcError && (
+          <div className="bg-red-100 text-red-700 p-4 rounded-xl border border-red-300 font-bold mb-4">
+            خطأ في قاعدة البيانات (لم يتم رفع الكود الأخير الخاص بالـ RPC): {rpcError}
+          </div>
+        )}
         <section>
           <SectionTitle icon={<Zap className="w-5 h-5 text-primary" />} title="الإجمالي المحقق من الخطة" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

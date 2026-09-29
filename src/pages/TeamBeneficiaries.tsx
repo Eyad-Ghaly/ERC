@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2, Lock, Search, Download, Key, ShieldCheck, Upload, Save, Eye, Edit, UserPlus, Users, Trash2, Filter } from "lucide-react";
+import { Loader2, Lock, Search, Download, Key, ShieldCheck, Upload, Save, Eye, Edit, UserPlus, Users, Trash2, Filter, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 // Utility: SHA-256 hash
 async function sha256(text: string): Promise<string> {
@@ -187,6 +189,17 @@ export default function TeamBeneficiaries() {
   const [saving, setSaving] = useState(false);
   const [dragSelection, setDragSelection] = useState<{ type: 'indiv'|'group', startIdx: number, endIdx: number, field: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Import Excel state
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importMissions, setImportMissions] = useState<any[]>([]);
+  const [importSelectedMissionId, setImportSelectedMissionId] = useState("");
+  const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<any[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+  const [importStep, setImportStep] = useState<'select-mission' | 'preview' | 'done'>('select-mission');
 
   useEffect(() => {
     const handleMouseUp = () => setIsDragging(false);
@@ -553,6 +566,212 @@ export default function TeamBeneficiaries() {
     };
   };
 
+  // ─── Import Excel ─────────────────────────────────────────────────────────
+
+  const openImportFlow = async (file: File) => {
+    setImportPendingFile(file);
+    setImportPreview([]);
+    setImportSelectedMissionId("");
+
+    // Peek at file headers to detect round-trip export (has record_id column)
+    try {
+      const ab = await file.arrayBuffer();
+      const wb = XLSX.read(ab, { type: 'array', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+      if (rows.length > 0) {
+        const headers = Object.keys(rows[0]);
+        const hasRecordId = headers.some(h => String(h).trim() === 'record_id');
+        if (hasRecordId) {
+          // All rows know their record already → skip mission selection, go to preview
+          setImportStep('preview');
+          setImportDialogOpen(true);
+          parseExcelFile(file, "");
+          return;
+        }
+      }
+    } catch {
+      // Fall through to normal flow if peeking fails
+    }
+
+    // Normal flow: no record_id → user must pick a mission for new rows
+    setImportStep('select-mission');
+    setImportDialogOpen(true);
+    const { data: missionsData } = await supabase
+      .from('missions')
+      .select('id, mission_code, mission_name, activity_date, governorate')
+      .eq('team_id', teamId)
+      .order('activity_date', { ascending: false });
+    setImportMissions(missionsData || []);
+  };
+
+  const parseExcelFile = async (file: File, missionId: string = "") => {
+    setImportLoading(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const jsonRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+      if (jsonRows.length === 0) {
+        toast.error("الملف لا يحتوي على بيانات");
+        setImportLoading(false);
+        return;
+      }
+
+      // Normalize column names
+      const colMap: Record<string, string> = {
+        'record_id': 'record_id',                                              // round-trip update key
+        'اسم المستفيد': 'full_name', 'الاسم': 'full_name', 'full_name': 'full_name',
+        'الرقم القومي': 'national_id', 'رقم قومي': 'national_id', 'national_id': 'national_id',
+        'التليفون': 'phone', 'الهاتف': 'phone', 'phone': 'phone',
+        'تاريخ الميلاد': 'birthdate', 'birthdate': 'birthdate',
+        'النوع': 'gender', 'الجنس': 'gender', 'gender': 'gender',
+        'الجنسية': 'nationality', 'nationality': 'nationality',
+        'نوع الخدمة': 'service_type', 'service_type': 'service_type',
+        'الكمية': 'service_quantity', 'service_quantity': 'service_quantity',
+        // group fields
+        'الفئة العمرية': 'age_category', 'age_category': 'age_category',
+        'عدد المستفيدين': 'count', 'count': 'count',
+        'كمية الخدمة (لكل فرد)': 'service_quantity',
+      };
+      // Read-only info columns that should not be imported as custom fields
+      const skipCols = new Set([
+        'كود المهمة', 'اسم المهمة', 'تاريخ النشاط', 'المحافظة', 'تفاصيل النشاط',
+        'mission_code', 'mission_name', 'activity_date', 'governorate', 'activity_details',
+      ]);
+
+      const normalized = jsonRows.map(row => {
+        const mapped: any = { custom_metadata: {} };
+        for (const [key, val] of Object.entries(row)) {
+          const trimmedKey = String(key).trim();
+          if (skipCols.has(trimmedKey)) continue;
+          const mappedField = colMap[trimmedKey];
+          if (mappedField) {
+            mapped[mappedField] = String(val).trim();
+          } else {
+            if (trimmedKey) mapped.custom_metadata[trimmedKey] = String(val).trim();
+          }
+        }
+        // For rows without record_id, assign the chosen mission
+        if (!mapped.record_id && missionId) {
+          mapped.mission_id = missionId;
+        }
+        return mapped;
+      });
+
+      setImportPreview(normalized);
+      setImportStep('preview');
+    } catch (err: any) {
+      toast.error("فشل قراءة الملف: " + err.message);
+    }
+    setImportLoading(false);
+  };
+
+  const commitImport = async () => {
+    if (importPreview.length === 0) return;
+    setImportLoading(true);
+    setImportProgress({ current: 0, total: importPreview.length });
+    let updatedCount = 0;
+    let insertedCount = 0;
+    let failCount = 0;
+
+    // Split rows into UPDATE (have record_id) and INSERT (no record_id)
+    const updateRows = importPreview.filter(r => r.record_id?.trim());
+    const insertRows = importPreview.filter(r => !r.record_id?.trim());
+
+    // ── 1. Process UPDATEs in parallel chunks of 20 ─────────────────────────
+    const CHUNK = 20;
+    for (let i = 0; i < updateRows.length; i += CHUNK) {
+      const chunk = updateRows.slice(i, i + CHUNK);
+      const results = await Promise.all(
+        chunk.map(async (row) => {
+          const nationalId = row.national_id || "";
+          let id_hash = null;
+          let encrypted_id = null;
+          if (nationalId) {
+            id_hash = await sha256(nationalId);
+            encrypted_id = await encryptData(nationalId);
+          }
+          const payload: any = {
+            full_name: row.full_name || null,
+            phone: row.phone || null,
+            birthdate: row.birthdate || null,
+            gender: row.gender || null,
+            nationality: row.nationality || null,
+            service_type: row.service_type || null,
+            service_quantity: parseInt(row.service_quantity) || 1,
+            custom_metadata: Object.keys(row.custom_metadata || {}).length > 0 ? row.custom_metadata : null,
+          };
+          if (id_hash) { payload.id_hash = id_hash; payload.encrypted_id = encrypted_id; }
+          const { error } = await supabase
+            .from('beneficiaries_individual')
+            .update(payload)
+            .eq('id', row.record_id.trim());
+          return error ? 'fail' : 'ok';
+        })
+      );
+      results.forEach(r => r === 'ok' ? updatedCount++ : failCount++);
+      setImportProgress(prev => ({ ...prev, current: Math.min(prev.total, i + CHUNK + insertedCount) }));
+    }
+
+    // ── 2. Batch-insert new rows (no record_id) all at once ──────────────────
+    if (insertRows.length > 0) {
+      // Encrypt IDs first (can be parallelised)
+      const prepared = await Promise.all(
+        insertRows.map(async (row) => {
+          const nationalId = row.national_id || "";
+          let id_hash = null;
+          let encrypted_id = null;
+          if (nationalId) {
+            id_hash = await sha256(nationalId);
+            encrypted_id = await encryptData(nationalId);
+          }
+          return {
+            mission_id: row.mission_id,
+            full_name: row.full_name || null,
+            phone: row.phone || null,
+            birthdate: row.birthdate || null,
+            gender: row.gender || null,
+            nationality: row.nationality || null,
+            service_type: row.service_type || null,
+            service_quantity: parseInt(row.service_quantity) || 1,
+            id_hash,
+            encrypted_id,
+            custom_metadata: Object.keys(row.custom_metadata || {}).length > 0 ? row.custom_metadata : null,
+          };
+        })
+      );
+      // Insert in chunks of 200 to avoid payload limits
+      for (let i = 0; i < prepared.length; i += 200) {
+        const { error } = await supabase
+          .from('beneficiaries_individual')
+          .insert(prepared.slice(i, i + 200));
+        if (error) { failCount += Math.min(200, prepared.length - i); console.error(error); }
+        else insertedCount += Math.min(200, prepared.length - i);
+        setImportProgress(prev => ({ ...prev, current: updatedCount + insertedCount + failCount }));
+      }
+    }
+
+    setImportProgress(prev => ({ ...prev, current: prev.total }));
+    setImportLoading(false);
+    setImportStep('done');
+    const total = updatedCount + insertedCount;
+    if (total > 0) {
+      const parts = [];
+      if (updatedCount > 0) parts.push(`تم تحديث ${updatedCount} سجل`);
+      if (insertedCount > 0) parts.push(`إضافة ${insertedCount} سجل جديد`);
+      if (failCount > 0) parts.push(`${failCount} فشل`);
+      toast.success(parts.join(' · '));
+      fetchBeneficiaries();
+    } else {
+      toast.error("فشل الاستيراد، يرجى مراجعة الملف");
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   const saveAllIndiv = async () => {
     setSaving(true);
     let successCount = 0;
@@ -680,6 +899,87 @@ export default function TeamBeneficiaries() {
   const filteredIndiv = applyFilters(indivBens, originalIndivBens);
   const filteredGroup = applyFilters(groupBens, originalGroupBens);
 
+  // ─── Export Excel ──────────────────────────────────────────────────────
+  const handleExportExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // ─ Sheet 1: Individual beneficiaries
+    const allCustomKeysIndiv = Array.from(
+      new Set(filteredIndiv.flatMap(r => Object.keys(r.custom_metadata || {})))
+    );
+
+    // record_id is the first column so re-import can identify rows for update
+    const indivHeaders = [
+      'record_id',
+      'كود المهمة', 'اسم المهمة', 'تاريخ النشاط', 'المحافظة', 'تفاصيل النشاط',
+      'اسم المستفيد', 'الرقم القومي', 'التليفون', 'تاريخ الميلاد',
+      'النوع', 'الجنسية', 'نوع الخدمة', 'الكمية',
+      ...allCustomKeysIndiv,
+    ];
+
+    const indivRows = filteredIndiv.map(r => [
+      r.id || '',
+      r.mission_code || '',
+      r.mission_name || '',
+      r.activity_date || '',
+      r.governorate || '',
+      r.activity_details || '',
+      r.full_name || '',
+      r.decrypted_id || '',
+      r.phone || '',
+      r.birthdate || '',
+      r.gender || '',
+      r.nationality || '',
+      r.service_type || '',
+      r.service_quantity ?? 1,
+      ...allCustomKeysIndiv.map(k => r.custom_metadata?.[k] ?? ''),
+    ]);
+
+    const wsIndiv = XLSX.utils.aoa_to_sheet([indivHeaders, ...indivRows]);
+    wsIndiv['!cols'] = indivHeaders.map(() => ({ wch: 18 }));
+    XLSX.utils.book_append_sheet(wb, wsIndiv, 'مستفيدين فردي');
+
+    // ─ Sheet 2: Group beneficiaries
+    const allCustomKeysGroup = Array.from(
+      new Set(filteredGroup.flatMap(r => Object.keys(r.custom_metadata || {})))
+    );
+
+    const groupHeaders = [
+      'record_id',
+      'كود المهمة', 'اسم المهمة', 'تاريخ النشاط', 'المحافظة', 'تفاصيل النشاط',
+      'الجنسية', 'النوع', 'الفئة العمرية', 'عدد المستفيدين',
+      'نوع الخدمة', 'كمية الخدمة (لكل فرد)',
+      ...allCustomKeysGroup,
+    ];
+
+    const groupRows = filteredGroup.map(r => [
+      r.id || '',
+      r.mission_code || '',
+      r.mission_name || '',
+      r.activity_date || '',
+      r.governorate || '',
+      r.activity_details || '',
+      r.nationality || '',
+      r.gender || '',
+      r.age_category || '',
+      r.count ?? 1,
+      r.service_type || '',
+      r.service_quantity ?? 1,
+      ...allCustomKeysGroup.map(k => r.custom_metadata?.[k] ?? ''),
+    ]);
+
+    const wsGroup = XLSX.utils.aoa_to_sheet([groupHeaders, ...groupRows]);
+    wsGroup['!cols'] = groupHeaders.map(() => ({ wch: 18 }));
+    XLSX.utils.book_append_sheet(wb, wsGroup, 'مستفيدين جماعي');
+
+    // Generate filename with date
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `بيانات_فريق_${teamCode}_${dateStr}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    toast.success(`تم تصدير ${filteredIndiv.length + filteredGroup.length} سجل بنجاح`);
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (loading && !isAuthenticated) {
     return (
       <AppLayout title="جاري التحميل...">
@@ -764,10 +1064,32 @@ export default function TeamBeneficiaries() {
             <Button variant="outline" size="sm" onClick={() => { setIsAuthenticated(false); setPassword(""); }} className="text-xs">
               <Lock className="w-3 h-3 ml-1" /> قفل
             </Button>
-            <Button variant="outline" size="sm" className="gap-2 text-xs">
+            {/* Hidden file input for Excel import */}
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) openImportFlow(file);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-xs"
+              onClick={() => importFileInputRef.current?.click()}
+            >
               <Upload className="w-4 h-4" /> استيراد Excel
             </Button>
-            <Button variant="outline" size="sm" className="gap-2 text-xs">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-xs"
+              onClick={handleExportExcel}
+            >
               <Download className="w-4 h-4" /> تصدير Excel
             </Button>
           </div>
@@ -1148,6 +1470,171 @@ export default function TeamBeneficiaries() {
         </Tabs>
 
       </div>
+
+      {/* ── Import Excel Dialog ────────────────────────────────────────── */}
+      <Dialog open={importDialogOpen} onOpenChange={(o) => { if (!importLoading) { setImportDialogOpen(o); } }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-primary" />
+              استيراد مستفيدين من Excel
+            </DialogTitle>
+            <DialogDescription>
+              {importStep === 'select-mission' && 'اختر المهمة التي ستُضاف إليها السجلات الجديدة (السجلات التي تحتوي على record_id سيتم تحديثها تلقائياً)'}
+              {importStep === 'preview' && `معاينة ${importPreview.length} سجل — السجلات بـ record_id ستُحدَّث، وبدونه ستُضاف جديدة`}
+              {importStep === 'done' && 'تم الاستيراد بنجاح'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Step 1 – Mission selection */}
+          {importStep === 'select-mission' && (
+            <div className="space-y-4 py-2">
+              <Label>اختر المهمة</Label>
+              {importMissions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">لا توجد مهام مسجلة لهذا الفريق</p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto border rounded-md divide-y">
+                  {importMissions.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => setImportSelectedMissionId(m.id)}
+                      className={`w-full text-right px-4 py-2.5 text-sm transition-colors ${
+                        importSelectedMissionId === m.id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted'
+                      }`}
+                    >
+                      <span className="font-bold">{m.mission_code}</span>
+                      {m.mission_name && ` – ${m.mission_name}`}
+                      {m.activity_date && <span className="text-xs opacity-70 mr-2">({m.activity_date})</span>}
+                      {m.governorate && <span className="text-xs opacity-70"> · {m.governorate}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2 – Preview */}
+          {importStep === 'preview' && (() => {
+            const updateRows = importPreview.filter(r => r.record_id?.trim());
+            const newRows = importPreview.filter(r => !r.record_id?.trim());
+            return (
+            <div className="space-y-3 py-2">
+              <div className="flex flex-wrap items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-300">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>
+                  {updateRows.length > 0 && <span className="font-semibold text-blue-700">🔄 {updateRows.length} سيتم تحديثهم </span>}
+                  {newRows.length > 0 && <span className="font-semibold text-green-700">✚ {newRows.length} سيتم إضافتهم جدد </span>}
+                </span>
+              </div>
+              <div className="overflow-x-auto border rounded-md">
+                <table className="text-xs w-full">
+                  <thead className="bg-muted/60">
+                    <tr>
+                      <th className="px-3 py-2 text-right font-medium">#</th>
+                      <th className="px-3 py-2 text-right font-medium">الحالة</th>
+                      <th className="px-3 py-2 text-right font-medium">الاسم</th>
+                      <th className="px-3 py-2 text-right font-medium">الرقم القومي</th>
+                      <th className="px-3 py-2 text-right font-medium">الهاتف</th>
+                      <th className="px-3 py-2 text-right font-medium">النوع</th>
+                      <th className="px-3 py-2 text-right font-medium">الجنسية</th>
+                      <th className="px-3 py-2 text-right font-medium">نوع الخدمة</th>
+                      <th className="px-3 py-2 text-right font-medium">الكمية</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {importPreview.slice(0, 50).map((row, i) => (
+                      <tr key={i} className={`hover:bg-muted/30 ${row.record_id?.trim() ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''}`}>
+                        <td className="px-3 py-1.5 text-muted-foreground">{i + 1}</td>
+                        <td className="px-3 py-1.5">
+                          {row.record_id?.trim()
+                            ? <span className="bg-blue-100 text-blue-700 text-[10px] font-semibold px-1.5 py-0.5 rounded">تحديث</span>
+                            : <span className="bg-green-100 text-green-700 text-[10px] font-semibold px-1.5 py-0.5 rounded">جديد</span>
+                          }
+                        </td>
+                        <td className="px-3 py-1.5">{row.full_name || '—'}</td>
+                        <td className="px-3 py-1.5" dir="ltr">{row.national_id || '—'}</td>
+                        <td className="px-3 py-1.5" dir="ltr">{row.phone || '—'}</td>
+                        <td className="px-3 py-1.5">{row.gender || '—'}</td>
+                        <td className="px-3 py-1.5">{row.nationality || '—'}</td>
+                        <td className="px-3 py-1.5">{row.service_type || '—'}</td>
+                        <td className="px-3 py-1.5">{row.service_quantity || '1'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {importPreview.length > 50 && (
+                <p className="text-xs text-muted-foreground text-center">يتم عرض أول 50 سجل فقط للمعاينة</p>
+              )}
+            </div>
+            );
+          })()}
+
+          {/* Step 3 – Done */}
+          {importStep === 'done' && (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <CheckCircle2 className="w-14 h-14 text-green-500" />
+              <p className="text-lg font-semibold">اكتمل الاستيراد!</p>
+              <p className="text-sm text-muted-foreground">يمكنك الآن إغلاق هذه النافذة ومراجعة البيانات.</p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 flex-row-reverse">
+            {importStep === 'select-mission' && (
+              <>
+                <Button
+                  onClick={() => {
+                    if (!importSelectedMissionId) { toast.error('يرجى اختيار مهمة أولاً'); return; }
+                    if (importPendingFile) parseExcelFile(importPendingFile, importSelectedMissionId);
+                  }}
+                  disabled={!importSelectedMissionId || importLoading}
+                  className="gap-2"
+                >
+                  {importLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+                  معاينة البيانات
+                </Button>
+                <Button variant="outline" onClick={() => setImportDialogOpen(false)}>إلغاء</Button>
+              </>
+            )}
+            {importStep === 'preview' && (
+              <>
+                {importLoading && (
+                  <div className="w-full mb-3 space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>جاري المعالجة...</span>
+                      <span>{importProgress.current} / {importProgress.total}</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                      <div
+                        className="bg-green-500 h-2.5 rounded-full transition-all duration-300"
+                        style={{ width: `${importProgress.total > 0 ? Math.round((importProgress.current / importProgress.total) * 100) : 0}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-center text-muted-foreground">
+                      {importProgress.total > 0 ? Math.round((importProgress.current / importProgress.total) * 100) : 0}% — لا تغلق هذه النافذة
+                    </p>
+                  </div>
+                )}
+                <Button
+                  onClick={commitImport}
+                  disabled={importLoading}
+                  className="gap-2 bg-green-600 hover:bg-green-700"
+                >
+                  {importLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {importLoading ? `جاري المعالجة (${importProgress.current}/${importProgress.total})` : `تأكيد الاستيراد (${importPreview.length} سجل)`}
+                </Button>
+                <Button variant="outline" onClick={() => setImportStep('select-mission')} disabled={importLoading}>رجوع</Button>
+              </>
+            )}
+            {importStep === 'done' && (
+              <Button onClick={() => setImportDialogOpen(false)}>إغلاق</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </AppLayout>
   );
 }

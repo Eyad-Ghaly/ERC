@@ -52,22 +52,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let initialLoadDone = false;
+
+    // NOTE: onAuthStateChange callback must NOT be async — Supabase holds an
+    // internal navigator lock during this callback. Making it async causes a
+    // deadlock / 5000ms timeout. Use setTimeout(0) to escape the lock.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_evt, sess) => {
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
-        setTimeout(() => loadProfileAndRoles(sess.user.id), 0);
+        setTimeout(() => {
+          loadProfileAndRoles(sess.user.id).then(() => {
+            if (!initialLoadDone) {
+              initialLoadDone = true;
+              setLoading(false);
+            }
+          });
+        }, 0);
       } else {
         setProfile(null);
         setRoles([]);
+        if (!initialLoadDone) {
+          initialLoadDone = true;
+          setLoading(false);
+        }
       }
     });
 
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) await loadProfileAndRoles(s.user.id);
-      setLoading(false);
+      if (!initialLoadDone) {
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user) await loadProfileAndRoles(s.user.id);
+        initialLoadDone = true;
+        setLoading(false);
+      }
     });
 
     return () => subscription.unsubscribe();

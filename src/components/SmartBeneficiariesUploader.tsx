@@ -94,10 +94,15 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadErrors, setUploadErrors] = useState<{ rowIndex: number; error: string }[]>([]);
 
+  // Duplicate / replace mode state
+  const [duplicateMissions, setDuplicateMissions] = useState<{ missionCode: string; existingCount: number }[]>([]);
+  const [uploadMode, setUploadMode] = useState<"replace" | "append">("replace");
+
   useEffect(() => {
     if (!open) {
       setStep(0); setUploadType("individual"); setExcelData([]); setExcelHeaders([]); setColumnMapping({});
       setValueMapping({}); setInvalidValues([]); setInvalidMissionCodes([]); setUploadErrors([]);
+      setDuplicateMissions([]); setUploadMode("replace");
       setIsValidating(false);
     } else {
       // Load custom fields for the current team only
@@ -229,6 +234,34 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
 
     setInvalidMissionCodes(badMissionRows);
 
+    // 3b. Check for missions that already have beneficiary data (duplicates)
+    const validBaseCodes = Array.from(excelMissionCodes).filter(c => existingMissionCodesSet.has(c));
+    const foundDuplicates: { missionCode: string; existingCount: number }[] = [];
+    if (validBaseCodes.length > 0) {
+      const table = uploadType === "group" ? "beneficiaries_group" : "beneficiaries_individual";
+      const chunkSize = 100;
+      for (let i = 0; i < validBaseCodes.length; i += chunkSize) {
+        const chunk = validBaseCodes.slice(i, i + chunkSize);
+        // Get mission IDs for these codes
+        const { data: missionRows } = await supabase
+          .from("missions")
+          .select("id, mission_code")
+          .in("mission_code", chunk);
+        if (missionRows && missionRows.length > 0) {
+          for (const m of missionRows) {
+            const { count } = await supabase
+              .from(table)
+              .select("id", { count: "exact", head: true })
+              .eq("mission_id", m.id);
+            if (count && count > 0) {
+              foundDuplicates.push({ missionCode: m.mission_code, existingCount: count });
+            }
+          }
+        }
+      }
+    }
+    setDuplicateMissions(foundDuplicates);
+
     // 4. Other field value validations
     excelData.forEach((row) => {
       activeFields.forEach(sf => {
@@ -330,6 +363,28 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
     if (invalidMissionCodes.length > 0) {
       toast.error("لا يمكن الحفظ: يوجد صفوف تحتوي على أكواد مهمات غير مسجلة بالنظام.");
       return;
+    }
+
+    // If replace mode: delete existing beneficiary records for all uploaded mission codes first
+    if (uploadMode === "replace" && duplicateMissions.length > 0) {
+      const codesToReplace = duplicateMissions.map(d => d.missionCode);
+      const { data: missionRows } = await supabase
+        .from("missions")
+        .select("id")
+        .in("mission_code", codesToReplace);
+      if (missionRows && missionRows.length > 0) {
+        const missionIds = missionRows.map(m => m.id);
+        const table = uploadType === "group" ? "beneficiaries_group" : "beneficiaries_individual";
+        const { error: delErr } = await supabase
+          .from(table)
+          .delete()
+          .in("mission_id", missionIds);
+        if (delErr) {
+          toast.error("فشل حذف البيانات القديمة: " + delErr.message);
+          return;
+        }
+        toast.info(`تم حذف البيانات القديمة لـ ${codesToReplace.length} مهمة، جاري رفع الجديدة...`);
+      }
     }
     setIsUploading(true);
     setUploadProgress({ current: 0, total: excelData.length });
@@ -726,7 +781,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
             {invalidMissionCodes.length > 0 ? (
               <AlertCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
             ) : (
-              <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
+              <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
             )}
 
             <h3 className="font-semibold text-2xl">
@@ -736,6 +791,58 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
             <p className="text-muted-foreground">
               سيتم إدراج {excelData.length} {uploadType === 'individual' ? 'مستفيد' : 'مجموعة'}.
             </p>
+
+            {/* Duplicate missions warning with replace/append choice */}
+            {duplicateMissions.length > 0 && invalidMissionCodes.length === 0 && (
+              <div className="mt-4 text-right max-w-xl mx-auto bg-amber-50 border border-amber-300 p-4 rounded-xl text-sm space-y-3">
+                <div className="font-bold flex items-center gap-2 text-base text-amber-800">
+                  <AlertCircle className="w-5 h-5 shrink-0 text-amber-600" />
+                  تحذير: هذه المهام بها بيانات مسجلة مسبقاً ({duplicateMissions.length} مهمة)
+                </div>
+                <div className="max-h-32 overflow-y-auto bg-white/70 p-2 rounded border border-amber-200 text-xs font-mono text-amber-900">
+                  {duplicateMissions.map((d, idx) => (
+                    <div key={idx} className="py-0.5">
+                      • مهمة <strong>{d.missionCode}</strong>: {d.existingCount} سجل موجود
+                    </div>
+                  ))}
+                </div>
+                <p className="text-amber-800 text-xs">اختر كيف تريد التعامل مع هذه المهام:</p>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-start gap-3 cursor-pointer bg-white/60 p-3 rounded-lg border-2 transition-all"
+                    style={{ borderColor: uploadMode === 'replace' ? '#f59e0b' : '#e5e7eb' }}
+                  >
+                    <input
+                      type="radio"
+                      name="uploadMode"
+                      value="replace"
+                      checked={uploadMode === "replace"}
+                      onChange={() => setUploadMode("replace")}
+                      className="mt-0.5 accent-amber-500"
+                    />
+                    <div>
+                      <div className="font-semibold text-red-700">🔄 استبدال البيانات (حذف القديم + رفع الجديد)</div>
+                      <div className="text-xs text-gray-500">سيتم حذف جميع البيانات القديمة لهذه المهام ثم رفع الجديدة بدلاً منها. مناسب لتصحيح بيانات مرفوعة بالخطأ.</div>
+                    </div>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer bg-white/60 p-3 rounded-lg border-2 transition-all"
+                    style={{ borderColor: uploadMode === 'append' ? '#f59e0b' : '#e5e7eb' }}
+                  >
+                    <input
+                      type="radio"
+                      name="uploadMode"
+                      value="append"
+                      checked={uploadMode === "append"}
+                      onChange={() => setUploadMode("append")}
+                      className="mt-0.5 accent-amber-500"
+                    />
+                    <div>
+                      <div className="font-semibold text-blue-700">➕ إضافة على القديم (تراكمي)</div>
+                      <div className="text-xs text-gray-500">سيتم إضافة البيانات الجديدة بجانب القديمة. مناسب لإضافة مستفيدين جدد فعلاً لنفس المهمة.</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
 
             {invalidMissionCodes.length > 0 && (
               <div className="mt-4 text-right max-w-lg mx-auto bg-destructive/15 text-destructive border border-destructive/30 p-4 rounded-xl text-sm space-y-2">
@@ -771,6 +878,7 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                 onClick={executeUpload} 
                 disabled={isUploading || invalidMissionCodes.length > 0} 
                 className="min-w-[150px]"
+                variant={uploadMode === 'replace' && duplicateMissions.length > 0 ? 'destructive' : 'default'}
               >
                 {isUploading ? (
                   <>
@@ -779,7 +887,11 @@ export function SmartBeneficiariesUploader({ onSuccess, trigger }: Props) {
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4 ml-2" /> تأكيد وحفظ
+                    <Save className="w-4 h-4 ml-2" />
+                    {uploadMode === 'replace' && duplicateMissions.length > 0
+                      ? `استبدال وحفظ`
+                      : `تأكيد وحفظ`
+                    }
                   </>
                 )}
               </Button>

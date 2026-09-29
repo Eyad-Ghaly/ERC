@@ -66,7 +66,7 @@ export default function YouthSupplyReview() {
     // Load form and request details
     const { data: form } = await supabase
       .from('supply_request_forms')
-      .select('*, volunteer_supply_requests(*, departments(name))')
+      .select('*, volunteer_supply_requests(*, departments:departments!department_id(name))')
       .eq('id', form_id)
       .single();
       
