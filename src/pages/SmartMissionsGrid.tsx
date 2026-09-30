@@ -142,14 +142,19 @@ export default function SmartMissionsGrid() {
         }
       }
     } else {
+      // Accessed from sidebar (no dashboard filters)
       const isGlobalAdmin = hasRole("admin") || hasRole("data_manager") || hasRole("management");
-      if (!profile?.team_id && !isGlobalAdmin) {
-        setLoading(false);
-        return;
-      }
-      if (profile?.team_id && !isGlobalAdmin) {
+      
+      if (profile?.team_id) {
+        // If the user belongs to a team, ALWAYS restrict to their team's missions 
+        // when accessed from the sidebar (even if they have admin roles).
+        // Admins wanting to edit other teams should use the Dashboard filter button.
         query = query.eq("team_id", profile.team_id);
+      } else if (!isGlobalAdmin) {
+        // If they have no team and are not an admin, only show what they created
+        query = query.eq("created_by", user?.id);
       }
+      // If they are an admin and have NO team, they will see all missions (up to limit)
     }
 
     const { data, error } = await query;
