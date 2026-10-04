@@ -57,7 +57,7 @@ export default function DepartmentGoals() {
   const [editObj, setEditObj] = useState<{ id: string; code: string; title: string } | null>(null);
   const [editInd, setEditInd] = useState<any>(null);
   
-  const isDeptAdmin = hasRole('department_admin') || hasRole('admin') || true;
+  const isDeptAdmin = hasRole('department_admin') || hasRole('admin') || hasRole('department_entry');
   const isTopLevel = hasRole('admin') || hasRole('stakeholder') || hasRole('data_manager');
 
   const loadData = async () => {

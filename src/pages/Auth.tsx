@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { Heart, Loader2 } from "lucide-react";
 
 export default function Auth() {
-  const { user, signIn, signUp, loading } = useAuth();
+  const { user, signIn, signUp, resetPassword, loading } = useAuth();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
 
@@ -53,9 +53,10 @@ export default function Auth() {
 
         <Card className="card-elevated p-6">
           <Tabs defaultValue="signin" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="signin">تسجيل الدخول</TabsTrigger>
               <TabsTrigger value="signup">إنشاء حساب</TabsTrigger>
+              <TabsTrigger value="reset">نسيت كلمة المرور</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin">
@@ -95,6 +96,30 @@ export default function Auth() {
                 </Button>
                 <p className="text-xs text-muted-foreground text-center">
                   بعد التسجيل، يجب على المدير الموافقة على حسابك وتعيين الصلاحيات.
+                </p>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="reset">
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!email) { toast.error("يرجى إدخال البريد الإلكتروني"); return; }
+                setBusy(true);
+                const { error } = await resetPassword(email);
+                setBusy(false);
+                if (error) toast.error(error.message || "فشل إرسال رابط استعادة كلمة المرور");
+                else toast.success("تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني");
+              }} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reset-email">البريد الإلكتروني</Label>
+                  <Input id="reset-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr" />
+                </div>
+                <Button type="submit" className="w-full" disabled={busy}>
+                  {busy && <Loader2 className="ms-2 h-4 w-4 animate-spin" />}
+                  إرسال رابط الاستعادة
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  سيتم إرسال رابط إلى بريدك الإلكتروني لتعيين كلمة مرور جديدة.
                 </p>
               </form>
             </TabsContent>

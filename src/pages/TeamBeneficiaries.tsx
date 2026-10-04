@@ -1113,9 +1113,30 @@ export default function TeamBeneficiaries() {
               <Input placeholder="بحث سريع..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pr-9" />
             </div>
             <Input placeholder="التاريخ" type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
-            <Input placeholder="المحافظة" value={filterGov} onChange={e => setFilterGov(e.target.value)} />
+            
+            <select 
+              className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-muted-foreground"
+              value={filterGov}
+              onChange={e => setFilterGov(e.target.value)}
+            >
+              <option value="">المحافظة (الكل)</option>
+              {Array.from(new Set([...indivBens, ...groupBens].map(b => b.governorate).filter(Boolean))).sort().map(gov => (
+                <option key={gov} value={gov} className="text-foreground">{gov}</option>
+              ))}
+            </select>
+            
             <Input placeholder="اسم المهمة" value={filterMission} onChange={e => setFilterMission(e.target.value)} />
-            <Input placeholder="تفاصيل النشاط" value={filterDetails} onChange={e => setFilterDetails(e.target.value)} />
+            
+            <select 
+              className="w-full h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-muted-foreground"
+              value={filterDetails}
+              onChange={e => setFilterDetails(e.target.value)}
+            >
+              <option value="">تفاصيل النشاط (الكل)</option>
+              {Array.from(new Set([...indivBens, ...groupBens].map(b => b.activity_details).filter(Boolean))).sort().map(det => (
+                <option key={det} value={det} className="text-foreground">{det}</option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-4">
             {isGlobalAdmin && (

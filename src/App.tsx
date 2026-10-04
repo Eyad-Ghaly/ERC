@@ -7,6 +7,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
+import UpdatePassword from "./pages/UpdatePassword.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import DepartmentDashboard from "./pages/DepartmentDashboard.tsx";
 import DepartmentEntry from "./pages/DepartmentEntry.tsx";
@@ -51,6 +52,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/update-password" element={<UpdatePassword />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
 
             <Route path="/department-dashboard" element={<ProtectedRoute roles={["department_entry", "management", "department_admin", "admin", "stakeholder"]}><DepartmentDashboard /></ProtectedRoute>} />
