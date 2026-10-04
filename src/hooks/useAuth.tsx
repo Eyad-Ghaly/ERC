@@ -59,7 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // NOTE: onAuthStateChange callback must NOT be async — Supabase holds an
     // internal navigator lock during this callback. Making it async causes a
     // deadlock / 5000ms timeout. Use setTimeout(0) to escape the lock.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_evt, sess) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((evt, sess) => {
+      if (evt === 'PASSWORD_RECOVERY') {
+        window.location.hash = "/update-password";
+      }
       setSession(sess);
       setUser(sess?.user ?? null);
       if (sess?.user) {
@@ -117,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `https://erc-six.vercel.app/#/update-password`,
+      redirectTo: `https://erc-six.vercel.app/`,
     });
     return { error };
   };
