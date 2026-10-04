@@ -84,6 +84,17 @@ function UsersTab() {
     load();
   };
 
+  const deleteProfile = async (id: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذا المستخدم نهائياً؟")) return;
+    const { error } = await supabase.from("profiles").delete().eq("id", id);
+    if (error) {
+      toast.error(error.message || "حدث خطأ أثناء الحذف");
+    } else {
+      toast.success("تم حذف المستخدم");
+      load();
+    }
+  };
+
   const updateField = async (p: ProfileRow, field: "team_id" | "department_id", value: string) => {
     if (value === "none") value = null as any;
     const patch = field === "team_id" ? { team_id: value } : { department_id: value };
@@ -104,6 +115,7 @@ function UsersTab() {
           <TableHead>البريد</TableHead><TableHead>الاسم</TableHead>
           <TableHead>الفريق</TableHead><TableHead>الإدارة</TableHead>
           <TableHead>معتمد</TableHead><TableHead>الأدوار</TableHead>
+          <TableHead></TableHead>
         </TableRow></TableHeader>
         <TableBody>
           {profiles.map((p) => (
@@ -142,9 +154,14 @@ function UsersTab() {
                   })}
                 </div>
               </TableCell>
+              <TableCell>
+                <Button size="icon" variant="ghost" onClick={() => deleteProfile(p.id)} title="حذف المستخدم">
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </Button>
+              </TableCell>
             </TableRow>
           ))}
-          {profiles.length === 0 && <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">لا يوجد مستخدمون</TableCell></TableRow>}
+          {profiles.length === 0 && <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">لا يوجد مستخدمون</TableCell></TableRow>}
         </TableBody>
       </Table>
     </Card>

@@ -108,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: `https://erc-six.vercel.app/`,
         data: { full_name: fullName },
       },
     });
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/#/update-password`,
+      redirectTo: `https://erc-six.vercel.app/#/update-password`,
     });
     return { error };
   };

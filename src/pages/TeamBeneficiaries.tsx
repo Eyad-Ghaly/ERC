@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2, Lock, Search, Download, Key, ShieldCheck, Upload, Save, Eye, Edit, UserPlus, Users, Trash2, Filter, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -183,6 +184,7 @@ export default function TeamBeneficiaries() {
   const [filterMission, setFilterMission] = useState("");
   const [filterDetails, setFilterDetails] = useState("");
   const [columnFilters, setColumnFilters] = useState<Record<string, string[]>>({});
+  const [fetchLimit, setFetchLimit] = useState<number>(1000);
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -229,7 +231,7 @@ export default function TeamBeneficiaries() {
     } else if (teamId && isGlobalAdmin) {
       fetchBeneficiaries(teamId);
     }
-  }, [teamId, isGlobalAdmin]);
+  }, [teamId, isGlobalAdmin, fetchLimit]);
 
   const checkTeamStatus = async () => {
     setLoading(true);
@@ -318,7 +320,8 @@ export default function TeamBeneficiaries() {
         missions!inner(id, team_id, mission_code, mission_name, activity_date, governorate, activity_details)
       `)
       .eq('missions.team_id', tid)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(fetchLimit);
 
     if (indData) {
        const decryptedData = await Promise.all(indData.map(async (r: any) => {
@@ -353,7 +356,8 @@ export default function TeamBeneficiaries() {
         missions!inner(id, team_id, mission_code, mission_name, activity_date, governorate, activity_details)
       `)
       .eq('missions.team_id', tid)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(fetchLimit);
 
     if (grpData) {
       const formattedGrp = grpData.map((r: any) => ({
@@ -1102,6 +1106,22 @@ export default function TeamBeneficiaries() {
             >
               <Download className="w-4 h-4" /> تصدير Excel
             </Button>
+            
+            <div className="flex items-center gap-2 mr-2 border-r pr-2">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">عدد السجلات:</span>
+              <Select value={fetchLimit.toString()} onValueChange={(val) => setFetchLimit(Number(val))}>
+                <SelectTrigger className="h-8 w-[100px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1000">1000</SelectItem>
+                  <SelectItem value="5000">5000</SelectItem>
+                  <SelectItem value="10000">10,000</SelectItem>
+                  <SelectItem value="50000">50,000</SelectItem>
+                  <SelectItem value="1000000">الكل</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
